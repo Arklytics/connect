@@ -1,7 +1,4 @@
 <aside class="text-light">
-  <div class="wg-sidebar-brand">
-    <img src="/wpi2/website/uploads/connect-logo.png" alt="Connect logo">
-  </div>
   <ul class="list-group list-group-flush">
     <a href="/wpi2/business" class="text-decoration-none">
       <li class="list-group-item active"><i class="bi bi-grid-1x2-fill"></i> Dashboard</li>
