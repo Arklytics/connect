@@ -1,0 +1,15 @@
+Options -MultiViews
+RewriteEngine On
+RewriteBase /wpi2/
+
+RewriteRule ^$ business [R=302,L]
+RewriteRule ^index/?$ business [R=302,L]
+RewriteRule ^login/?$ business/login [R=302,L]
+
+RewriteRule ^business/?$ website/index.php [L,QSA]
+RewriteRule ^business/login/?$ website/login.php [L,QSA]
+RewriteRule ^business/logout/?$ website/logout.php [L,QSA]
+RewriteRule ^business/([A-Za-z0-9_-]+)/?$ website/$1.php [L,QSA]
+
+RewriteRule ^master/?$ master/index.php [L,QSA]
+RewriteRule ^master/([A-Za-z0-9_-]+)/?$ master/$1.php [L,QSA]
