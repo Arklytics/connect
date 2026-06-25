@@ -1,6 +1,9 @@
 <?php
-include '../db_conn.php';
 include '../session.php';
+include '../db_conn.php';
+
+$biz_id = Auth::requireLogin();
+
 include 'header.php'; 
 
 function gdTableColumns(mysqli $db, string $table): array

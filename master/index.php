@@ -1,9 +1,10 @@
 <?php
 include 'session.php';
 include 'db_conn.php';
-include 'header.php';
 
 $master_id = Auth::requireMaster();
+
+include 'header.php';
 $orderCount = 0;
 $templateCount = 0;
 $activeTokenCount = 0;
@@ -103,19 +104,19 @@ try {
                     <h1 style="font-size: 20px;">Quick Actions</h1>
                 </div>
                 <div class="wg-action-grid">
-                    <a class="wg-card wg-action-card" href="/wpi2/master/new-order">
+ <a class="wg-card wg-action-card" href="<?php echo h(app_url('master/new-order')); ?>">
                         <i class="bi bi-plus-circle"></i>
                         <span><strong>New Order</strong><span>Create business access</span></span>
                     </a>
-                    <a class="wg-card wg-action-card" href="/wpi2/master/view-orders">
+ <a class="wg-card wg-action-card" href="<?php echo h(app_url('master/view-orders')); ?>">
                         <i class="bi bi-table"></i>
                         <span><strong>View Orders</strong><span>Review businesses</span></span>
                     </a>
-                    <a class="wg-card wg-action-card" href="/wpi2/master/new-templates">
+ <a class="wg-card wg-action-card" href="<?php echo h(app_url('master/new-templates')); ?>">
                         <i class="bi bi-files"></i>
                         <span><strong>Templates</strong><span>Manage approvals</span></span>
                     </a>
-                    <a class="wg-card wg-action-card" href="/wpi2/master/setting-token">
+ <a class="wg-card wg-action-card" href="<?php echo h(app_url('master/setting-token')); ?>">
                         <i class="bi bi-key"></i>
                         <span><strong>API Tokens</strong><span>Connect WhatsApp API</span></span>
                     </a>

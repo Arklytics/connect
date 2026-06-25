@@ -6,11 +6,14 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 include '../session.php';
 include '../db_conn.php';
-include 'header.php';
 
 if (isset($_POST['check'])) {
     Security::verifyCsrf();
 }
+
+$biz_id = Auth::requireLogin();
+
+include 'header.php';
 
 // Handle Excel Import Submission
 if (isset($_POST['import'])) {

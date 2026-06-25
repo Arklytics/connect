@@ -9,8 +9,8 @@ require 'db_conn.php';
 $request = $_SERVER['REQUEST_URI'];
 
 // Routing logic
-if ($request == '/wpi2/master/login') {
-    header('location: /wpi2/master/login');
+if ($request == '/master/login') {
+    header('location: ' . app_url('master/login'));
 }  else {
     // 404 handler
     echo '404 Page Not Found';

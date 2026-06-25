@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($stmt->execute()) {
                 Auth::login((int) mysqli_insert_id($db));
-                header('Location: /wpi2/business/connect-whatsapp');
+                header('Location: ' . app_url('business/connect-whatsapp'));
                 exit();
             }
 
@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="/wpi2/master/css/style.css" rel="stylesheet">
+    <link href="<?php echo h(app_url('master/css/style.css')); ?>" rel="stylesheet">
     <title>WhatsGrow - Business Signup</title>
   </head>
   <body class="wg-login-body">
@@ -70,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <div class="wg-login-form-wrap">
         <div class="wg-login-card" style="max-width: 620px;">
           <div class="wg-brand text-dark">
-            <img class="wg-brand-logo" src="/wpi2/website/uploads/connect-logo.png" alt="Connect logo">
+            <img class="wg-brand-logo" src="<?php echo h(app_url('website/uploads/connect-logo.png')); ?>" alt="Connect logo">
             <span>Business Signup</span>
           </div>
           <h2>Create business account</h2>
@@ -120,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               <i class="bi bi-person-plus me-1"></i> Create Account
             </button>
             <div class="text-center mt-3">
-              <a href="/wpi2/business/login" class="text-decoration-none">Already have an account? Sign in</a>
+              <a href="<?php echo h(app_url('business/login')); ?>" class="text-decoration-none">Already have an account? Sign in</a>
             </div>
           </form>
         </div>

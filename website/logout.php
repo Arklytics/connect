@@ -6,5 +6,5 @@ require_once dirname(__DIR__) . '/app/bootstrap.php';
 
 Auth::logout();
 
-header('Location: /wpi2/business/login');
+header('Location: ' . app_url('business/login'));
 exit();

@@ -26,7 +26,7 @@ if (isset($_POST['login'])) {
 
         if ($validPassword) {
             Auth::loginMaster((int) $admin['id']);
-            header('Location: /wpi2/master');
+            header('Location: ' . app_url('master'));
             exit();
         }
 
@@ -50,7 +50,7 @@ if (isset($_POST['login'])) {
     >
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="/wpi2/master/css/style.css" rel="stylesheet">
+    <link href="<?php echo h(app_url('master/css/style.css')); ?>" rel="stylesheet">
     <title>WhatsGrow - Master Login</title>
   </head>
   <body class="wg-login-body">
@@ -58,7 +58,7 @@ if (isset($_POST['login'])) {
       <div class="wg-login-form-wrap">
         <div class="wg-login-card">
           <div class="wg-brand text-dark">
-            <img class="wg-brand-logo" src="/wpi2/master/uploads/connect-logo.png" alt="Connect logo">
+            <img class="wg-brand-logo" src="<?php echo h(app_url('master/uploads/connect-logo.png')); ?>" alt="Connect logo">
             <span>Master Console</span>
           </div>
           <h2>Welcome back</h2>

@@ -4,7 +4,7 @@ require_once __DIR__ . '/db_conn.php';
 Auth::requireMaster();
 
 // API URL
-$url = "http://localhost/wpi2/master/register_phone"; // Your API URL
+$url = "https://connect.arklytics.in/master/register_phone"; // Your API URL
 
 // Certificate Content (Directly Pasted)
 $base64Certificate = base64_encode(<<<CERT

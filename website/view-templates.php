@@ -1,9 +1,11 @@
 <?php
-include '../db_conn.php'; // Database connection
 include '../session.php';
-include 'header.php';
+include '../db_conn.php'; // Database connection
 
 $biz_id = Auth::requireLogin(); // Business ID
+
+include 'header.php';
+
 $templateSyncError = '';
 $templateRows = [];
 

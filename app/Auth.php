@@ -14,7 +14,7 @@ final class Auth
     {
         $id = self::id();
         if ($id === null || $id <= 0) {
-            header('Location: login.php');
+            header('Location: ' . app_url('business/login'));
             exit();
         }
 
@@ -51,7 +51,7 @@ final class Auth
     {
         $id = self::masterId();
         if ($id === null || $id <= 0) {
-            header('Location: manuel/login.php');
+            header('Location: ' . app_url('master/login'));
             exit();
         }
 

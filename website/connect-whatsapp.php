@@ -1,9 +1,10 @@
 <?php
 include '../session.php';
 include '../db_conn.php';
-include 'header.php';
 
 $biz_id = Auth::requireLogin();
+
+include 'header.php';
 $message = '';
 $message_type = 'success';
 $appId = trim((string) Config::get('META_APP_ID', ''));
@@ -123,7 +124,7 @@ $isConnected = (($business['status'] ?? '0') == '1');
                         <p class="mb-2"><strong>WhatsApp Business ID:</strong> <?php echo h(!empty($business['whatsapp_id']) ? $business['whatsapp_id'] : 'Not connected'); ?></p>
                         <p class="mb-2"><strong>Phone Number ID:</strong> <?php echo h(!empty($business['phone_number_id']) ? $business['phone_number_id'] : 'Not connected'); ?></p>
                         <p class="mb-0"><strong>Status:</strong> <?php echo $isConnected ? 'Connected' : 'Waiting for IDs'; ?></p>
-                        <a href="/wpi2/business/profile" class="btn btn-outline-success mt-3">
+    <a href="<?php echo h(app_url('business/profile')); ?>" class="btn btn-outline-success mt-3">
                             <i class="bi bi-person-badge me-1"></i> View Profile
                         </a>
                     </div>

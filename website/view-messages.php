@@ -1,6 +1,9 @@
 <?php
-include '../db_conn.php'; // Database connection
 include '../session.php';
+include '../db_conn.php'; // Database connection
+
+$biz_id = Auth::requireLogin();
+
 include 'header.php';
 
 // Default date range (last 7 days)

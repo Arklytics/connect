@@ -1,14 +1,15 @@
 <?php
 include '../session.php';
 include '../db_conn.php';
+
+$biz_id = Auth::requireLogin();
+
 include 'header.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Security::verifyCsrf();
 
     $group = trim((string) ($_POST['group_name'] ?? ''));
-    $biz_id = Auth::requireLogin();
-
     $stmt = $db->prepare('INSERT INTO gd_groups (biz_id, group_name) VALUES (?, ?)');
     $stmt->bind_param('is', $biz_id, $group);
 
@@ -99,8 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    
                 </td>
                 <td>
-                <a href="/wpi2/business/add-contacts-group" class="btn btn-primary">Add</a>
-                    <a href="/wpi2/business/view-contacts?group_id=<?php echo h($group['id']);?>" class="btn btn-success">View</a>
+    <a href="<?php echo h(app_url('business/add-contacts-group')); ?>" class="btn btn-primary">Add</a>
+    <a href="<?php echo h(app_url('business/view-contacts?group_id=' . $group['id'])); ?>" class="btn btn-success">View</a>
                 </td>
             </tr>
         <?php } ?>

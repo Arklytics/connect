@@ -1,7 +1,10 @@
 <?php
-include 'header.php';
 include '../session.php';
 include '../db_conn.php';
+
+$biz_id = Auth::requireLogin();
+
+include 'header.php';
 
 $message = '';
 $message_type = 'success';
@@ -14,7 +17,6 @@ $fileSize = 0;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Security::verifyCsrf();
 
-    $biz_id = Auth::requireLogin();
     $appId = trim((string) Config::get('META_APP_ID', ''));
 
     $stmt = $db->prepare('SELECT auth_token FROM gd_orders WHERE id = ? LIMIT 1');
@@ -55,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $localPath = $uploadDir . $safeName;
 
             if (move_uploaded_file($tmpPath, $localPath)) {
-                $previewUrl = '/wpi2/website/uploads/media/' . $safeName;
+$previewUrl = app_url('website/uploads/media/' . $safeName);
 
                 $sessionUrl = 'https://graph.facebook.com/v18.0/' . rawurlencode($appId)
                     . '/uploads?file_name=' . rawurlencode($fileName)

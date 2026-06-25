@@ -1,6 +1,9 @@
 <?php
 include '../session.php';
 include '../db_conn.php';
+
+$biz_id = Auth::requireLogin();
+
 include 'header.php';
 
 $contactColumns = Crm::tableColumns($db, 'gd_user_contacts');

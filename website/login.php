@@ -20,7 +20,7 @@ if (isset($_POST['login'])) {
 
     if ($user && password_verify($password, (string) $user['password'])) {
         Auth::login((int) $user['id']);
-        header('Location: /wpi2/business');
+        header('Location: ' . app_url('business'));
         exit();
     }
 
@@ -42,7 +42,7 @@ if (isset($_POST['login'])) {
     >
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="/wpi2/master/css/style.css" rel="stylesheet">
+    <link href="<?php echo h(app_url('master/css/style.css')); ?>" rel="stylesheet">
     <title>WhatsGrow - Business Login</title>
   </head>
   <body class="wg-login-body">
@@ -50,7 +50,7 @@ if (isset($_POST['login'])) {
       <div class="wg-login-form-wrap">
         <div class="wg-login-card">
           <div class="wg-brand text-dark">
-            <img class="wg-brand-logo" src="/wpi2/website/uploads/connect-logo.png" alt="Connect logo">
+            <img class="wg-brand-logo" src="<?php echo h(app_url('website/uploads/connect-logo.png')); ?>" alt="Connect logo">
             <span>Business Login</span>
           </div>
           <h2>Welcome back</h2>
@@ -81,7 +81,7 @@ if (isset($_POST['login'])) {
             </button>
             <div class="text-center mt-4">
               <p class="text-muted mb-2">New business?</p>
-              <a href="/wpi2/business/signup" class="btn btn-light w-100">
+              <a href="<?php echo h(app_url('business/signup')); ?>" class="btn btn-light w-100">
                 <i class="bi bi-person-plus me-1"></i> Create Account
               </a>
             </div>

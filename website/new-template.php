@@ -1,7 +1,10 @@
 <?php
-include 'header.php';
 include '../session.php';
 include '../db_conn.php';
+
+$biz_id = Auth::requireLogin();
+
+include 'header.php';
 
 $message = '';
 $message_type = 'success';
@@ -27,7 +30,6 @@ function variableNumbers(string $text): array
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Security::verifyCsrf();
 
-    $biz_id = Auth::requireLogin();
     $template_name = normalizeTemplateName((string) ($_POST['template_name'] ?? ''));
     $category = strtoupper(trim((string) ($_POST['category'] ?? 'MARKETING')));
     $language = trim((string) ($_POST['language'] ?? 'en_US'));
@@ -243,7 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <h4><i class="bi bi-cloud-plus"></i> Create Cloud API Template</h4>
             <div class="alert alert-info">
                 For image, video, or document headers, upload the file first and paste the generated media handle here.
-                <a href="/wpi2/business/upload-media" class="alert-link">Upload media</a>
+    <a href="<?php echo h(app_url('business/upload-media')); ?>" class="alert-link">Upload media</a>
             </div>
             <form action="" method="post" id="templateForm">
                 <?php echo Security::csrfField(); ?>

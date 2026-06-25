@@ -1,11 +1,13 @@
 <?php
-include 'header.php';
 include '../session.php';
+include '../db_conn.php';
 
+$biz_id = Auth::requireLogin();
+
+include 'header.php';
 $totalMessages = 0;
 $successfulMessages = 0;
 $failedMessages = 0;
-$biz_id = Auth::requireLogin();
 $dashboardError = '';
 $connectionLabel = 'Not connected yet';
 $dbProfile = null;
@@ -185,10 +187,10 @@ if ($db) {
                             <p class="text-muted mb-0">No contacts are in this business account yet. Add a lead manually or import a sheet to populate the premium CRM view.</p>
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
-                            <a class="btn btn-success" href="/wpi2/business/create-contact">
+                            <a class="btn btn-success" href="<?php echo h(app_url('business/create-contact')); ?>">
                                 <i class="bi bi-person-plus me-1"></i> Add Lead
                             </a>
-                            <a class="btn btn-outline-success" href="/wpi2/business/add-contacts-group">
+                            <a class="btn btn-outline-success" href="<?php echo h(app_url('business/add-contacts-group')); ?>">
                                 <i class="bi bi-file-earmark-spreadsheet me-1"></i> Import Leads
                             </a>
                         </div>
@@ -207,7 +209,7 @@ if ($db) {
                         <h5 class="mb-1">Connection Status</h5>
                         <p class="text-muted mb-0"><?php echo h($connectionLabel); ?></p>
                     </div>
-                    <a class="btn btn-outline-success" href="/wpi2/business/profile">
+                    <a class="btn btn-outline-success" href="<?php echo h(app_url('business/profile')); ?>">
                         <i class="bi bi-person-badge me-1"></i> Open Profile
                     </a>
                 </div>
@@ -218,27 +220,27 @@ if ($db) {
                     <h1 style="font-size: 20px;">Connect Quick Actions</h1>
                 </div>
                 <div class="wg-action-grid">
-                    <a class="wg-card wg-action-card" href="/wpi2/business/create-contact">
+                    <a class="wg-card wg-action-card" href="<?php echo h(app_url('business/create-contact')); ?>">
                         <i class="bi bi-person-plus"></i>
                         <span><strong>Contacts</strong><span>Manage leads and status</span></span>
                     </a>
-                    <a class="wg-card wg-action-card" href="/wpi2/business/add-contacts-group">
+                    <a class="wg-card wg-action-card" href="<?php echo h(app_url('business/add-contacts-group')); ?>">
                         <i class="bi bi-file-earmark-spreadsheet"></i>
                         <span><strong>Import Contacts</strong><span>Upload leads in bulk</span></span>
                     </a>
-                    <a class="wg-card wg-action-card" href="/wpi2/business/create-group">
+                    <a class="wg-card wg-action-card" href="<?php echo h(app_url('business/create-group')); ?>">
                         <i class="bi bi-people"></i>
                         <span><strong>Contact Groups</strong><span>Organize contact lists</span></span>
                     </a>
-                    <a class="wg-card wg-action-card" href="/wpi2/business/profile">
+                    <a class="wg-card wg-action-card" href="<?php echo h(app_url('business/profile')); ?>">
                         <i class="bi bi-gear"></i>
                         <span><strong>Settings</strong><span>WhatsApp and billing</span></span>
                     </a>
-                    <a class="wg-card wg-action-card" href="/wpi2/business/profile">
+                    <a class="wg-card wg-action-card" href="<?php echo h(app_url('business/profile')); ?>">
                         <i class="bi bi-person-badge"></i>
                         <span><strong>Profile</strong><span>View your details</span></span>
                     </a>
-                    <a class="wg-card wg-action-card" href="/wpi2/business/send-messages">
+                    <a class="wg-card wg-action-card" href="<?php echo h(app_url('business/send-messages')); ?>">
                         <i class="bi bi-send"></i>
                         <span><strong>Send Messages</strong><span>Launch a campaign</span></span>
                     </a>

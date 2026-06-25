@@ -1,7 +1,6 @@
 Options -MultiViews
 RewriteEngine On
 RewriteBase /wpi2/
-
 RewriteRule ^$ business [R=302,L]
 RewriteRule ^index/?$ business [R=302,L]
 RewriteRule ^login/?$ business/login [R=302,L]

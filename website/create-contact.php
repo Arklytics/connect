@@ -4,7 +4,6 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 include '../session.php';
 include '../db_conn.php';
-include 'header.php';
 
 function gdTableExists(mysqli $db, string $table): bool
 {
@@ -144,6 +143,8 @@ function gdDynamicUpdate(mysqli $db, string $table, array $data, string $whereSq
 }
 
 $biz_id = Auth::requireLogin();
+
+include 'header.php';
 $contactColumns = gdTableColumns($db, 'gd_user_contacts');
 $followupTableExists = gdTableExists($db, 'gd_contact_followups');
 $contactsHaveCrm = in_array('lead_status', $contactColumns, true) || in_array('lead_stage', $contactColumns, true);

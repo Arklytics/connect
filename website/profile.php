@@ -3,9 +3,10 @@ declare(strict_types=1);
 
 include '../session.php';
 include '../db_conn.php';
-include 'header.php';
 
 $bizId = Auth::requireLogin();
+
+include 'header.php';
 $profileError = '';
 $db = Database::connectOrNull();
 $profile = [];
@@ -57,7 +58,7 @@ $isConnected = (($profile['status'] ?? '0') == '1');
                         <?php endif; ?>
                         <?php if (!empty($profile['business_logo'])): ?>
                             <div class="mb-3">
-                                <img src="/wpi2/<?php echo h($profile['business_logo']); ?>" alt="Business Logo" class="img-fluid rounded" style="max-height: 120px;">
+ <img src="<?php echo h(app_url(ltrim((string) $profile['business_logo'], '/'))); ?>" alt="Business Logo" class="img-fluid rounded" style="max-height: 120px;">
                             </div>
                         <?php endif; ?>
                         <p class="mb-2"><strong>Business:</strong> <?php echo h($profile['business_name'] ?? ''); ?></p>
@@ -112,7 +113,7 @@ $isConnected = (($profile['status'] ?? '0') == '1');
                         <p class="text-muted mb-0">Use this area for WhatsApp connection, billing, and future account settings.</p>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
-                        <a href="/wpi2/business/connect-whatsapp" class="btn btn-success">
+ <a href="<?php echo h(app_url('business/connect-whatsapp')); ?>" class="btn btn-success">
                             <i class="bi bi-whatsapp me-1"></i> WhatsApp Connection
                         </a>
                         <button type="button" class="btn btn-outline-secondary" disabled>
