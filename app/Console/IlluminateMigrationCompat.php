@@ -191,15 +191,11 @@ namespace Illuminate\Database\Schema {
             $statements = [];
 
             foreach ($this->columns as $column) {
-                $statement = sprintf(
+                $statements[] = sprintf(
                     'ALTER TABLE `%s` ADD COLUMN %s',
                     $this->table,
                     $this->compileColumnDefinition($column, false)
                 );
-                if ($column->after !== null) {
-                    $statement .= sprintf(' AFTER `%s`', $column->after);
-                }
-                $statements[] = $statement;
             }
 
             foreach ($this->dropColumns as $column) {
