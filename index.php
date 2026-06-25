@@ -30,6 +30,21 @@ if ($requestPath === '/' || $requestPath === '/index.php') {
     return;
 }
 
+if ($requestPath === '/privacy-policy') {
+    app_dispatch('website/privacy-policy.php');
+    return;
+}
+
+if ($requestPath === '/crm-privacy') {
+    app_dispatch('website/crm-privacy.php');
+    return;
+}
+
+if ($requestPath === '/terms-conditions') {
+    app_dispatch('website/terms-conditions.php');
+    return;
+}
+
 if (str_starts_with($requestPath, '/business')) {
     $subPath = trim(substr($requestPath, strlen('/business')), '/');
     app_dispatch($subPath === '' ? 'website/index.php' : 'website/' . $subPath . '.php');

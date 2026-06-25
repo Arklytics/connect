@@ -122,6 +122,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="text-center mt-3">
               <a href="<?php echo h(app_url('business/login')); ?>" class="text-decoration-none">Already have an account? Sign in</a>
             </div>
+            <div class="text-center mt-3 small text-muted">
+              <a href="<?php echo h(app_url('privacy-policy')); ?>" class="text-decoration-none me-2">Privacy Policy</a>
+              <a href="<?php echo h(app_url('terms-conditions')); ?>" class="text-decoration-none me-2">Terms</a>
+              <a href="<?php echo h(app_url('crm-privacy')); ?>" class="text-decoration-none">CRM Privacy</a>
+            </div>
           </form>
         </div>
       </div>

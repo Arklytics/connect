@@ -4,6 +4,9 @@ RewriteBase /wpi2/
 RewriteRule ^$ business [R=302,L]
 RewriteRule ^index/?$ business [R=302,L]
 RewriteRule ^login/?$ business/login [R=302,L]
+RewriteRule ^privacy-policy/?$ index.php [L,QSA]
+RewriteRule ^crm-privacy/?$ index.php [L,QSA]
+RewriteRule ^terms-conditions/?$ index.php [L,QSA]
 
 RewriteRule ^business/?$ website/index.php [L,QSA]
 RewriteRule ^business/login/?$ website/login.php [L,QSA]

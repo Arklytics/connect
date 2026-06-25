@@ -84,6 +84,11 @@ if (isset($_POST['login'])) {
               <a href="<?php echo h(app_url('business/signup')); ?>" class="btn btn-light w-100">
                 <i class="bi bi-person-plus me-1"></i> Create Account
               </a>
+              <div class="small text-muted mt-3">
+                <a href="<?php echo h(app_url('privacy-policy')); ?>" class="text-decoration-none me-2">Privacy Policy</a>
+                <a href="<?php echo h(app_url('terms-conditions')); ?>" class="text-decoration-none me-2">Terms</a>
+                <a href="<?php echo h(app_url('crm-privacy')); ?>" class="text-decoration-none">CRM Privacy</a>
+              </div>
             </div>
           </form>
         </div>
