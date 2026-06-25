@@ -1,0 +1,13 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/app/Config.php';
+require __DIR__ . '/app/Console/IlluminateMigrationCompat.php';
+require __DIR__ . '/app/Console/MigrationRunner.php';
+
+Config::load(__DIR__ . '/.env');
+
+$runner = new \App\Console\MigrationRunner(__DIR__);
+exit($runner->run($argv));
