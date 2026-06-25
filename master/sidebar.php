@@ -1,48 +1,68 @@
 <aside class="text-light">
-  <ul class="list-group list-group-flush">
- <a href="<?php echo h(app_url('master')); ?>" class="text-decoration-none">
-      <li class="list-group-item active"><i class="bi bi-grid-1x2-fill"></i> Dashboard</li>
+  <nav class="list-group list-group-flush">
+    <a href="<?php echo h(app_url('master')); ?>" class="list-group-item list-group-item-action active">
+      <i class="bi bi-grid-1x2-fill"></i> Dashboard
     </a>
 
-    <li class="list-group-item dropdown-toggle" id="ordersDropdown" style="cursor: pointer;">
+    <button type="button" class="list-group-item list-group-item-action dropdown-toggle" id="ordersDropdown" style="cursor: pointer;">
       <i class="bi bi-bag-check-fill"></i> Orders
-    </li>
-    <ul class="list-group collapse" id="ordersMenu">
- <a href="<?php echo h(app_url('master/new-order')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-plus-circle"></i> New Order</li></a>
- <a href="<?php echo h(app_url('master/view-orders')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-table"></i> View Orders</li></a>
-    </ul>
+    </button>
+    <div class="collapse" id="ordersMenu">
+      <div class="list-group mt-2 ms-3">
+        <a href="<?php echo h(app_url('master/new-order')); ?>" class="list-group-item list-group-item-action">
+          <i class="bi bi-plus-circle"></i> New Order
+        </a>
+        <a href="<?php echo h(app_url('master/view-orders')); ?>" class="list-group-item list-group-item-action">
+          <i class="bi bi-table"></i> View Orders
+        </a>
+      </div>
+    </div>
 
-    <li class="list-group-item dropdown-toggle" id="templatesDropdown" style="cursor: pointer;">
+    <button type="button" class="list-group-item list-group-item-action dropdown-toggle" id="templatesDropdown" style="cursor: pointer;">
       <i class="bi bi-layout-text-window-reverse"></i> Templates
-    </li>
-    <ul class="list-group collapse" id="templatesMenu">
- <a href="<?php echo h(app_url('master/new-templates')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-files"></i> View Templates</li></a>
-      <li class="list-group-item"><i class="bi bi-check2-circle"></i> Check Templates</li>
-    </ul>
+    </button>
+    <div class="collapse" id="templatesMenu">
+      <div class="list-group mt-2 ms-3">
+        <a href="<?php echo h(app_url('master/new-templates')); ?>" class="list-group-item list-group-item-action">
+          <i class="bi bi-files"></i> View Templates
+        </a>
+        <span class="list-group-item">
+          <i class="bi bi-check2-circle"></i> Check Templates
+        </span>
+      </div>
+    </div>
 
-    <li class="list-group-item"><i class="bi bi-whatsapp"></i> Messages</li>
+    <span class="list-group-item">
+      <i class="bi bi-whatsapp"></i> Messages
+    </span>
 
-    <li class="list-group-item dropdown-toggle" id="settingsDropdown" style="cursor: pointer;">
+    <button type="button" class="list-group-item list-group-item-action dropdown-toggle" id="settingsDropdown" style="cursor: pointer;">
       <i class="bi bi-gear-fill"></i> Settings
-    </li>
-    <ul class="list-group collapse" id="settingsMenu">
- <a href="<?php echo h(app_url('master/setting-token')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-key"></i> Add Token</li></a>
-    </ul>
+    </button>
+    <div class="collapse" id="settingsMenu">
+      <div class="list-group mt-2 ms-3">
+        <a href="<?php echo h(app_url('master/setting-token')); ?>" class="list-group-item list-group-item-action">
+          <i class="bi bi-key"></i> Add Token
+        </a>
+      </div>
+    </div>
 
-    <li class="list-group-item dropdown-toggle" id="reportsDropdown" style="cursor: pointer;">
+    <button type="button" class="list-group-item list-group-item-action dropdown-toggle" id="reportsDropdown" style="cursor: pointer;">
       <i class="bi bi-bar-chart-fill"></i> Reports
-    </li>
-    <ul class="list-group collapse" id="reportsMenu">
-      <li class="list-group-item"><i class="bi bi-credit-card"></i> Payments</li>
-      <li class="list-group-item"><i class="bi bi-chat-left-text"></i> Messages</li>
-      <li class="list-group-item"><i class="bi bi-file-earmark-text"></i> Templates</li>
-      <li class="list-group-item"><i class="bi bi-bag"></i> Orders</li>
-    </ul>
+    </button>
+    <div class="collapse" id="reportsMenu">
+      <div class="list-group mt-2 ms-3">
+        <span class="list-group-item"><i class="bi bi-credit-card"></i> Payments</span>
+        <span class="list-group-item"><i class="bi bi-chat-left-text"></i> Messages</span>
+        <span class="list-group-item"><i class="bi bi-file-earmark-text"></i> Templates</span>
+        <span class="list-group-item"><i class="bi bi-bag"></i> Orders</span>
+      </div>
+    </div>
 
- <a href="<?php echo h(app_url('master/signout')); ?>" class="text-decoration-none">
-      <li class="list-group-item"><i class="bi bi-box-arrow-right"></i> Logout</li>
+    <a href="<?php echo h(app_url('master/signout')); ?>" class="list-group-item list-group-item-action">
+      <i class="bi bi-box-arrow-right"></i> Logout
     </a>
-  </ul>
+  </nav>
 </aside>
 
 <script>

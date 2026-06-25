@@ -105,18 +105,18 @@ a {
     min-height: calc(100vh - 74px);
 }
 
-.container-fluid {
+.wg-shell.container-fluid {
     padding-left: 0;
     padding-right: 0;
 }
 
-.container-fluid > .row {
+.wg-shell.container-fluid > .row {
     margin-left: 0;
     margin-right: 0;
 }
 
-.container-fluid > .row.bg-light,
-.container-fluid .row.bg-light {
+.wg-shell.container-fluid > .row.bg-light,
+.wg-shell.container-fluid .row.bg-light {
     background: var(--wg-bg) !important;
 }
 
@@ -197,7 +197,7 @@ a {
     min-height: calc(100vh - 74px);
 }
 
-.wg-sidebar + [class*="col-"] {
+.wg-shell .wg-sidebar + [class*="col-"] {
     padding: 28px;
     background: linear-gradient(180deg, var(--wg-bg-accent), var(--wg-bg));
     min-height: calc(100vh - 74px);

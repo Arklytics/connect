@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 </div>
 
 <!-- HTML Form -->
-<div class="container-fluid">
+<div class="container-fluid wg-shell">
     <div class="row">
         <div class="col-lg-2 col-md-3 p-0 wg-sidebar">
             <?php include 'sidebar.php'; ?>

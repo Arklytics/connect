@@ -7,7 +7,7 @@ $loadError = '';
 ?>
 
 
-<div class="container-fluid">
+    <div class="container-fluid wg-shell">
     <div class="row bg-light">
     <div class="col-lg-2 col-md-3 p-0 wg-sidebar">
             <?php include 'sidebar.php';?>
