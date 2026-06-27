@@ -9,6 +9,8 @@ include 'header.php';
 $message = '';
 $message_type = 'success';
 $apiPayloadPreview = '';
+$mediaUploadError = '';
+$uploadedMediaPreviewUrl = '';
 
 function normalizeTemplateName(string $name): string
 {
@@ -37,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $header_text = trim((string) ($_POST['header_text'] ?? ''));
     $header_media_handle = trim((string) ($_POST['header_media_handle'] ?? ''));
     $header_media_url = trim((string) ($_POST['header_media_url'] ?? ''));
+    $header_media_file = $_FILES['header_media_file'] ?? null;
     $body_text = trim((string) ($_POST['body_text'] ?? ''));
     $footer_text = trim((string) ($_POST['footer_text'] ?? ''));
     $header_sample = trim((string) ($_POST['header_sample'] ?? ''));
@@ -46,11 +49,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $components = [];
     $buttons = [];
 
+    $stmt = $db->prepare('SELECT whatsapp_id, auth_token FROM gd_orders WHERE id = ? LIMIT 1');
+    $stmt->bind_param('i', $biz_id);
+    $stmt->execute();
+    $business = $stmt->get_result()->fetch_assoc() ?: [];
+
+    $access_token = ($business['auth_token'] ?? '') ?: AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', ''));
+    $whatsapp_business_id = trim((string) ($business['whatsapp_id'] ?? ''));
+
+    if ($whatsapp_business_id === '' || $access_token === '') {
+        $mediaUploadError = 'WhatsApp Business ID or access token is missing. Add API credentials first.';
+    } elseif (is_array($header_media_file) && (int) ($header_media_file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+        $fileName = basename((string) $header_media_file['name']);
+        $tmpPath = (string) $header_media_file['tmp_name'];
+        $fileSize = (int) $header_media_file['size'];
+        $fileType = mime_content_type($tmpPath) ?: (string) ($header_media_file['type'] ?? '');
+        $allowedTypes = [
+            'image/jpeg', 'image/png',
+            'video/mp4', 'video/3gpp',
+            'application/pdf',
+        ];
+
+        if (!in_array($fileType, $allowedTypes, true)) {
+            $mediaUploadError = 'Unsupported file type. Use JPG, PNG, MP4, 3GP, or PDF.';
+        } else {
+            $uploadDir = __DIR__ . '/uploads/media/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0775, true);
+            }
+
+            $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+            $safeName = bin2hex(random_bytes(12)) . ($extension !== '' ? '.' . $extension : '');
+            $localPath = $uploadDir . $safeName;
+
+            if (move_uploaded_file($tmpPath, $localPath)) {
+                $uploadedMediaPreviewUrl = app_url('website/uploads/media/' . $safeName);
+                $uploadResult = ApiSupport::metaUploadMediaHandle(
+                    (string) $whatsapp_business_id,
+                    (string) $access_token,
+                    $localPath,
+                    $fileName,
+                    $fileType,
+                    $fileSize
+                );
+
+                if (!($uploadResult['ok'] ?? false)) {
+                    $mediaUploadError = 'Media saved locally, but handle generation failed: ' . (string) ($uploadResult['error'] ?? 'Unknown error.');
+                } else {
+                    $header_media_handle = (string) ($uploadResult['handle'] ?? '');
+                    $header_media_url = $uploadedMediaPreviewUrl;
+                }
+            } else {
+                $mediaUploadError = 'Could not save uploaded file locally.';
+            }
+        }
+    }
+
     if ($template_name === '' || $body_text === '') {
         $message = 'Template name and body are required.';
         $message_type = 'danger';
     } else {
         $validationErrors = [];
+
+        if ($mediaUploadError !== '') {
+            $validationErrors[] = $mediaUploadError;
+        }
 
         if ($header_type === 'TEXT' && $header_text !== '') {
             $header = [
@@ -156,14 +219,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = implode(' ', $validationErrors);
             $message_type = 'danger';
         } else {
-        $stmt = $db->prepare('SELECT whatsapp_id, auth_token FROM gd_orders WHERE id = ? LIMIT 1');
-        $stmt->bind_param('i', $biz_id);
-        $stmt->execute();
-        $business = $stmt->get_result()->fetch_assoc();
-
-        $access_token = ($business['auth_token'] ?? '') ?: AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', ''));
-        $whatsapp_business_id = trim((string) ($business['whatsapp_id'] ?? ''));
-
         if ($whatsapp_business_id === '' || $access_token === '') {
             $message = 'WhatsApp Business ID or access token is missing. Add API credentials first.';
             $message_type = 'danger';
@@ -301,6 +356,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <label class="form-label" for="header_media_url">Preview URL</label>
                         <input type="url" name="header_media_url" id="header_media_url" class="form-control" placeholder="https://example.com/image.jpg" oninput="renderTemplateBuilder()">
                     </div>
+                    <div class="col-md-12 header-media-field d-none mt-2">
+                        <label class="form-label" for="header_media_file">Upload Media File</label>
+                        <input type="file" name="header_media_file" id="header_media_file" class="form-control" accept=".jpg,.jpeg,.png,.mp4,.3gp,.pdf,image/jpeg,image/png,video/mp4,video/3gpp,application/pdf" onchange="renderTemplateBuilder()">
+                    </div>
                 </div>
 
                 <div class="row">
@@ -374,6 +433,7 @@ function renderTemplateBuilder() {
   const headerType = document.getElementById('header_type').value;
   const headerText = document.getElementById('header_text').value;
   const headerMediaUrl = document.getElementById('header_media_url').value;
+  const headerMediaFile = document.getElementById('header_media_file');
   const bodyText = document.getElementById('body_text').value;
   const footerText = document.getElementById('footer_text').value;
   const mediaPreview = document.getElementById('previewMediaUrl');
@@ -402,19 +462,39 @@ function renderTemplateBuilder() {
     document.getElementById('previewTitle').textContent = headerText || '[Header]';
   } else if (headerType === 'IMAGE') {
     document.getElementById('previewTitle').classList.add('d-none');
-    mediaPreview.innerHTML = headerMediaUrl
-      ? `<img src="${headerMediaUrl}" alt="Image preview" style="max-width:100%; max-height:220px; border-radius:8px;">`
-      : '<div class="text-muted small">Image header preview</div>';
+    if (headerMediaFile.files && headerMediaFile.files[0]) {
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        mediaPreview.innerHTML = `<img src="${event.target.result}" alt="Image preview" style="max-width:100%; max-height:220px; border-radius:8px;">`;
+      };
+      reader.readAsDataURL(headerMediaFile.files[0]);
+    } else {
+      mediaPreview.innerHTML = headerMediaUrl
+        ? `<img src="${headerMediaUrl}" alt="Image preview" style="max-width:100%; max-height:220px; border-radius:8px;">`
+        : '<div class="text-muted small">Image header preview</div>';
+    }
   } else if (headerType === 'VIDEO') {
     document.getElementById('previewTitle').classList.add('d-none');
-    mediaPreview.innerHTML = headerMediaUrl
-      ? `<video src="${headerMediaUrl}" controls style="width:100%; max-height:220px; border-radius:8px;"></video>`
-      : '<div class="text-muted small">Video header preview</div>';
+    if (headerMediaFile.files && headerMediaFile.files[0]) {
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        mediaPreview.innerHTML = `<video src="${event.target.result}" controls style="width:100%; max-height:220px; border-radius:8px;"></video>`;
+      };
+      reader.readAsDataURL(headerMediaFile.files[0]);
+    } else {
+      mediaPreview.innerHTML = headerMediaUrl
+        ? `<video src="${headerMediaUrl}" controls style="width:100%; max-height:220px; border-radius:8px;"></video>`
+        : '<div class="text-muted small">Video header preview</div>';
+    }
   } else if (headerType === 'DOCUMENT') {
     document.getElementById('previewTitle').classList.add('d-none');
-    mediaPreview.innerHTML = headerMediaUrl
-      ? `<a class="btn btn-light btn-sm" href="${headerMediaUrl}" target="_blank"><i class="bi bi-file-earmark-text me-1"></i> Open document</a>`
-      : '<div class="text-muted small">Document header preview</div>';
+    if (headerMediaFile.files && headerMediaFile.files[0]) {
+      mediaPreview.innerHTML = `<div class="text-muted small">${headerMediaFile.files[0].name}</div>`;
+    } else {
+      mediaPreview.innerHTML = headerMediaUrl
+        ? `<a class="btn btn-light btn-sm" href="${headerMediaUrl}" target="_blank"><i class="bi bi-file-earmark-text me-1"></i> Open document</a>`
+        : '<div class="text-muted small">Document header preview</div>';
+    }
   } else {
     document.getElementById('previewTitle').classList.add('d-none');
   }
@@ -524,6 +604,7 @@ function renderPayloadPreview() {
 document.getElementById('template_name').addEventListener('input', renderPayloadPreview);
 document.getElementById('category').addEventListener('change', renderPayloadPreview);
 document.getElementById('language').addEventListener('change', renderPayloadPreview);
+document.getElementById('header_media_file').addEventListener('change', renderTemplateBuilder);
 renderTemplateBuilder();
 </script>
 

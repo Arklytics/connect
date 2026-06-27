@@ -119,6 +119,85 @@ final class ApiSupport
         ];
     }
 
+    public static function metaUploadMediaHandle(
+        string $appId,
+        string $accessToken,
+        string $filePath,
+        string $fileName,
+        string $fileType,
+        int $fileLength
+    ): array {
+        if ($appId === '' || $accessToken === '' || $filePath === '' || !is_file($filePath)) {
+            return [
+                'ok' => false,
+                'handle' => null,
+                'error' => 'Missing upload credentials or file path.',
+            ];
+        }
+
+        $sessionUrl = 'https://graph.facebook.com/v18.0/' . rawurlencode($appId)
+            . '/uploads?file_name=' . rawurlencode($fileName)
+            . '&file_length=' . $fileLength
+            . '&file_type=' . rawurlencode($fileType)
+            . '&access_token=' . rawurlencode($accessToken);
+
+        $ch = curl_init($sessionUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+        ]);
+        $sessionResponse = curl_exec($ch);
+        $sessionHttpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $sessionError = curl_error($ch);
+        curl_close($ch);
+
+        $sessionData = json_decode((string) $sessionResponse, true);
+        $uploadSessionId = (string) ($sessionData['id'] ?? '');
+
+        if ($sessionError !== '' || $sessionHttpStatus < 200 || $sessionHttpStatus >= 300 || $uploadSessionId === '') {
+            return [
+                'ok' => false,
+                'handle' => null,
+                'error' => $sessionData['error']['message'] ?? ($sessionError !== '' ? $sessionError : 'Could not start Meta upload session.'),
+            ];
+        }
+
+        $ch = curl_init('https://graph.facebook.com/v18.0/' . rawurlencode($uploadSessionId));
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 60,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: OAuth ' . $accessToken,
+                'file_offset: 0',
+                'Content-Type: application/octet-stream',
+            ],
+            CURLOPT_POSTFIELDS => file_get_contents($filePath),
+        ]);
+        $handleResponse = curl_exec($ch);
+        $handleHttpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $handleError = curl_error($ch);
+        curl_close($ch);
+
+        $handleData = json_decode((string) $handleResponse, true);
+        $mediaHandle = (string) ($handleData['h'] ?? '');
+
+        if ($handleError !== '' || $handleHttpStatus < 200 || $handleHttpStatus >= 300 || $mediaHandle === '') {
+            return [
+                'ok' => false,
+                'handle' => null,
+                'error' => $handleData['error']['message'] ?? ($handleError !== '' ? $handleError : 'Meta did not return a media handle.'),
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'handle' => $mediaHandle,
+            'error' => null,
+        ];
+    }
+
     public static function whatsappTextPayload(string $to, string $messageBody): array
     {
         return [
