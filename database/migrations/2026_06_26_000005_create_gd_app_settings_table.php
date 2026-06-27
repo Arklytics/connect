@@ -11,10 +11,9 @@ return new class extends Migration
         Schema::create('gd_app_settings', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('admin_id')->default(0);
-            $table->string('setting_key', 120);
+            $table->string('setting_key', 120)->unique();
             $table->text('setting_value')->nullable();
             $table->timestamps();
-            $table->unique(['admin_id', 'setting_key'], 'gd_app_settings_admin_key_unique');
         });
     }
 
