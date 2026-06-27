@@ -143,23 +143,107 @@ final class ApiSupport
         return '';
     }
 
-    public static function buildTemplateSendComponents(array $templateRow): array
-    {
-        $meta = self::templateMeta($templateRow);
-        $payloadComponents = [];
+public static function buildTemplateSendComponents(array $templateRow): array
+{
+    $meta = [];
 
-        if (isset($meta['payload']['components']) && is_array($meta['payload']['components'])) {
-            $payloadComponents = $meta['payload']['components'];
-        } elseif (isset($meta['components']) && is_array($meta['components'])) {
-            $payloadComponents = $meta['components'];
-        }
-
-        if (!empty($payloadComponents)) {
-            return self::buildComponentsFromPayload($templateRow, $meta, $payloadComponents);
-        }
-
-        return self::buildComponentsFromLegacyTemplate($templateRow, $meta);
+    if (!empty($templateRow['placeholders'])) {
+        $meta = json_decode($templateRow['placeholders'], true) ?: [];
     }
+
+    $components = [];
+
+    /*
+    |--------------------------------------------------------------------------
+    | HEADER
+    |--------------------------------------------------------------------------
+    */
+
+    $headerType = strtoupper($meta['header_type'] ?? '');
+
+    if ($headerType === 'TEXT') {
+
+        $headerText = $meta['header_text'] ?? '';
+        preg_match_all('/{{\s*(\d+)\s*}}/', $headerText, $matches);
+
+        if (!empty($matches[1])) {
+
+            $components[] = [
+                'type' => 'header',
+                'parameters' => [[
+                    'type' => 'text',
+                    'text' => $meta['header_sample'] ?? '',
+                ]]
+            ];
+        }
+
+    } elseif (in_array($headerType, ['IMAGE','VIDEO','DOCUMENT'])) {
+
+        /*
+         * IMPORTANT
+         * Template messages require a MEDIA ID here,
+         * NOT the header_handle.
+         *
+         * Upload the media using:
+         * POST /PHONE_NUMBER_ID/media
+         *
+         * Then use:
+         *
+         * image.id
+         */
+
+        if (!empty($meta['media_id'])) {
+
+            $type = strtolower($headerType);
+
+            $components[] = [
+                'type' => 'header',
+                'parameters' => [[
+                    'type' => $type,
+                    $type => [
+                        'id' => $meta['media_id']
+                    ]
+                ]]
+            ];
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | BODY
+    |--------------------------------------------------------------------------
+    */
+
+    $body = $templateRow['message_body'] ?? '';
+
+    preg_match_all('/{{\s*(\d+)\s*}}/', $body, $matches);
+
+    if (!empty($matches[1])) {
+
+        $parameters = [];
+
+        foreach ($matches[1] as $number) {
+
+            $value = $meta['body_samples'][$number] ?? '';
+
+            $parameters[] = [
+                'type' => 'text',
+                'text' => $value
+            ];
+        }
+
+        $components[] = [
+            'type' => 'body',
+            'parameters' => $parameters
+        ];
+    }
+
+    return [
+        'components' => $components,
+        'error' => null
+    ];
+}
+
 
     private static function templateMeta(array $templateRow): array
     {
