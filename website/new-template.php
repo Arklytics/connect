@@ -10,6 +10,7 @@ $message = '';
 $message_type = 'success';
 $apiPayloadPreview = '';
 $mediaUploadError = '';
+$mediaUploadWarning = '';
 $uploadedMediaPreviewUrl = '';
 
 function normalizeTemplateName(string $name): string
@@ -76,32 +77,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $uploadDir = __DIR__ . '/uploads/media/';
             if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0775, true);
+                @mkdir($uploadDir, 0775, true);
             }
 
             $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
             $safeName = bin2hex(random_bytes(12)) . ($extension !== '' ? '.' . $extension : '');
             $localPath = $uploadDir . $safeName;
+            $localSaved = false;
+            $localError = '';
+            $handleSourcePath = $tmpPath;
 
-            if (move_uploaded_file($tmpPath, $localPath)) {
+            if (is_dir($uploadDir) && is_writable($uploadDir) && move_uploaded_file($tmpPath, $localPath)) {
+                $localSaved = true;
                 $uploadedMediaPreviewUrl = app_public_url('website/uploads/media/' . $safeName);
-                $uploadResult = ApiSupport::metaUploadMediaHandle(
-                    (string) $appId,
-                    (string) $access_token,
-                    $localPath,
-                    $fileName,
-                    $fileType,
-                    $fileSize
-                );
-
-                if (!($uploadResult['ok'] ?? false)) {
-                    $mediaUploadError = 'Media saved locally, but handle generation failed: ' . (string) ($uploadResult['error'] ?? 'Unknown error.');
-                } else {
-                    $header_media_handle = (string) ($uploadResult['handle'] ?? '');
-                    $header_media_url = $uploadedMediaPreviewUrl;
-                }
+                $handleSourcePath = $localPath;
             } else {
-                $mediaUploadError = 'Could not save uploaded file locally.';
+                $localError = 'Could not save uploaded file locally. Upload directory may be missing or not writable: ' . $uploadDir;
+            }
+
+            $uploadResult = ApiSupport::metaUploadMediaHandle(
+                (string) $appId,
+                (string) $access_token,
+                $handleSourcePath,
+                $fileName,
+                $fileType,
+                $fileSize
+            );
+
+            if (!($uploadResult['ok'] ?? false)) {
+                $metaError = (string) ($uploadResult['error'] ?? 'Unknown error.');
+                $mediaUploadError = $localError !== '' ? trim($localError . ' ' . $metaError) : $metaError;
+            } else {
+                $header_media_handle = (string) ($uploadResult['handle'] ?? '');
+                if ($localSaved) {
+                    $header_media_url = $uploadedMediaPreviewUrl;
+                } else {
+                    $mediaUploadWarning = 'Media handle generated, but local preview file could not be saved.';
+                }
             }
         }
     }
@@ -275,6 +287,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($stmt->execute()) {
                     $message = 'Template created on WhatsApp Cloud API and saved locally.';
                     $message_type = 'success';
+                    if ($mediaUploadWarning !== '') {
+                        $message = $message . ' ' . $mediaUploadWarning;
+                        $message_type = 'warning';
+                    }
                 } else {
                     $message = 'Template created on WhatsApp Cloud API, but local save failed.';
                     $message_type = 'warning';

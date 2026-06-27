@@ -97,28 +97,45 @@ class TemplateController extends Controller
 
             $mediaDir = public_path('business-template-media');
             if (!is_dir($mediaDir)) {
-                mkdir($mediaDir, 0775, true);
+                @mkdir($mediaDir, 0775, true);
             }
 
             $fileName = Str::uuid() . '.' . $mediaFile->getClientOriginalExtension();
-            $mediaFile->move($mediaDir, $fileName);
+            $tempPath = (string) $mediaFile->getPathname();
             $localPath = $mediaDir . DIRECTORY_SEPARATOR . $fileName;
-            $mediaUrl = asset('business-template-media/' . $fileName);
+            $localSaved = false;
+            $localError = '';
+
+            if (is_dir($mediaDir) && is_writable($mediaDir) && $mediaFile->move($mediaDir, $fileName)) {
+                $localSaved = true;
+                $localPath = $mediaDir . DIRECTORY_SEPARATOR . $fileName;
+                $mediaUrl = asset('business-template-media/' . $fileName);
+            } else {
+                $localError = 'Media handle can still be generated, but the local preview file could not be saved. Check folder permissions for ' . $mediaDir . '.';
+            }
 
             $uploadResult = \ApiSupport::metaUploadMediaHandle(
                 $appId,
                 $accessToken,
-                $localPath,
+                $localSaved ? $localPath : $tempPath,
                 (string) $mediaFile->getClientOriginalName(),
                 $mediaType,
                 (int) $mediaFile->getSize()
             );
 
             if (!($uploadResult['ok'] ?? false)) {
-                return back()->withInput()->with('error', 'Media saved locally, but handle generation failed: ' . (string) ($uploadResult['error'] ?? 'Unknown error.'));
+                $error = (string) ($uploadResult['error'] ?? 'Unknown error.');
+                if ($localError !== '') {
+                    $error = trim($localError . ' ' . $error);
+                }
+
+                return back()->withInput()->with('error', 'Media handle generation failed: ' . $error);
             }
 
             $headerMediaHandle = (string) ($uploadResult['handle'] ?? '');
+            if (!$localSaved) {
+                $mediaUrl = '';
+            }
         }
 
         if ($headerType === 'TEXT' && $headerText !== '') {

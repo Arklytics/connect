@@ -13,6 +13,7 @@ $previewUrl = '';
 $fileName = '';
 $fileType = '';
 $fileSize = 0;
+$uploadAttempt = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Security::verifyCsrf();
@@ -49,35 +50,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $uploadDir = __DIR__ . '/uploads/media/';
             if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0775, true);
+                @mkdir($uploadDir, 0775, true);
             }
 
             $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
             $safeName = bin2hex(random_bytes(12)) . ($extension !== '' ? '.' . $extension : '');
             $localPath = $uploadDir . $safeName;
+            $localSaved = false;
+            $localError = '';
+            $metaError = '';
+            $handleSourcePath = $tmpPath;
 
-            if (move_uploaded_file($tmpPath, $localPath)) {
+            if (is_dir($uploadDir) && is_writable($uploadDir) && move_uploaded_file($tmpPath, $localPath)) {
+                $localSaved = true;
                 $previewUrl = app_public_url('website/uploads/media/' . $safeName);
-                $uploadResult = ApiSupport::metaUploadMediaHandle(
-                    $appId,
-                    $accessToken,
-                    $localPath,
-                    $fileName,
-                    $fileType,
-                    $fileSize
-                );
-
-                if (!($uploadResult['ok'] ?? false)) {
-                    $apiError = (string) ($uploadResult['error'] ?? 'Unknown error.');
-                    $message = 'Media saved locally, but handle generation failed: ' . $apiError;
-                    $message_type = 'danger';
-                } else {
-                    $mediaHandle = (string) ($uploadResult['handle'] ?? '');
-                    $message = 'Media uploaded. Copy the media handle into your template header.';
-                    $message_type = 'success';
-                }
             } else {
-                $message = 'Could not save uploaded file locally.';
+                $localError = 'Could not save uploaded file locally. Upload directory may be missing or not writable: ' . $uploadDir;
+            }
+
+            $uploadResult = ApiSupport::metaUploadMediaHandle(
+                $appId,
+                $accessToken,
+                $localSaved ? $localPath : $handleSourcePath,
+                $fileName,
+                $fileType,
+                $fileSize
+            );
+
+            if (!($uploadResult['ok'] ?? false)) {
+                $metaError = (string) ($uploadResult['error'] ?? 'Unknown error.');
+            } else {
+                $mediaHandle = (string) ($uploadResult['handle'] ?? '');
+            }
+
+            $uploadAttempt = [
+                'file_name' => $fileName,
+                'file_type' => $fileType,
+                'file_size' => $fileSize,
+                'local_saved' => $localSaved,
+                'local_error' => $localError,
+                'meta_ok' => ($uploadResult['ok'] ?? false) === true,
+                'meta_error' => $metaError,
+                'media_handle' => $mediaHandle,
+                'preview_url' => $previewUrl,
+            ];
+
+            if ($localSaved && $mediaHandle !== '') {
+                $message = 'Media uploaded. Copy the media handle into your template header.';
+                $message_type = 'success';
+            } elseif ($mediaHandle !== '') {
+                $message = 'Media handle generated. Local file save failed, but WhatsApp upload still succeeded.';
+                $message_type = 'warning';
+            } else {
+                $message = trim($localError . ' ' . $metaError);
                 $message_type = 'danger';
             }
         }
@@ -143,6 +168,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         Type: <?php echo h($fileType); ?> |
                         Size: <?php echo h((string) round($fileSize / 1024, 2)); ?> KB
                     </p>
+                </div>
+            <?php endif; ?>
+
+            <?php if (is_array($uploadAttempt)): ?>
+                <div class="wg-card p-4 mt-4">
+                    <h5 class="mb-3">Latest Upload Status</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>File</th>
+                                    <th>Local Save</th>
+                                    <th>Meta Handle</th>
+                                    <th>Error</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><?php echo h((string) $uploadAttempt['file_name']); ?></td>
+                                    <td>
+                                        <span class="badge bg-<?php echo $uploadAttempt['local_saved'] ? 'success' : 'danger'; ?>">
+                                            <?php echo $uploadAttempt['local_saved'] ? 'Saved' : 'Failed'; ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-<?php echo $uploadAttempt['meta_ok'] ? 'success' : 'danger'; ?>">
+                                            <?php echo $uploadAttempt['meta_ok'] ? 'Generated' : 'Failed'; ?>
+                                        </span>
+                                        <?php if (!empty($uploadAttempt['media_handle'])): ?>
+                                            <div class="small text-break mt-1"><?php echo h((string) $uploadAttempt['media_handle']); ?></div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="small text-danger">
+                                        <?php echo h(trim((string) $uploadAttempt['local_error'] . ' ' . (string) $uploadAttempt['meta_error'])); ?>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             <?php endif; ?>
         </main>
