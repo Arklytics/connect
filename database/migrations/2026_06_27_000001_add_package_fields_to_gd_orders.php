@@ -19,7 +19,7 @@ return new class extends Migration
                 $table->unsignedInteger('messages_used')->default(0)->after('message_limit');
             }
             if (!Schema::hasColumn('gd_orders', 'package_price')) {
-                $table->decimal('package_price', 10, 2)->nullable()->after('messages_used');
+                $table->string('package_price', 50)->nullable()->after('messages_used');
             }
             if (!Schema::hasColumn('gd_orders', 'package_started_at')) {
                 $table->timestamp('package_started_at')->nullable()->after('package_price');
