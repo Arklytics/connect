@@ -56,10 +56,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $access_token = ($business['auth_token'] ?? '') ?: AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', ''));
     $whatsapp_business_id = trim((string) ($business['whatsapp_id'] ?? ''));
+    $appId = trim((string) AppSettings::getGlobal($db, 'META_APP_ID', Config::get('META_APP_ID', '')));
 
-    if ($whatsapp_business_id === '' || $access_token === '') {
-        $mediaUploadError = 'WhatsApp Business ID or access token is missing. Add API credentials first.';
-    } elseif (is_array($header_media_file) && (int) ($header_media_file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+    if (is_array($header_media_file) && (int) ($header_media_file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
         $fileName = basename((string) $header_media_file['name']);
         $tmpPath = (string) $header_media_file['tmp_name'];
         $fileSize = (int) $header_media_file['size'];
@@ -70,7 +69,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'application/pdf',
         ];
 
-        if (!in_array($fileType, $allowedTypes, true)) {
+        if ($appId === '' || $access_token === '') {
+            $mediaUploadError = 'Meta App ID or access token is missing. Add API credentials first.';
+        } elseif (!in_array($fileType, $allowedTypes, true)) {
             $mediaUploadError = 'Unsupported file type. Use JPG, PNG, MP4, 3GP, or PDF.';
         } else {
             $uploadDir = __DIR__ . '/uploads/media/';
@@ -85,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (move_uploaded_file($tmpPath, $localPath)) {
                 $uploadedMediaPreviewUrl = app_url('website/uploads/media/' . $safeName);
                 $uploadResult = ApiSupport::metaUploadMediaHandle(
-                    (string) $whatsapp_business_id,
+                    (string) $appId,
                     (string) $access_token,
                     $localPath,
                     $fileName,
@@ -302,7 +303,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 For image, video, or document headers, upload the file first and paste the generated media handle here.
     <a href="<?php echo h(app_url('business/upload-media')); ?>" class="alert-link">Upload media</a>
             </div>
-            <form action="" method="post" id="templateForm">
+            <form action="" method="post" id="templateForm" enctype="multipart/form-data">
                 <?php echo Security::csrfField(); ?>
 
                 <div class="row">

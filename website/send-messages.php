@@ -28,10 +28,20 @@ if (isset($_POST['send'])) {
     $messageTitle = $templateData['message_title'];
     $messageBody = $templateData['message_body'];
     $subtitle = $templateData['subtitle'];
+    $placeholderData = json_decode((string) ($templateData['placeholders'] ?? ''), true);
+    $languageCode = is_array($placeholderData) ? (string) ($placeholderData['payload']['language'] ?? 'en_US') : 'en_US';
+    if ($languageCode === '') {
+        $languageCode = 'en_US';
+    }
 
     // Fetch group members
-    $stmt = $db->prepare('SELECT id, full_name, phone_number FROM gd_user_contacts WHERE biz_id = ? AND group_id = ?');
-    $stmt->bind_param('ii', $biz_id, $group_id);
+    $stmt = $db->prepare(
+        'SELECT DISTINCT c.id, c.full_name, c.phone_number
+         FROM gd_user_contacts c
+         LEFT JOIN gd_group_contacts gc ON gc.contact_id = c.id AND gc.biz_id = c.biz_id
+         WHERE c.biz_id = ? AND (c.group_id = ? OR gc.group_id = ?)'
+    );
+    $stmt->bind_param('iii', $biz_id, $group_id, $group_id);
     $stmt->execute();
     $groupQuery = $stmt->get_result();
 
@@ -86,7 +96,7 @@ if (isset($_POST['send'])) {
             "type" => "template",
             "template" => [
                 "name" => $tempname,
-                "language" => ["code" => "en"]
+                "language" => ["code" => $languageCode]
             ]
         ];
     

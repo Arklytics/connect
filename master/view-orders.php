@@ -19,6 +19,33 @@ function gdMasterTableExists(mysqli $db, string $table): bool
     return (bool) $result && $result->num_rows > 0;
 }
 
+function gdMasterColumnExists(mysqli $db, string $table, string $column): bool
+{
+    $stmt = $db->prepare(
+        'SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ? LIMIT 1'
+    );
+    $stmt->bind_param('ss', $table, $column);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    return (bool) $result && $result->num_rows > 0;
+}
+
+function gdMasterDeleteBusinessRows(mysqli $db, string $table, int $businessId): void
+{
+    try {
+        if (!gdMasterTableExists($db, $table) || !gdMasterColumnExists($db, $table, 'biz_id')) {
+            return;
+        }
+
+        $stmt = $db->prepare("DELETE FROM `$table` WHERE biz_id = ?");
+        $stmt->bind_param('i', $businessId);
+        $stmt->execute();
+    } catch (Throwable $exception) {
+        error_log("Business related cleanup failed for {$table}: " . $exception->getMessage());
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_business_id'])) {
     Security::verifyCsrf();
 
@@ -35,8 +62,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_business_id'])
             $message = 'Business not found.';
             $message_type = 'warning';
         } else {
-            $db->begin_transaction();
-
             foreach ([
                 'gd_contact_followups',
                 'gd_whatsapp_sequence_plans',
@@ -47,18 +72,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_business_id'])
                 'gd_groups',
                 'gd_package_requests',
             ] as $table) {
-                if (gdMasterTableExists($db, $table)) {
-                    $stmt = $db->prepare("DELETE FROM `$table` WHERE biz_id = ?");
-                    $stmt->bind_param('i', $deleteId);
-                    $stmt->execute();
-                }
+                gdMasterDeleteBusinessRows($db, $table, $deleteId);
             }
 
             $stmt = $db->prepare('DELETE FROM gd_orders WHERE id = ? AND admin_id = ?');
             $stmt->bind_param('ii', $deleteId, $mid);
             $stmt->execute();
 
-            $db->commit();
+            if ($stmt->affected_rows < 1) {
+                throw new RuntimeException('No gd_orders row was deleted.');
+            }
 
             if (!empty($business['business_logo'])) {
                 $logoPath = __DIR__ . '/' . ltrim((string) $business['business_logo'], '/');
@@ -71,8 +94,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_business_id'])
             $message_type = 'success';
         }
     } catch (Throwable $exception) {
-        @$db->rollback();
-        $message = 'Unable to delete business right now. Refresh and try again.';
+        error_log('Business delete failed: ' . $exception->getMessage());
+        $message = 'Unable to delete business right now: ' . $exception->getMessage();
         $message_type = 'danger';
     }
 }
@@ -108,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_business_id'])
                     $i=0;
                     $mid = Auth::requireMaster();
                     try {
-                        $stmt = $db->prepare('SELECT business_name, business_number, business_location, status FROM gd_orders WHERE admin_id = ? ORDER BY id DESC');
+                        $stmt = $db->prepare('SELECT id, business_name, business_number, business_location, status FROM gd_orders WHERE admin_id = ? ORDER BY id DESC');
                         $stmt->bind_param('i', $mid);
                         $stmt->execute();
                         $sql3 = $stmt->get_result();
