@@ -9,6 +9,9 @@
     <a href="{{ route('admin.orders.index') }}" class="text-decoration-none">
       <li class="list-group-item text-light shadow rounded mt-2 p-3"><i class="bi bi-list-columns-reverse"></i> View Orders</li>
     </a>
+    <a href="{{ route('admin.packages.index') }}" class="text-decoration-none">
+      <li class="list-group-item text-light shadow rounded mt-2 p-3"><i class="bi bi-box-seam"></i> Packages</li>
+    </a>
     <a href="{{ route('admin.settings.tokens') }}" class="text-decoration-none">
       <li class="list-group-item text-light shadow rounded mt-2 p-3"><i class="bi bi-gear-fill"></i> Packages & API</li>
     </a>

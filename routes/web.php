@@ -26,6 +26,7 @@ Route::prefix('master')->name('admin.')->group(function () {
         Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
         Route::resource('orders', AdminOrderController::class)->only(['index', 'create', 'store']);
         Route::post('orders/package', [AdminOrderController::class, 'storePackage'])->name('orders.package.store');
+        Route::get('packages', [AdminSettingController::class, 'packages'])->name('packages.index');
         Route::get('settings/tokens', [AdminSettingController::class, 'tokens'])->name('settings.tokens');
         Route::post('settings/app', [AdminSettingController::class, 'storeAppSettings'])->name('settings.app.store');
         Route::post('settings/tokens', [AdminSettingController::class, 'storeToken'])->name('settings.tokens.store');

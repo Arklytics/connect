@@ -45,6 +45,24 @@ class SettingController extends Controller
         ]);
     }
 
+    public function packages(Request $request)
+    {
+        $masterId = $request->session()->get('master_id');
+
+        $packageRequests = Schema::hasTable('gd_package_requests')
+            ? DB::table('gd_package_requests')->orderByDesc('id')->get()
+            : collect();
+
+        return view('admin.settings.packages', [
+            'businesses' => DB::table('gd_orders')
+                ->where('admin_id', $masterId)
+                ->orderByDesc('id')
+                ->get(),
+            'packageRequests' => $packageRequests,
+            'packages' => self::PACKAGES,
+        ]);
+    }
+
     public function storeAppSettings(Request $request)
     {
         $data = $request->validate([
