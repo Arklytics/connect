@@ -192,20 +192,22 @@ public static function buildTemplateSendComponents(array $templateRow): array
          * image.id
          */
 
-        if (!empty($meta['media_id'])) {
+$type = strtolower($headerType);
 
-            $type = strtolower($headerType);
+$mediaUrl = trim((string)($meta['header_media_url'] ?? $templateRow['media_url'] ?? ''));
 
-            $components[] = [
-                'type' => 'header',
-                'parameters' => [[
-                    'type' => $type,
-                    $type => [
-                        'id' => $meta['media_id']
-                    ]
-                ]]
-            ];
-        }
+if ($mediaUrl !== '') {
+
+    $components[] = [
+        'type' => 'header',
+        'parameters' => [[
+            'type' => $type,
+            $type => [
+                'link' => $mediaUrl
+            ]
+        ]]
+    ];
+}
     }
 
     /*
