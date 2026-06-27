@@ -213,113 +213,128 @@ final class ApiSupport
         ];
     }
 
-    public static function metaUploadMediaHandle(
-        string $appId,
-        string $accessToken,
-        string $filePath,
-        string $fileName,
-        string $fileType,
-        int $fileLength
-    ): array {
-        if ($appId === '' || $accessToken === '' || $filePath === '' || !is_file($filePath)) {
-            return [
-                'ok' => false,
-                'handle' => null,
-                'error' => 'Missing upload credentials or file path.',
-            ];
-        }
+public static function metaUploadMediaHandle(
+    string $appId,
+    string $accessToken,
+    string $filePath,
+    string $fileName,
+    string $fileType,
+    int $fileLength
+): array {
 
-        $graphVersion = trim((string) Config::get('META_GRAPH_VERSION', 'v18.0'));
-        if ($graphVersion === '') {
-            $graphVersion = 'v18.0';
-        }
-
-        $sessionUrl = 'https://graph.facebook.com/' . $graphVersion . '/' . rawurlencode($appId)
-            . '/uploads?' . http_build_query([
-                'file_name' => $fileName,
-                'file_length' => $fileLength,
-                'file_type' => $fileType,
-                'access_token' => $accessToken,
-            ], '', '&', PHP_QUERY_RFC3986);
-
-        $ch = curl_init($sessionUrl);
-        curl_setopt_array($ch, [
-            CURLOPT_POST => true,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 30,
-        ]);
-        $sessionResponse = curl_exec($ch);
-        $sessionHttpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $sessionError = curl_error($ch);
-        curl_close($ch);
-
-        $sessionData = json_decode((string) $sessionResponse, true);
-        $uploadSessionId = (string) ($sessionData['id'] ?? '');
-
-        if ($sessionError !== '' || $sessionHttpStatus < 200 || $sessionHttpStatus >= 300 || $uploadSessionId === '') {
-            return [
-                'ok' => false,
-                'handle' => null,
-                'error' => $sessionData['error']['message'] ?? ($sessionError !== '' ? $sessionError : 'Could not start Meta upload session.'),
-            ];
-        }
-
-        $fileContents = file_get_contents($filePath);
-        if ($fileContents === false) {
-            return [
-                'ok' => false,
-                'handle' => null,
-                'error' => 'Unable to read the uploaded file.',
-            ];
-        }
-
-        $uploadUrl = 'https://graph.facebook.com/' . $graphVersion . '/' . rawurlencode($uploadSessionId);
-        $authHeaders = [
-            'Authorization: Bearer ' . $accessToken,
-            'Authorization: OAuth ' . $accessToken,
+    if (!is_file($filePath)) {
+        return [
+            'ok' => false,
+            'handle' => null,
+            'error' => 'File not found.'
         ];
-        $lastError = 'Meta did not return a media handle.';
+    }
 
-        foreach ($authHeaders as $authHeader) {
-            $ch = curl_init($uploadUrl);
-            curl_setopt_array($ch, [
-                CURLOPT_POST => true,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 60,
-                CURLOPT_HTTPHEADER => [
-                    $authHeader,
-                    'file_offset: 0',
-                    'Content-Type: application/octet-stream',
-                ],
-                CURLOPT_POSTFIELDS => $fileContents,
-            ]);
-            $handleResponse = curl_exec($ch);
-            $handleHttpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $handleError = curl_error($ch);
-            curl_close($ch);
+    $graphVersion = 'v23.0';
 
-            $handleData = json_decode((string) $handleResponse, true);
-            $mediaHandle = (string) ($handleData['h'] ?? '');
+    /*
+     * STEP 1
+     * Create Upload Session
+     */
 
-            if ($handleError === '' && $handleHttpStatus >= 200 && $handleHttpStatus < 300 && $mediaHandle !== '') {
-                return [
-                    'ok' => true,
-                    'handle' => $mediaHandle,
-                    'error' => null,
-                ];
-            }
+    $url = "https://graph.facebook.com/{$graphVersion}/{$appId}/uploads";
 
-            $lastError = $handleData['error']['message'] ?? ($handleError !== '' ? $handleError : $lastError);
-        }
+    $ch = curl_init($url);
+
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "Authorization: Bearer {$accessToken}",
+        ],
+        CURLOPT_POSTFIELDS => http_build_query([
+            'file_name'   => $fileName,
+            'file_length' => $fileLength,
+            'file_type'   => $fileType,
+        ]),
+    ]);
+
+    $response = curl_exec($ch);
+    $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $json = json_decode($response, true);
+
+    if ($http >= 300 || empty($json['id'])) {
 
         return [
             'ok' => false,
             'handle' => null,
-            'error' => $lastError,
+            'error' => $json['error']['message'] ?? $response,
         ];
     }
 
-    public static function whatsappTextPayload(string $to, string $messageBody): array
+    $uploadId = $json['id'];
+
+    /*
+     * STEP 2
+     * Upload Binary
+     */
+
+    $binary = file_get_contents($filePath);
+
+    $uploadUrl = "https://graph.facebook.com/{$graphVersion}/{$uploadId}";
+
+    $ch = curl_init($uploadUrl);
+
+    curl_setopt_array($ch, [
+
+        CURLOPT_CUSTOMREQUEST => "POST",
+        CURLOPT_RETURNTRANSFER => true,
+
+        CURLOPT_HTTPHEADER => [
+
+            "Authorization: OAuth {$accessToken}",
+
+            "file_offset: 0",
+
+            "Content-Type: application/octet-stream",
+
+            "Content-Length: ".strlen($binary),
+
+        ],
+
+        CURLOPT_POSTFIELDS => $binary,
+
+    ]);
+
+    $response = curl_exec($ch);
+    $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+    curl_close($ch);
+
+    $json = json_decode($response, true);
+
+    if ($http >= 300 || empty($json['h'])) {
+
+        return [
+
+            'ok' => false,
+
+            'handle' => null,
+
+            'error' => $json['error']['message'] ?? $response,
+
+        ];
+    }
+
+    return [
+
+        'ok' => true,
+
+        'handle' => $json['h'],
+
+        'error' => null,
+
+    ];
+}
+
+public static function whatsappTextPayload(string $to, string $messageBody): array
     {
         return [
             'messaging_product' => 'whatsapp',
