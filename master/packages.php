@@ -27,6 +27,18 @@ function gdMasterColumns(mysqli $db, string $table): array
     return $columns;
 }
 
+function gdMasterTableExists(mysqli $db, string $table): bool
+{
+    $stmt = $db->prepare(
+        'SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1'
+    );
+    $stmt->bind_param('s', $table);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    return (bool) $result && $result->num_rows > 0;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Security::verifyCsrf();
 
@@ -103,7 +115,7 @@ if ($db) {
         $stmt->execute();
         $businesses = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
-        if (\Illuminate\Support\Facades\Schema::hasTable('gd_package_requests')) {
+        if (gdMasterTableExists($db, 'gd_package_requests')) {
             $stmt = $db->prepare('SELECT * FROM gd_package_requests ORDER BY id DESC');
             $stmt->execute();
             $packageRequests = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
