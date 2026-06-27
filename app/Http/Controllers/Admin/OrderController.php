@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class OrderController extends Controller
@@ -124,5 +125,43 @@ class OrderController extends Controller
             ]);
 
         return back()->with('success', 'Package updated for the business.');
+    }
+
+    public function destroy(Request $request, int $order)
+    {
+        $masterId = (int) $request->session()->get('master_id');
+        $business = DB::table('gd_orders')
+            ->where('id', $order)
+            ->where('admin_id', $masterId)
+            ->first();
+
+        if (!$business) {
+            return back()->with('warning', 'Business not found.');
+        }
+
+        DB::transaction(function () use ($order) {
+            foreach ([
+                'gd_contact_followups',
+                'gd_whatsapp_sequence_plans',
+                'gd_sent_messages',
+                'gd_whatsapp_templates',
+                'gd_group_contacts',
+                'gd_user_contacts',
+                'gd_groups',
+                'gd_package_requests',
+            ] as $table) {
+                if (Schema::hasTable($table)) {
+                    DB::table($table)->where('biz_id', $order)->delete();
+                }
+            }
+
+            DB::table('gd_orders')->where('id', $order)->delete();
+        });
+
+        if (!empty($business->business_logo)) {
+            Storage::disk('public')->delete((string) $business->business_logo);
+        }
+
+        return back()->with('success', 'Business deleted successfully.');
     }
 }

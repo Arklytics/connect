@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Business;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class TemplateController extends Controller
 {
@@ -32,8 +33,22 @@ class TemplateController extends Controller
             'placeholder' => ['nullable', 'string'],
             'subtitle' => ['nullable', 'string', 'max:255'],
             'media_url' => ['nullable', 'url'],
+            'media_file' => ['nullable', 'image', 'max:4096'],
             'buttons' => ['nullable', 'array'],
         ]);
+
+        $mediaUrl = trim((string) ($data['media_url'] ?? ''));
+        if ($request->hasFile('media_file')) {
+            $mediaFile = $request->file('media_file');
+            $mediaDir = public_path('business-template-media');
+            if (!is_dir($mediaDir)) {
+                mkdir($mediaDir, 0775, true);
+            }
+
+            $fileName = Str::uuid() . '.' . $mediaFile->getClientOriginalExtension();
+            $mediaFile->move($mediaDir, $fileName);
+            $mediaUrl = asset('business-template-media/' . $fileName);
+        }
 
         DB::table('gd_whatsapp_templates')->insert([
             'biz_id' => $request->session()->get('biz_id'),
@@ -42,7 +57,7 @@ class TemplateController extends Controller
             'message_body' => $data['message'] ?? '',
             'placeholders' => $data['placeholder'] ?? '',
             'subtitle' => $data['subtitle'] ?? '',
-            'media_url' => $data['media_url'] ?? '',
+            'media_url' => $mediaUrl,
             'status' => 'Pending',
             'buttons' => json_encode($data['buttons'] ?? []),
         ]);

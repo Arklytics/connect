@@ -14,6 +14,7 @@
         <th>Contact</th>
         <th>Location</th>
         <th>Status</th>
+        <th>Action</th>
       </tr>
     </thead>
     <tbody>
@@ -26,9 +27,18 @@
           <td>{{ $order->business_number }}</td>
           <td>{{ $order->business_location }}</td>
           <td>{{ (int) $order->status === 1 ? 'Activated' : 'In-active' }}</td>
+          <td>
+            <form action="{{ route('admin.orders.destroy', $order->id) }}" method="post" onsubmit="return confirm('Delete this business and all related data?');">
+              @csrf
+              @method('DELETE')
+              <button type="submit" class="btn btn-sm btn-danger">
+                <i class="bi bi-trash me-1"></i> Delete
+              </button>
+            </form>
+          </td>
         </tr>
       @empty
-        <tr><td colspan="7" class="text-center">No orders found</td></tr>
+        <tr><td colspan="8" class="text-center">No orders found</td></tr>
       @endforelse
     </tbody>
   </table>
