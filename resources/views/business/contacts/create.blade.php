@@ -63,6 +63,22 @@
         </div>
       </div>
     </div>
+    <div class="col-md-2">
+      <div class="card shadow-sm border-0">
+        <div class="card-body">
+          <div class="text-muted small">Verified Replies</div>
+          <div class="fs-3 fw-bold">{{ $stats['verified_replies'] ?? 0 }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card shadow-sm border-0">
+        <div class="card-body">
+          <div class="text-muted small">Quick / Delayed</div>
+          <div class="fs-3 fw-bold">{{ ($stats['quick_replies'] ?? 0) }}/{{ ($stats['delayed_replies'] ?? 0) }}</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <form method="GET" class="row g-3 mt-3 align-items-end">
@@ -237,6 +253,7 @@
             <th>Stage</th>
             <th>Status</th>
             <th>WhatsApp</th>
+            <th>Reply</th>
             <th>Next Follow-Up</th>
             <th>Actions</th>
           </tr>
@@ -265,6 +282,29 @@
                 <span class="badge bg-{{ $badge }} text-uppercase">{{ $contact->lead_status ?? 'new' }}</span>
               </td>
               <td>{!! !empty($contact->whatsapp_opt_in) ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-light text-dark">No</span>' !!}</td>
+              <td>
+                @php
+                  $replyPath = $contact->reply_path ?? '';
+                  $replyBadge = match ($replyPath) {
+                      'quick_reply' => 'success',
+                      'delayed_reply' => 'warning',
+                      'verified' => 'info',
+                      default => 'secondary',
+                  };
+                  $replyLabel = match ($replyPath) {
+                      'quick_reply' => 'Quick',
+                      'delayed_reply' => 'Delayed',
+                      'verified' => 'Verified',
+                      default => 'Pending',
+                  };
+                @endphp
+                <div class="d-flex flex-column gap-1">
+                  <span class="badge bg-{{ $replyBadge }}">{{ $replyLabel }}</span>
+                  @if (!empty($contact->reply_verified_at))
+                    <span class="small text-muted">{{ $contact->reply_verified_at }}</span>
+                  @endif
+                </div>
+              </td>
               <td>{{ $contact->next_follow_up_at ?: '-' }}</td>
               <td>
                 <div class="d-flex flex-wrap gap-1">
@@ -299,7 +339,7 @@
             </tr>
           @empty
             <tr>
-              <td colspan="9" class="text-center py-4">No contacts found</td>
+              <td colspan="10" class="text-center py-4">No contacts found</td>
             </tr>
           @endforelse
         </tbody>
@@ -333,7 +373,18 @@
               <td>{{ $followUp->sequence_name ?? '-' }}</td>
               <td>{{ $followUp->step_no }}</td>
               <td>{{ $followUp->scheduled_at }}</td>
-              <td><span class="badge bg-secondary">{{ $followUp->status }}</span></td>
+              <td>
+                @php
+                  $statusBadge = match ($followUp->status) {
+                      'sent' => 'success',
+                      'sending' => 'warning',
+                      'failed' => 'danger',
+                      'paused' => 'secondary',
+                      default => 'info',
+                  };
+                @endphp
+                <span class="badge bg-{{ $statusBadge }}">{{ $followUp->status }}</span>
+              </td>
             </tr>
           @empty
             <tr>

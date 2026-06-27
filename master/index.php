@@ -81,7 +81,7 @@ try {
                 <div class="col-xl-3 col-md-6">
                     <div class="wg-card wg-stat-card">
                         <span class="icon"><i class="bi bi-key"></i></span>
-                        <div class="label">API Tokens</div>
+                        <div class="label">API Settings</div>
                         <p class="value"><?php echo h((string) $activeTokenCount); ?></p>
                     </div>
                 </div>
@@ -118,7 +118,7 @@ try {
                     </a>
  <a class="wg-card wg-action-card" href="<?php echo h(app_url('master/setting-token')); ?>">
                         <i class="bi bi-key"></i>
-                        <span><strong>API Tokens</strong><span>Connect WhatsApp API</span></span>
+                        <span><strong>API Settings</strong><span>Connect WhatsApp and internal APIs</span></span>
                     </a>
                 </div>
             </div>

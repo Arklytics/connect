@@ -10,6 +10,7 @@ use App\Http\Controllers\Business\ContactController;
 use App\Http\Controllers\Business\DashboardController as BusinessDashboardController;
 use App\Http\Controllers\Business\GroupController;
 use App\Http\Controllers\Business\MessageController;
+use App\Http\Controllers\Business\SequenceController;
 use App\Http\Controllers\Business\TemplateController as BusinessTemplateController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,11 +22,14 @@ Route::prefix('master')->name('admin.')->group(function () {
     Route::post('/login', [AdminAuthController::class, 'login'])->name('login.store');
     Route::post('/logout', [AdminAuthController::class, 'logout'])->name('logout');
 
-    Route::middleware('master.auth')->group(function () {
+        Route::middleware('master.auth')->group(function () {
         Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
         Route::resource('orders', AdminOrderController::class)->only(['index', 'create', 'store']);
+        Route::post('orders/package', [AdminOrderController::class, 'storePackage'])->name('orders.package.store');
         Route::get('settings/tokens', [AdminSettingController::class, 'tokens'])->name('settings.tokens');
+        Route::post('settings/app', [AdminSettingController::class, 'storeAppSettings'])->name('settings.app.store');
         Route::post('settings/tokens', [AdminSettingController::class, 'storeToken'])->name('settings.tokens.store');
+        Route::post('settings/package', [AdminSettingController::class, 'storePackage'])->name('settings.package.store');
         Route::get('templates', [AdminTemplateController::class, 'index'])->name('templates.index');
     });
 });
@@ -50,8 +54,12 @@ Route::prefix('business')->name('business.')->group(function () {
         Route::get('templates/fetch/{template}', [BusinessTemplateController::class, 'fetch'])->name('templates.fetch');
         Route::resource('templates', BusinessTemplateController::class)->only(['index', 'create', 'store']);
 
+        Route::get('sequences', [SequenceController::class, 'index'])->name('sequences.index');
+        Route::post('sequences', [SequenceController::class, 'store'])->name('sequences.store');
+
         Route::get('messages', [MessageController::class, 'index'])->name('messages.index');
         Route::get('messages/send', [MessageController::class, 'create'])->name('messages.create');
         Route::post('messages/send', [MessageController::class, 'send'])->name('messages.send');
+        Route::post('packages/request', [BusinessDashboardController::class, 'requestLimitIncrease'])->name('packages.request');
     });
 });

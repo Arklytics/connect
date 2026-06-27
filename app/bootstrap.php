@@ -8,6 +8,8 @@ require_once __DIR__ . '/Security.php';
 require_once __DIR__ . '/Auth.php';
 require_once __DIR__ . '/Flash.php';
 require_once __DIR__ . '/Crm.php';
+require_once __DIR__ . '/AppSettings.php';
+require_once __DIR__ . '/ApiSupport.php';
 
 Config::load(dirname(__DIR__) . '/.env');
 Security::startSession();
@@ -44,4 +46,30 @@ function app_url(string $path = ''): string
     $path = '/' . ltrim($path, '/');
 
     return ($basePath !== '' ? $basePath : '') . $path;
+}
+
+function app_public_url(string $path = ''): string
+{
+    $configuredBase = trim((string) Config::get('APP_URL', ''));
+    if ($configuredBase !== '') {
+        return rtrim($configuredBase, '/') . '/' . ltrim($path, '/');
+    }
+
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443';
+    $scheme = $https ? 'https' : 'http';
+    $host = trim((string) ($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost'));
+    $basePath = app_base_path();
+
+    $url = $scheme . '://' . $host;
+    if ($basePath !== '') {
+        $url .= $basePath;
+    }
+
+    $path = ltrim($path, '/');
+    if ($path !== '') {
+        $url .= '/' . $path;
+    }
+
+    return $url;
 }

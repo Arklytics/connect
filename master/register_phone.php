@@ -15,7 +15,7 @@ CERT
 
 // API Headers
 $headers = [
-    "Authorization: Bearer " . Config::require('META_ACCESS_TOKEN'),
+    "Authorization: Bearer " . AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', '')),
     "Content-Type: application/json"
 ];
 

@@ -18,6 +18,13 @@ $totalContacts = 0;
 $wonContacts = 0;
 $lostContacts = 0;
 $dueFollowUps = 0;
+$packageName = 'No Package';
+$messageLimit = 0;
+$messagesUsed = 0;
+$messagesRemaining = 0;
+$limitRequestStatus = 'none';
+$limitRequestNote = '';
+$packageEndsAt = null;
 
 if (!$db) {
     $dashboardError = 'Dashboard counts could not be loaded because MySQL is not responding. Start MySQL in XAMPP, then refresh.';
@@ -48,6 +55,22 @@ try {
     }
     } catch (mysqli_sql_exception $exception) {
         $dashboardError = 'Dashboard counts could not be loaded. Restart MySQL in XAMPP if this keeps happening.';
+    }
+
+    try {
+        $stmt = $db->prepare('SELECT package_name, message_limit, messages_used, limit_request_status, limit_request_note, package_ends_at FROM gd_orders WHERE id = ? LIMIT 1');
+        $stmt->bind_param('i', $biz_id);
+        $stmt->execute();
+        $packageRow = $stmt->get_result()->fetch_assoc() ?: [];
+        $packageName = (string) ($packageRow['package_name'] ?? $packageName);
+        $messageLimit = (int) ($packageRow['message_limit'] ?? 0);
+        $messagesUsed = (int) ($packageRow['messages_used'] ?? 0);
+        $messagesRemaining = max(0, $messageLimit - $messagesUsed);
+        $limitRequestStatus = (string) ($packageRow['limit_request_status'] ?? 'none');
+        $limitRequestNote = (string) ($packageRow['limit_request_note'] ?? '');
+        $packageEndsAt = $packageRow['package_ends_at'] ?? null;
+    } catch (mysqli_sql_exception $exception) {
+        $packageName = 'No Package';
     }
 
     $columnStmt = $db->prepare('SHOW COLUMNS FROM gd_user_contacts');
@@ -124,6 +147,39 @@ if ($db) {
             <?php if ($dashboardError !== ''): ?>
                 <div class="alert alert-warning"><?php echo h($dashboardError); ?></div>
             <?php endif; ?>
+
+            <div class="wg-card p-4 mb-4 border-success">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <div>
+                        <div class="text-muted small">Current Package</div>
+                        <h5 class="mb-1"><?php echo h($packageName); ?></h5>
+                        <div class="text-muted">
+                            Used <?php echo h(number_format($messagesUsed)); ?> of <?php echo h(number_format($messageLimit)); ?> messages
+                            <?php if (!empty($packageEndsAt)): ?>
+                                <span class="ms-2">Ends: <?php echo h((string) $packageEndsAt); ?></span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <div class="fs-3 fw-bold"><?php echo h(number_format($messagesRemaining)); ?></div>
+                        <div class="text-muted small">Messages left</div>
+                    </div>
+                </div>
+                <div class="progress mt-3" style="height: 10px;">
+                    <?php
+                        $percent = $messageLimit > 0 ? (int) round(min(1, $messagesUsed / max(1, $messageLimit)) * 100) : 0;
+                    ?>
+                    <div class="progress-bar bg-success" role="progressbar" style="width: <?php echo h((string) $percent); ?>%;" aria-valuenow="<?php echo h((string) $percent); ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <?php if ($limitRequestStatus !== 'none'): ?>
+                    <div class="mt-3 small text-muted">
+                        Limit request status: <?php echo h(ucfirst($limitRequestStatus)); ?>
+                        <?php if ($limitRequestNote !== ''): ?>
+                            <span class="ms-2">Note: <?php echo h($limitRequestNote); ?></span>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
 
             <div class="row g-3">
                 <?php if ($hasCrmColumns): ?>
@@ -239,6 +295,10 @@ if ($db) {
                     <a class="wg-card wg-action-card" href="<?php echo h(app_url('business/profile')); ?>">
                         <i class="bi bi-person-badge"></i>
                         <span><strong>Profile</strong><span>View your details</span></span>
+                    </a>
+                    <a class="wg-card wg-action-card" href="<?php echo h(app_url('business/whatsapp-sequences')); ?>">
+                        <i class="bi bi-diagram-3"></i>
+                        <span><strong>WhatsApp Sequences</strong><span>Build structured follow-up plans</span></span>
                     </a>
                     <a class="wg-card wg-action-card" href="<?php echo h(app_url('business/send-messages')); ?>">
                         <i class="bi bi-send"></i>

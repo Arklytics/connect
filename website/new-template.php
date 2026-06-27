@@ -161,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute();
         $business = $stmt->get_result()->fetch_assoc();
 
-        $access_token = ($business['auth_token'] ?? '') ?: Config::require('META_ACCESS_TOKEN');
+        $access_token = ($business['auth_token'] ?? '') ?: AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', ''));
         $whatsapp_business_id = trim((string) ($business['whatsapp_id'] ?? ''));
 
         if ($whatsapp_business_id === '' || $access_token === '') {

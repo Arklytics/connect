@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
@@ -57,6 +58,15 @@ class ContactController extends Controller
                 ->whereDate('next_follow_up_at', '<=', now()->toDateString())
                 ->count(),
             'opted_in' => DB::table('gd_user_contacts')->where('biz_id', $bizId)->where('whatsapp_opt_in', 1)->count(),
+            'verified_replies' => Schema::hasColumn('gd_user_contacts', 'reply_verified_at')
+                ? DB::table('gd_user_contacts')->where('biz_id', $bizId)->whereNotNull('reply_verified_at')->count()
+                : 0,
+            'quick_replies' => Schema::hasColumn('gd_user_contacts', 'reply_path')
+                ? DB::table('gd_user_contacts')->where('biz_id', $bizId)->where('reply_path', 'quick_reply')->count()
+                : 0,
+            'delayed_replies' => Schema::hasColumn('gd_user_contacts', 'reply_path')
+                ? DB::table('gd_user_contacts')->where('biz_id', $bizId)->where('reply_path', 'delayed_reply')->count()
+                : 0,
         ];
 
         return view('business.contacts.create', [

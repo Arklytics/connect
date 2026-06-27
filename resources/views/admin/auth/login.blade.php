@@ -4,11 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <title>WhatsGrow Master Login</title>
+    <title>Arklytics Connect Master Login</title>
   </head>
   <body style="background-color: #EEEEEE;">
     <nav class="navbar bg-success bg-gradient navbar-dark">
-      <div class="container-fluid"><a class="navbar-brand" href="#">WhatsGrow Master</a></div>
+      <div class="container-fluid"><a class="navbar-brand" href="#">Arklytics Connect Master</a></div>
     </nav>
     <div class="container vh-100 d-flex justify-content-center align-items-center rounded-2">
       <div class="row w-100">

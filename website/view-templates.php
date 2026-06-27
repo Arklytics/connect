@@ -18,7 +18,7 @@ try {
     $orderStmt->execute();
     $get4 = $orderStmt->get_result()->fetch_assoc();
     $whatsapp_business_id = $get4['whatsapp_id'] ?? '';
-    $access_token = ($get4['auth_token'] ?? '') ?: Config::require('META_ACCESS_TOKEN');
+    $access_token = ($get4['auth_token'] ?? '') ?: AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', ''));
 
     $stmt = $db->prepare('SELECT * FROM gd_whatsapp_templates WHERE biz_id = ? ORDER BY id DESC');
     $stmt->bind_param('i', $biz_id);

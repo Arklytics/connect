@@ -65,7 +65,7 @@ $isConnected = (($profile['status'] ?? '0') == '1');
                         <p class="mb-2"><strong>Connection:</strong> <?php echo $isConnected ? 'Connected to WhatsApp' : 'Not connected yet'; ?></p>
                         <p class="mb-2"><strong>WhatsApp Business ID:</strong> <?php echo h(!empty($profile['whatsapp_id']) ? $profile['whatsapp_id'] : 'Not connected'); ?></p>
                         <p class="mb-2"><strong>Phone Number ID:</strong> <?php echo h(!empty($profile['phone_number_id']) ? $profile['phone_number_id'] : 'Not connected'); ?></p>
-                        <p class="mb-0"><strong>Webhook URL:</strong> <?php echo h(!empty($profile['webhook_url']) ? $profile['webhook_url'] : 'Not set'); ?></p>
+                        <p class="mb-0"><strong>Webhook URL:</strong> <?php echo h(!empty($profile['webhook_url']) ? $profile['webhook_url'] : app_public_url('incoming.php')); ?></p>
                     </div>
                 </div>
 

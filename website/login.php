@@ -43,7 +43,7 @@ if (isset($_POST['login'])) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="<?php echo h(app_url('master/css/style.css')); ?>" rel="stylesheet">
-    <title>WhatsGrow - Business Login</title>
+    <title>Arklytics Connect - Business Login</title>
   </head>
   <body class="wg-login-body">
     <main class="wg-login-shell">
@@ -54,7 +54,7 @@ if (isset($_POST['login'])) {
             <span>Business Login</span>
           </div>
           <h2>Welcome back</h2>
-          <p class="subtitle">Access your WhatsGrow business workspace.</p>
+          <p class="subtitle">Access your Arklytics Connect business workspace.</p>
 
           <?php if ($message !== ''): ?>
             <div class="alert alert-danger"><?php echo h($message); ?></div>

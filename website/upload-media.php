@@ -17,13 +17,13 @@ $fileSize = 0;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Security::verifyCsrf();
 
-    $appId = trim((string) Config::get('META_APP_ID', ''));
+    $appId = AppSettings::getGlobal($db, 'META_APP_ID', Config::get('META_APP_ID', ''));
 
     $stmt = $db->prepare('SELECT auth_token FROM gd_orders WHERE id = ? LIMIT 1');
     $stmt->bind_param('i', $biz_id);
     $stmt->execute();
     $business = $stmt->get_result()->fetch_assoc();
-    $accessToken = ($business['auth_token'] ?? '') ?: Config::require('META_ACCESS_TOKEN');
+    $accessToken = ($business['auth_token'] ?? '') ?: AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', ''));
 
     if ($appId === '') {
         $message = 'META_APP_ID is missing in .env. Add your Meta App ID, then retry.';

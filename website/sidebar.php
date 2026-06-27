@@ -11,7 +11,7 @@
  <a href="<?php echo h(app_url('business/create-contact')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-person-lines-fill"></i> Contacts</li></a>
  <a href="<?php echo h(app_url('business/add-contacts-group')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-file-earmark-spreadsheet"></i> Import Contacts</li></a>
  <a href="<?php echo h(app_url('business/create-group')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-people"></i> Contact Groups</li></a>
- <a href="<?php echo h(app_url('business/send-messages')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-whatsapp"></i> WhatsApp Sequences</li></a>
+ <a href="<?php echo h(app_url('business/whatsapp-sequences')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-diagram-3"></i> WhatsApp Sequences</li></a>
     </ul>
 
     <li class="list-group-item dropdown-toggle" id="templatesDropdown" style="cursor: pointer;">
@@ -44,10 +44,9 @@
       <i class="bi bi-bar-chart-fill"></i> Reports
     </li>
     <ul class="list-group collapse" id="reportsMenu">
-      <li class="list-group-item"><i class="bi bi-credit-card"></i> Payments</li>
-      <li class="list-group-item"><i class="bi bi-chat-left-text"></i> Messages</li>
-      <li class="list-group-item"><i class="bi bi-file-earmark-text"></i> Templates</li>
-      <li class="list-group-item"><i class="bi bi-bag"></i> Orders</li>
+ <a href="<?php echo h(app_url('business/reports')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-clipboard-data-fill"></i> Reports Home</li></a>
+ <a href="<?php echo h(app_url('business/view-messages')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-chat-dots-fill"></i> Message Reports</li></a>
+ <a href="<?php echo h(app_url('business/lead-reports')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-people-fill"></i> Lead Reports</li></a>
     </ul>
 
  <a href="<?php echo h(app_url('business/logout')); ?>" class="text-decoration-none">

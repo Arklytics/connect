@@ -7,9 +7,10 @@ $biz_id = Auth::requireLogin();
 include 'header.php';
 $message = '';
 $message_type = 'success';
-$appId = trim((string) Config::get('META_APP_ID', ''));
-$configId = trim((string) Config::get('META_CONFIG_ID', ''));
-$appSecret = trim((string) Config::get('META_APP_SECRET', ''));
+$appId = AppSettings::getGlobal($db, 'META_APP_ID', Config::get('META_APP_ID', ''));
+$configId = AppSettings::getGlobal($db, 'META_CONFIG_ID', Config::get('META_CONFIG_ID', ''));
+$appSecret = AppSettings::getGlobal($db, 'META_APP_SECRET', Config::get('META_APP_SECRET', ''));
+$defaultWebhookUrl = app_public_url('incoming.php');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Security::verifyCsrf();
@@ -53,13 +54,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message_type = 'danger';
     } else {
         if ($accessToken !== '') {
-            $stmt = $db->prepare("UPDATE gd_orders SET auth_token = ?, whatsapp_id = COALESCE(NULLIF(?, ''), whatsapp_id), phone_number_id = COALESCE(NULLIF(?, ''), phone_number_id), status = ? WHERE id = ?");
+            $stmt = $db->prepare("UPDATE gd_orders SET auth_token = ?, whatsapp_id = COALESCE(NULLIF(?, ''), whatsapp_id), phone_number_id = COALESCE(NULLIF(?, ''), phone_number_id), webhook_url = COALESCE(NULLIF(webhook_url, ''), ?), status = ? WHERE id = ?");
             $status = $hasIds ? '1' : '0';
-            $stmt->bind_param('ssssi', $accessToken, $wabaId, $phoneNumberId, $status, $biz_id);
+            $stmt->bind_param('sssssi', $accessToken, $wabaId, $phoneNumberId, $defaultWebhookUrl, $status, $biz_id);
         } else {
-            $stmt = $db->prepare("UPDATE gd_orders SET whatsapp_id = COALESCE(NULLIF(?, ''), whatsapp_id), phone_number_id = COALESCE(NULLIF(?, ''), phone_number_id), status = ? WHERE id = ?");
+            $stmt = $db->prepare("UPDATE gd_orders SET whatsapp_id = COALESCE(NULLIF(?, ''), whatsapp_id), phone_number_id = COALESCE(NULLIF(?, ''), phone_number_id), webhook_url = COALESCE(NULLIF(webhook_url, ''), ?), status = ? WHERE id = ?");
             $status = $hasIds ? '1' : '0';
-            $stmt->bind_param('sssi', $wabaId, $phoneNumberId, $status, $biz_id);
+            $stmt->bind_param('ssssi', $wabaId, $phoneNumberId, $defaultWebhookUrl, $status, $biz_id);
         }
 
         $saved = $stmt->execute();
@@ -78,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$stmt = $db->prepare('SELECT business_name, auth_token, whatsapp_id, phone_number_id, status FROM gd_orders WHERE id = ? LIMIT 1');
+$stmt = $db->prepare('SELECT business_name, auth_token, whatsapp_id, phone_number_id, webhook_url, status FROM gd_orders WHERE id = ? LIMIT 1');
 $stmt->bind_param('i', $biz_id);
 $stmt->execute();
 $business = $stmt->get_result()->fetch_assoc() ?: [];
@@ -107,7 +108,11 @@ $isConnected = (($business['status'] ?? '0') == '1');
 
             <?php if ($appId === '' || $configId === ''): ?>
                 <div class="alert alert-warning">
-                    Add <strong>META_APP_ID</strong> and <strong>META_CONFIG_ID</strong> in <code>.env</code> to enable Embedded Signup.
+                    Add the Connect API values in <strong>Master Settings</strong> to enable Embedded Signup.
+                </div>
+            <?php else: ?>
+                <div class="alert alert-success py-2">
+                    Connect API is configured for this workspace.
                 </div>
             <?php endif; ?>
 
@@ -121,8 +126,12 @@ $isConnected = (($business['status'] ?? '0') == '1');
                             <div class="alert alert-warning py-2">Connection is incomplete. Please add the missing WhatsApp IDs below.</div>
                         <?php endif; ?>
                         <p class="mb-2"><strong>Business:</strong> <?php echo h($business['business_name'] ?? ''); ?></p>
+                        <p class="mb-2"><strong>Connect App ID:</strong> <?php echo h(!empty($appId) ? AppSettings::masked($appId) : 'Not set'); ?></p>
+                        <p class="mb-2"><strong>Connect Config ID:</strong> <?php echo h(!empty($configId) ? AppSettings::masked($configId) : 'Not set'); ?></p>
+                        <p class="mb-2"><strong>API Token:</strong> <?php echo h(AppSettings::masked((string) AppSettings::getGlobal($db, 'API_TOKEN', '')) ?: 'Not set'); ?></p>
                         <p class="mb-2"><strong>WhatsApp Business ID:</strong> <?php echo h(!empty($business['whatsapp_id']) ? $business['whatsapp_id'] : 'Not connected'); ?></p>
                         <p class="mb-2"><strong>Phone Number ID:</strong> <?php echo h(!empty($business['phone_number_id']) ? $business['phone_number_id'] : 'Not connected'); ?></p>
+                        <p class="mb-2"><strong>Webhook URL:</strong> <?php echo h(!empty($business['webhook_url']) ? $business['webhook_url'] : $defaultWebhookUrl); ?></p>
                         <p class="mb-0"><strong>Status:</strong> <?php echo $isConnected ? 'Connected' : 'Waiting for IDs'; ?></p>
     <a href="<?php echo h(app_url('business/profile')); ?>" class="btn btn-outline-success mt-3">
                             <i class="bi bi-person-badge me-1"></i> View Profile
@@ -145,7 +154,7 @@ $isConnected = (($business['status'] ?? '0') == '1');
                         <input type="hidden" name="phone_number_id" id="phoneNumberId" value="<?php echo h($business['phone_number_id'] ?? ''); ?>">
                         <div id="signupStatus" class="small text-muted mt-3"></div>
                         <div class="mt-3">
-                            <p class="text-muted small mb-0">If Meta does not return the IDs automatically, your master admin can sync them from the control panel.</p>
+                            <p class="text-muted small mb-0">If Meta does not return the IDs automatically, your master admin can sync them from the control panel. The webhook callback is auto-set to your project endpoint.</p>
                         </div>
                     </form>
                 </div>

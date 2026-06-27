@@ -8,6 +8,10 @@ RewriteRule ^privacy-policy/?$ index.php [L,QSA]
 RewriteRule ^crm-privacy/?$ index.php [L,QSA]
 RewriteRule ^terms-conditions/?$ index.php [L,QSA]
 
+RewriteRule ^api/?$ api/index.php [L,QSA]
+RewriteRule ^api/contacts/import/?$ api/contacts/import.php [L,QSA]
+RewriteRule ^api/whatsapp/send/?$ api/whatsapp/send.php [L,QSA]
+
 RewriteRule ^business/?$ website/index.php [L,QSA]
 RewriteRule ^business/login/?$ website/login.php [L,QSA]
 RewriteRule ^business/logout/?$ website/logout.php [L,QSA]

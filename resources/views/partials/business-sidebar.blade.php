@@ -9,7 +9,7 @@
     <a href="{{ route('business.contacts.import') }}" class="text-decoration-none">
       <li class="list-group-item text-light shadow rounded mt-2 p-3"><i class="bi bi-file-earmark-spreadsheet"></i> Import Contacts</li>
     </a>
-    <a href="{{ route('business.messages.create') }}" class="text-decoration-none">
+    <a href="{{ route('business.sequences.index') }}" class="text-decoration-none">
       <li class="list-group-item text-light shadow rounded mt-2 p-3"><i class="bi bi-whatsapp"></i> WhatsApp Sequences</li>
     </a>
     <a href="{{ route('business.groups.index') }}" class="text-decoration-none">

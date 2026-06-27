@@ -22,6 +22,20 @@
       <div class="col-md-12"><textarea class="form-control shadow rounded" name="business_description" rows="5" placeholder="About Business">{{ old('business_description') }}</textarea></div>
     </div>
     <div class="row bg-light mt-2">
+      <div class="col-md-4">
+        <label class="form-label">Package</label>
+        <select class="form-control shadow" name="package_key">
+          @foreach ($packages ?? [] as $key => $package)
+            <option value="{{ $key }}">{{ $package['label'] }} ({{ number_format($package['limit']) }} messages)</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Custom Limit</label>
+        <input type="number" class="form-control p-2 shadow" name="custom_message_limit" min="1" placeholder="Optional custom limit">
+      </div>
+    </div>
+    <div class="row bg-light mt-2">
       <div class="col-md-3">
         <input type="file" class="form-control" name="business_logo" accept="image/*">
         <p style="font-size: 12px;">Upload Business Logo</p>

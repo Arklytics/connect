@@ -9,7 +9,7 @@ require_once __DIR__ . '/../app/bootstrap.php';
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Terms and Conditions | WhatsGrow</title>
+    <title>Terms and Conditions | Arklytics Connect</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -24,12 +24,12 @@ require_once __DIR__ . '/../app/bootstrap.php';
             <span>Terms and Conditions</span>
           </div>
           <h2>Terms and Conditions</h2>
-          <p class="subtitle">Rules for using the WhatsGrow platform.</p>
+          <p class="subtitle">Rules for using the Arklytics Connect platform.</p>
 
           <div class="text-start">
             <p>By using this platform, you agree to provide accurate account information and to use the service only for lawful business purposes.</p>
             <p>You are responsible for the contacts, messages, and content you upload or send from your workspace.</p>
-            <p>WhatsGrow may suspend access if the platform is misused, if login credentials are shared improperly, or if activity violates applicable laws or third-party platform rules.</p>
+            <p>Arklytics Connect may suspend access if the platform is misused, if login credentials are shared improperly, or if activity violates applicable laws or third-party platform rules.</p>
             <p>Message delivery depends on external providers such as WhatsApp, Meta, hosting, and database services. Availability may vary.</p>
             <p>Features and pricing may change as the product evolves.</p>
           </div>

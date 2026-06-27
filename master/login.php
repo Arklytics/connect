@@ -51,7 +51,7 @@ if (isset($_POST['login'])) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="<?php echo h(app_url('master/css/style.css')); ?>" rel="stylesheet">
-    <title>WhatsGrow - Master Login</title>
+    <title>Arklytics Connect - Master Login</title>
   </head>
   <body class="wg-login-body">
     <main class="wg-login-shell">
@@ -59,7 +59,7 @@ if (isset($_POST['login'])) {
         <div class="wg-login-card">
           <div class="wg-brand text-dark">
             <img class="wg-brand-logo" src="<?php echo h(app_url('master/uploads/connect-logo.png')); ?>" alt="Connect logo">
-            <span>Master Console</span>
+            <span>Arklytics Connect Master</span>
           </div>
           <h2>Welcome back</h2>
           <p class="subtitle">Sign in with your admin mobile number.</p>

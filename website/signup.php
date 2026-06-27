@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $token = '';
             $wabaId = '';
             $phoneNumberId = '';
-            $webhookUrl = '';
+            $webhookUrl = app_public_url('incoming.php');
 
             $stmt = $db->prepare('INSERT INTO gd_orders (admin_id, full_name, mobile_number, email, password, business_name, business_number, business_email, business_location, business_description, business_logo, status, auth_token, whatsapp_id, phone_number_id, webhook_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $stmt->bind_param('sssssssssssissss', $adminId, $fullName, $mobile, $email, $passwordHash, $businessName, $businessNumber, $businessEmail, $businessLocation, $description, $logo, $status, $token, $wabaId, $phoneNumberId, $webhookUrl);
@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="<?php echo h(app_url('master/css/style.css')); ?>" rel="stylesheet">
-    <title>WhatsGrow - Business Signup</title>
+    <title>Arklytics Connect - Business Signup</title>
   </head>
   <body class="wg-login-body">
     <main class="wg-login-shell">

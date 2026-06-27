@@ -9,7 +9,7 @@ require_once __DIR__ . '/../app/bootstrap.php';
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Privacy Policy | WhatsGrow</title>
+    <title>Privacy Policy | Arklytics Connect</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -24,7 +24,7 @@ require_once __DIR__ . '/../app/bootstrap.php';
             <span>Privacy Policy</span>
           </div>
           <h2>Privacy Policy</h2>
-          <p class="subtitle">How WhatsGrow handles account, CRM, and WhatsApp-related data.</p>
+          <p class="subtitle">How Arklytics Connect handles account, CRM, and WhatsApp-related data.</p>
 
           <div class="text-start">
             <p>We collect and store the information needed to run your workspace, including business profile details, contacts you add, templates you create, and delivery logs for messages sent through the platform.</p>
