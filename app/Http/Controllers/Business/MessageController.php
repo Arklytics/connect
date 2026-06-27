@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class MessageController extends Controller
 {
@@ -103,9 +104,128 @@ class MessageController extends Controller
         ]);
     }
 
-    public function send()
+    public function send(Request $request)
     {
-        return back()->with('warning', 'WhatsApp sending should be connected through a Laravel service class after installation.');
+        $data = $request->validate([
+            'template_id' => ['required', 'integer', 'exists:gd_whatsapp_templates,id'],
+            'group_id' => ['required', 'integer', 'exists:gd_groups,id'],
+        ]);
+
+        $bizId = (int) $request->session()->get('biz_id');
+        $template = DB::table('gd_whatsapp_templates')
+            ->where('id', $data['template_id'])
+            ->where('biz_id', $bizId)
+            ->first();
+
+        if (!$template) {
+            return back()->with('warning', 'Template not found for this business.');
+        }
+
+        $group = DB::table('gd_groups')
+            ->where('id', $data['group_id'])
+            ->where('biz_id', $bizId)
+            ->first();
+
+        if (!$group) {
+            return back()->with('warning', 'Group not found for this business.');
+        }
+
+        $business = DB::table('gd_orders')->where('id', $bizId)->first();
+        if (!$business || empty($business->phone_number_id)) {
+            return back()->with('warning', 'WhatsApp credentials are missing. Please save the phone number ID first.');
+        }
+
+        $contacts = DB::table('gd_user_contacts as c')
+            ->leftJoin('gd_group_contacts as gc', 'gc.contact_id', '=', 'c.id')
+            ->where('c.biz_id', $bizId)
+            ->where(function ($query) use ($group) {
+                $query->where('c.group_id', $group->id)
+                    ->orWhere('gc.group_id', $group->id);
+            })
+            ->select('c.id', 'c.full_name', 'c.phone_number')
+            ->distinct()
+            ->get();
+
+        if ($contacts->isEmpty()) {
+            return back()->with('warning', 'No contacts found in the selected group.');
+        }
+
+        $whatsappToken = trim((string) ($business->auth_token ?? ''));
+        if ($whatsappToken === '') {
+            $whatsappToken = (string) (DB::table('gd_app_settings')
+                ->where('admin_id', 0)
+                ->where('setting_key', 'META_ACCESS_TOKEN')
+                ->value('setting_value') ?: '');
+        }
+        if ($whatsappToken === '') {
+            $whatsappToken = (string) \Config::get('META_ACCESS_TOKEN', '');
+        }
+
+        if ($whatsappToken === '') {
+            return back()->with('warning', 'WhatsApp access token is missing.');
+        }
+
+        $hasPackageColumns = Schema::hasColumn('gd_orders', 'message_limit') && Schema::hasColumn('gd_orders', 'messages_used');
+        $messageLimit = (int) ($business->message_limit ?? 0);
+        $messagesUsed = (int) ($business->messages_used ?? 0);
+        $successCount = 0;
+        $errorMessages = [];
+
+        foreach ($contacts as $contact) {
+            if ($hasPackageColumns && $messageLimit > 0 && $messagesUsed >= $messageLimit) {
+                $errorMessages[] = 'Message limit exhausted. Please request a package upgrade.';
+                break;
+            }
+
+            $phone = \ApiSupport::normalizePhone((string) ($contact->phone_number ?? ''));
+            if ($phone === '') {
+                $errorMessages[] = 'Skipping contact with empty phone number.';
+                continue;
+            }
+
+            $payload = \ApiSupport::whatsappTemplatePayload($phone, (string) $template->template_name);
+            $response = \ApiSupport::whatsappSendRequest((string) $business->phone_number_id, $whatsappToken, $payload);
+
+            $status = $response['ok'] ? 'success' : 'failed';
+            $deliveryStatus = $response['ok'] ? 'sent' : 'failed';
+            $errorMessage = $response['ok'] ? null : (string) ($response['error'] ?? 'Unknown error');
+            $messageId = $response['message_id'] !== null ? (string) $response['message_id'] : null;
+
+            $this->storeSentMessage([
+                'biz_id' => $bizId,
+                'phone_number' => $phone,
+                'template_id' => (int) $template->id,
+                'message_title' => (string) $template->message_title,
+                'message_body' => (string) $template->message_body,
+                'status' => $status,
+                'delivery_status' => $deliveryStatus,
+                'error_message' => $errorMessage,
+                'message_id' => $messageId,
+                'sent_at' => now(),
+            ]);
+
+            if ($response['ok']) {
+                $successCount++;
+                if ($hasPackageColumns) {
+                    DB::table('gd_orders')
+                        ->where('id', $bizId)
+                        ->increment('messages_used');
+                    $messagesUsed++;
+                }
+            } else {
+                $errorMessages[] = "Failed to send to {$phone} - Error: {$errorMessage}";
+            }
+        }
+
+        if ($successCount > 0 && empty($errorMessages)) {
+            return back()->with('success', "Messages sent successfully to {$successCount} recipients.");
+        }
+
+        if ($successCount > 0) {
+            return back()->with('warning', "Messages sent successfully to {$successCount} recipients, but some failed.");
+        }
+
+        return back()->with('error', $errorMessages[0] ?? 'Unable to send messages.');
     }
 
     private function resolveDateRange(Request $request): array
@@ -129,5 +249,39 @@ class MessageController extends Controller
     {
         $rows = DB::select('SHOW COLUMNS FROM gd_user_contacts');
         return array_map(static fn ($row) => $row->Field ?? '', $rows);
+    }
+
+    private function storeSentMessage(array $data): void
+    {
+        $payload = [
+            'biz_id' => $data['biz_id'],
+            'phone_number' => $data['phone_number'],
+            'template_id' => $data['template_id'],
+            'message_title' => $data['message_title'],
+            'message_body' => $data['message_body'],
+            'status' => $data['status'],
+            'error_message' => $data['error_message'],
+            'message_id' => $data['message_id'],
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        if (Schema::hasColumn('gd_sent_messages', 'delivery_status')) {
+            $payload['delivery_status'] = $data['delivery_status'];
+        }
+
+        if (Schema::hasColumn('gd_sent_messages', 'sent_at')) {
+            $payload['sent_at'] = $data['sent_at'] ?? now();
+        }
+
+        if (Schema::hasColumn('gd_sent_messages', 'delivered_at')) {
+            $payload['delivered_at'] = $data['delivery_status'] === 'sent' ? now() : null;
+        }
+
+        if (Schema::hasColumn('gd_sent_messages', 'read_at')) {
+            $payload['read_at'] = null;
+        }
+
+        DB::table('gd_sent_messages')->insert($payload);
     }
 }

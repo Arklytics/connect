@@ -166,31 +166,67 @@ final class ApiSupport
         ?string $messageId,
         ?string $sentAt = null
     ): void {
-        $stmt = $db->prepare('
-            INSERT INTO gd_sent_messages
-                (biz_id, phone_number, template_id, message_title, message_body, status, delivery_status, error_message, message_id, sent_at, created_at, updated_at)
-            VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ');
+        $stmt = $db->prepare('SHOW COLUMNS FROM gd_sent_messages');
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $columns = [];
+        while ($row = $result->fetch_assoc()) {
+            $columns[] = $row['Field'] ?? '';
+        }
 
-        $now = date('Y-m-d H:i:s');
-        $templateIdValue = $templateId;
-        $sentAtValue = $sentAt;
-        $stmt->bind_param(
-            'isisssssssss',
-            $bizId,
-            $phoneNumber,
-            $templateIdValue,
-            $messageTitle,
-            $messageBody,
-            $status,
-            $deliveryStatus,
-            $errorMessage,
-            $messageId,
-            $sentAtValue,
-            $now,
-            $now
-        );
+        $payload = [
+            'biz_id' => [$bizId, 'i'],
+            'phone_number' => [$phoneNumber, 's'],
+            'template_id' => [$templateId, 'i'],
+            'message_title' => [$messageTitle, 's'],
+            'message_body' => [$messageBody, 's'],
+            'status' => [$status, 's'],
+            'error_message' => [$errorMessage, 's'],
+            'message_id' => [$messageId, 's'],
+            'sent_at' => [$sentAt ?? date('Y-m-d H:i:s'), 's'],
+            'created_at' => [date('Y-m-d H:i:s'), 's'],
+            'updated_at' => [date('Y-m-d H:i:s'), 's'],
+        ];
+
+        if (in_array('delivery_status', $columns, true)) {
+            $payload['delivery_status'] = [$deliveryStatus, 's'];
+        }
+
+        if (in_array('delivered_at', $columns, true)) {
+            $payload['delivered_at'] = [$deliveryStatus === 'sent' ? date('Y-m-d H:i:s') : null, 's'];
+        }
+
+        if (in_array('read_at', $columns, true)) {
+            $payload['read_at'] = [null, 's'];
+        }
+
+        $insertColumns = [];
+        $placeholders = [];
+        $types = '';
+        $values = [];
+
+        foreach ($payload as $column => [$value, $type]) {
+            if ($value === null && !in_array($column, ['template_id', 'error_message', 'message_id', 'sent_at', 'delivery_status', 'delivered_at', 'read_at'], true)) {
+                continue;
+            }
+
+            if ($value === null && !in_array($column, $columns, true)) {
+                continue;
+            }
+
+            $insertColumns[] = $column;
+            $placeholders[] = '?';
+            $types .= $type;
+            $values[] = $value;
+        }
+
+        $sql = 'INSERT INTO gd_sent_messages (`' . implode('`, `', $insertColumns) . '`) VALUES (' . implode(', ', $placeholders) . ')';
+        $stmt = $db->prepare($sql);
+        $bind = [$types];
+        foreach ($values as $i => $value) {
+            $bind[] = &$values[$i];
+        }
+        call_user_func_array([$stmt, 'bind_param'], $bind);
         $stmt->execute();
     }
 

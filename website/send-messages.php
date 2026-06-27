@@ -126,11 +126,19 @@ if (isset($_POST['send'])) {
             $errorMessages[] = "Failed to send to $phone - Error: $errorMsg";
         }
         
-        // Insert message details into MySQL database
-        $stmt = $db->prepare("INSERT INTO gd_sent_messages (biz_id, phone_number, template_id, message_title, message_body, status, delivery_status, error_message, message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("issssssss", $biz_id, $phone, $template_id, $messageTitle, $messageBody, $status, $deliveryStatus, $errorMsg, $messageId);
-        $stmt->execute();
-        $stmt->close();
+        ApiSupport::storeSentMessage(
+            $db,
+            (int) $biz_id,
+            (string) $phone,
+            $template_id,
+            (string) $messageTitle,
+            (string) $messageBody,
+            $status,
+            $deliveryStatus,
+            $errorMsg,
+            $messageId,
+            $status === 'success' ? date('Y-m-d H:i:s') : null
+        );
     }
     
 

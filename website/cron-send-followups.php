@@ -148,20 +148,25 @@ while ($followup = $result->fetch_assoc()) {
 
         $sendResult = cronSendWhatsappText((string) $followup['phone_number_id'], $token, $to, $messageBody);
         $messageTitle = (string) $followup['sequence_name'];
+        $bizId = (int) $followup['biz_id'];
 
         if ($sendResult['ok']) {
             $messageId = (string) ($sendResult['message_id'] ?? '');
             $sentAt = date('Y-m-d H:i:s');
 
-            $sentStmt = $db->prepare('INSERT INTO gd_sent_messages (biz_id, phone_number, template_id, message_title, message_body, status, delivery_status, error_message, message_id, sent_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            $templateId = null;
-            $status = 'success';
-            $deliveryStatus = 'sent';
-            $error = null;
-            $now = date('Y-m-d H:i:s');
-            $bizId = (int) $followup['biz_id'];
-            $sentStmt->bind_param('isssssssssss', $bizId, $to, $templateId, $messageTitle, $messageBody, $status, $deliveryStatus, $error, $messageId, $sentAt, $now, $now);
-            $sentStmt->execute();
+            ApiSupport::storeSentMessage(
+                $db,
+                (int) $followup['biz_id'],
+                (string) $to,
+                null,
+                $messageTitle,
+                $messageBody,
+                'success',
+                'sent',
+                null,
+                $messageId,
+                $sentAt
+            );
             ApiSupport::consumeMessageCredit($db, $bizId);
 
             $markSent = $db->prepare('UPDATE gd_contact_followups SET status = ?, sent_at = NOW(), updated_at = NOW() WHERE id = ?');
@@ -174,16 +179,19 @@ while ($followup = $result->fetch_assoc()) {
         } else {
             $errorMessage = (string) ($sendResult['error'] ?? 'Unknown WhatsApp error');
 
-            $sentStmt = $db->prepare('INSERT INTO gd_sent_messages (biz_id, phone_number, template_id, message_title, message_body, status, delivery_status, error_message, message_id, sent_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            $templateId = null;
-            $status = 'failed';
-            $deliveryStatus = 'failed';
-            $messageId = null;
-            $now = date('Y-m-d H:i:s');
-            $bizId = (int) $followup['biz_id'];
-            $sentAt = null;
-            $sentStmt->bind_param('isssssssssss', $bizId, $to, $templateId, $messageTitle, $messageBody, $status, $deliveryStatus, $errorMessage, $messageId, $sentAt, $now, $now);
-            $sentStmt->execute();
+            ApiSupport::storeSentMessage(
+                $db,
+                (int) $followup['biz_id'],
+                (string) $to,
+                null,
+                $messageTitle,
+                $messageBody,
+                'failed',
+                'failed',
+                $errorMessage,
+                null,
+                null
+            );
 
             $markFailed = $db->prepare('UPDATE gd_contact_followups SET status = ?, notes = CONCAT(COALESCE(notes, ""), ?, updated_at = NOW()) WHERE id = ?');
             $failedStatus = 'failed';
