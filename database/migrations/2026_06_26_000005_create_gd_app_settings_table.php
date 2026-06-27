@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('admin_id')->default(0);
             $table->string('setting_key', 120);
-            $table->longText('setting_value')->nullable();
+            $table->text('setting_value')->nullable();
             $table->timestamps();
             $table->unique(['admin_id', 'setting_key'], 'gd_app_settings_admin_key_unique');
         });
