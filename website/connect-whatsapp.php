@@ -12,6 +12,79 @@ $configId = AppSettings::getGlobal($db, 'META_CONFIG_ID', Config::get('META_CONF
 $appSecret = AppSettings::getGlobal($db, 'META_APP_SECRET', Config::get('META_APP_SECRET', ''));
 $defaultWebhookUrl = app_public_url('incoming.php');
 
+function fetchMetaWhatsAppDetails(string $accessToken): array
+{
+    $results = [
+        'whatsapp_id' => '',
+        'phone_number_id' => '',
+        'error' => '',
+    ];
+
+    $url = 'https://graph.facebook.com/v18.0/me?fields=whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number,verified_name,status}}&access_token=' . rawurlencode($accessToken);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $response = curl_exec($ch);
+    $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    $payload = json_decode((string) $response, true);
+    if ($curlError !== '' || $httpStatus < 200 || $httpStatus >= 300) {
+        $results['error'] = (string) ($payload['error']['message'] ?? $curlError ?? 'Unknown Meta API error');
+        return $results;
+    }
+
+    $accounts = $payload['whatsapp_business_accounts']['data'] ?? $payload['whatsapp_business_accounts'] ?? [];
+    if (!is_array($accounts)) {
+        $accounts = [];
+    }
+
+    foreach ($accounts as $account) {
+        if (!is_array($account)) {
+            continue;
+        }
+
+        $wabaId = trim((string) ($account['id'] ?? ''));
+        $phoneNumbers = $account['phone_numbers']['data'] ?? $account['phone_numbers'] ?? [];
+        if (!is_array($phoneNumbers)) {
+            $phoneNumbers = [];
+        }
+
+        $phoneNumberId = '';
+        foreach ($phoneNumbers as $phoneNumber) {
+            if (!is_array($phoneNumber)) {
+                continue;
+            }
+
+            $phoneNumberId = trim((string) ($phoneNumber['id'] ?? ''));
+            if ($phoneNumberId !== '') {
+                break;
+            }
+        }
+
+        if ($results['whatsapp_id'] === '' && $wabaId !== '') {
+            $results['whatsapp_id'] = $wabaId;
+        }
+
+        if ($results['phone_number_id'] === '' && $phoneNumberId !== '') {
+            $results['phone_number_id'] = $phoneNumberId;
+        }
+
+        if ($results['whatsapp_id'] !== '' && $results['phone_number_id'] !== '') {
+            return $results;
+        }
+    }
+
+    if ($results['whatsapp_id'] === '' || $results['phone_number_id'] === '') {
+        $results['error'] = 'Meta did not return both WhatsApp Business ID and Phone Number ID.';
+    }
+
+    return $results;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Security::verifyCsrf();
 
@@ -46,6 +119,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $message = 'Signup completed, but token exchange failed: ' . ($tokenData['error']['message'] ?? $curlError ?: 'Unknown error');
             $message_type = 'warning';
+        }
+    }
+
+    if ($accessToken !== '') {
+        $metaDetails = fetchMetaWhatsAppDetails($accessToken);
+        if ($wabaId === '') {
+            $wabaId = $metaDetails['whatsapp_id'];
+        }
+        if ($phoneNumberId === '') {
+            $phoneNumberId = $metaDetails['phone_number_id'];
+        }
+
+        if ($metaDetails['error'] !== '' && ($wabaId === '' || $phoneNumberId === '')) {
+            $message = trim(($message !== '' ? $message . ' ' : '') . $metaDetails['error']);
+            if ($message_type !== 'warning') {
+                $message_type = 'warning';
+            }
         }
     }
 
@@ -179,10 +269,7 @@ let signupSubmitTimer = null;
 function maybeSubmitSignupForm() {
   const code = document.getElementById("signupCode").value;
   const accessToken = document.getElementById("signupAccessToken").value;
-  const wabaId = document.getElementById("wabaId").value;
-  const phoneNumberId = document.getElementById("phoneNumberId").value;
-
-  if ((code || accessToken) && wabaId && phoneNumberId) {
+  if (code || accessToken) {
     document.getElementById("signupStatus").textContent = "Saving WhatsApp connection details...";
     document.getElementById("connectForm").submit();
     return true;
@@ -224,9 +311,8 @@ window.addEventListener("message", function (event) {
 
   if (waitingForSignupPayload) {
     document.getElementById("signupStatus").textContent = "WhatsApp details received. Finishing connection...";
-    if (maybeSubmitSignupForm()) {
-      waitingForSignupPayload = false;
-    }
+    maybeSubmitSignupForm();
+    waitingForSignupPayload = false;
   }
 });
 
@@ -244,17 +330,9 @@ function launchWhatsAppSignup() {
     document.getElementById("signupCode").value = response.authResponse.code || "";
     document.getElementById("signupAccessToken").value = response.authResponse.accessToken || "";
     clearTimeout(signupSubmitTimer);
-    signupSubmitTimer = setTimeout(function () {
-      if (!maybeSubmitSignupForm()) {
-        const code = document.getElementById("signupCode").value;
-        const accessToken = document.getElementById("signupAccessToken").value;
-        if (code || accessToken) {
-          document.getElementById("signupStatus").textContent = "Meta returned a login result, but the WhatsApp IDs are not ready yet. Your admin can sync them from the master panel.";
-        } else {
-          document.getElementById("signupStatus").textContent = "Waiting for WhatsApp IDs from Meta. If nothing arrives, try the signup again.";
-        }
-      }
-    }, 2500);
+    if (maybeSubmitSignupForm()) {
+      waitingForSignupPayload = false;
+    }
   }, {
     config_id: "<?php echo h($configId); ?>",
     response_type: "code",
