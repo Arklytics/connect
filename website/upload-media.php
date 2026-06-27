@@ -57,61 +57,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $localPath = $uploadDir . $safeName;
 
             if (move_uploaded_file($tmpPath, $localPath)) {
-$previewUrl = app_url('website/uploads/media/' . $safeName);
+                $previewUrl = app_public_url('website/uploads/media/' . $safeName);
+                $uploadResult = ApiSupport::metaUploadMediaHandle(
+                    $appId,
+                    $accessToken,
+                    $localPath,
+                    $fileName,
+                    $fileType,
+                    $fileSize
+                );
 
-                $sessionUrl = 'https://graph.facebook.com/v18.0/' . rawurlencode($appId)
-                    . '/uploads?file_name=' . rawurlencode($fileName)
-                    . '&file_length=' . $fileSize
-                    . '&file_type=' . rawurlencode($fileType)
-                    . '&access_token=' . rawurlencode($accessToken);
-
-                $ch = curl_init($sessionUrl);
-                curl_setopt_array($ch, [
-                    CURLOPT_POST => true,
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_TIMEOUT => 30,
-                ]);
-                $sessionResponse = curl_exec($ch);
-                $sessionHttpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                $sessionError = curl_error($ch);
-                curl_close($ch);
-
-                $sessionData = json_decode((string) $sessionResponse, true);
-                $uploadSessionId = (string) ($sessionData['id'] ?? '');
-
-                if ($sessionError !== '' || $sessionHttpStatus < 200 || $sessionHttpStatus >= 300 || $uploadSessionId === '') {
-                    $apiError = $sessionData['error']['message'] ?? $sessionError ?: 'Could not start Meta upload session.';
-                    $message = 'Media saved locally, but Meta upload failed: ' . $apiError;
+                if (!($uploadResult['ok'] ?? false)) {
+                    $apiError = (string) ($uploadResult['error'] ?? 'Unknown error.');
+                    $message = 'Media saved locally, but handle generation failed: ' . $apiError;
                     $message_type = 'danger';
                 } else {
-                    $ch = curl_init('https://graph.facebook.com/v18.0/' . rawurlencode($uploadSessionId));
-                    curl_setopt_array($ch, [
-                        CURLOPT_POST => true,
-                        CURLOPT_RETURNTRANSFER => true,
-                        CURLOPT_TIMEOUT => 60,
-                        CURLOPT_HTTPHEADER => [
-                            'Authorization: OAuth ' . $accessToken,
-                            'file_offset: 0',
-                            'Content-Type: application/octet-stream',
-                        ],
-                        CURLOPT_POSTFIELDS => file_get_contents($localPath),
-                    ]);
-                    $handleResponse = curl_exec($ch);
-                    $handleHttpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                    $handleError = curl_error($ch);
-                    curl_close($ch);
-
-                    $handleData = json_decode((string) $handleResponse, true);
-                    $mediaHandle = (string) ($handleData['h'] ?? '');
-
-                    if ($handleError !== '' || $handleHttpStatus < 200 || $handleHttpStatus >= 300 || $mediaHandle === '') {
-                        $apiError = $handleData['error']['message'] ?? $handleError ?: 'Meta did not return a media handle.';
-                        $message = 'Media saved locally, but handle generation failed: ' . $apiError;
-                        $message_type = 'danger';
-                    } else {
-                        $message = 'Media uploaded. Copy the media handle into your template header.';
-                        $message_type = 'success';
-                    }
+                    $mediaHandle = (string) ($uploadResult['handle'] ?? '');
+                    $message = 'Media uploaded. Copy the media handle into your template header.';
+                    $message_type = 'success';
                 }
             } else {
                 $message = 'Could not save uploaded file locally.';

@@ -29,10 +29,16 @@ if (isset($_POST['send'])) {
     $messageBody = $templateData['message_body'];
     $subtitle = $templateData['subtitle'];
     $placeholderData = json_decode((string) ($templateData['placeholders'] ?? ''), true);
+    $templateSend = ApiSupport::buildTemplateSendComponents($templateData);
     $languageCode = is_array($placeholderData) ? (string) ($placeholderData['payload']['language'] ?? 'en_US') : 'en_US';
     if ($languageCode === '') {
         $languageCode = 'en_US';
     }
+
+    if (is_array($templateSend) && !empty($templateSend['error'])) {
+        die("<script>alert('" . addslashes((string) $templateSend['error']) . "');</script>");
+    }
+    $templateComponents = is_array($templateSend) ? ($templateSend['components'] ?? []) : [];
 
     // Fetch group members
     $stmt = $db->prepare(
@@ -91,17 +97,21 @@ if (isset($_POST['send'])) {
         // WhatsApp message payload
         $data = [
             "messaging_product" => "whatsapp",
-            "recipient_type" => "individual",
-            "to" => $phone,
-            "type" => "template",
-            "template" => [
-                "name" => $tempname,
-                "language" => ["code" => $languageCode]
-            ]
-        ];
+        "recipient_type" => "individual",
+        "to" => $phone,
+        "type" => "template",
+        "template" => [
+            "name" => $tempname,
+            "language" => ["code" => $languageCode]
+        ]
+    ];
+
+    if (!empty($templateComponents)) {
+        $data['template']['components'] = $templateComponents;
+    }
     
-        // Send request using cURL
-        $curl = curl_init();
+    // Send request using cURL
+    $curl = curl_init();
         curl_setopt_array($curl, [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,

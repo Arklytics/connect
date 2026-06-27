@@ -119,6 +119,100 @@ final class ApiSupport
         ];
     }
 
+    public static function templatePlaceholderNumbers(string $text): array
+    {
+        preg_match_all('/{{\s*(\d+)\s*}}/', $text, $matches);
+        $numbers = array_map('intval', $matches[1] ?? []);
+        $numbers = array_values(array_unique($numbers));
+        sort($numbers);
+
+        return $numbers;
+    }
+
+    private static function sampleValue(array $values, int $index): string
+    {
+        if (array_key_exists($index, $values)) {
+            return trim((string) $values[$index]);
+        }
+
+        $stringKey = (string) $index;
+        if (array_key_exists($stringKey, $values)) {
+            return trim((string) $values[$stringKey]);
+        }
+
+        return '';
+    }
+
+    public static function buildTemplateSendComponents(array $templateRow): array
+    {
+        $meta = [];
+        if (!empty($templateRow['placeholders'])) {
+            $decoded = json_decode((string) $templateRow['placeholders'], true);
+            if (is_array($decoded)) {
+                $meta = $decoded;
+            }
+        }
+
+        $components = [];
+        $messageBody = (string) ($templateRow['message_body'] ?? '');
+        $bodyNumbers = self::templatePlaceholderNumbers($messageBody);
+        if (!empty($bodyNumbers)) {
+            $bodySamples = [];
+            if (isset($meta['body_samples']) && is_array($meta['body_samples'])) {
+                $bodySamples = $meta['body_samples'];
+            }
+
+            $parameters = [];
+            foreach ($bodyNumbers as $number) {
+                $sample = self::sampleValue($bodySamples, $number);
+                if ($sample === '') {
+                    return [
+                        'components' => [],
+                        'error' => 'This template needs sample values for every body placeholder before it can be sent.',
+                    ];
+                }
+
+                $parameters[] = [
+                    'type' => 'text',
+                    'text' => $sample,
+                ];
+            }
+
+            $components[] = [
+                'type' => 'body',
+                'parameters' => $parameters,
+            ];
+        }
+
+        $headerType = strtoupper(trim((string) ($meta['header_type'] ?? '')));
+        $headerText = trim((string) ($meta['header_text'] ?? ($templateRow['message_title'] ?? '')));
+        $headerNumbers = self::templatePlaceholderNumbers($headerText);
+        if ($headerType === 'TEXT' && !empty($headerNumbers)) {
+            $headerSample = trim((string) ($meta['header_sample'] ?? ''));
+            if ($headerSample === '') {
+                return [
+                    'components' => [],
+                    'error' => 'This template needs a header sample before it can be sent.',
+                ];
+            }
+
+            $components[] = [
+                'type' => 'header',
+                'parameters' => [
+                    [
+                        'type' => 'text',
+                        'text' => $headerSample,
+                    ],
+                ],
+            ];
+        }
+
+        return [
+            'components' => $components,
+            'error' => null,
+        ];
+    }
+
     public static function metaUploadMediaHandle(
         string $appId,
         string $accessToken,
@@ -135,11 +229,18 @@ final class ApiSupport
             ];
         }
 
-        $sessionUrl = 'https://graph.facebook.com/v18.0/' . rawurlencode($appId)
-            . '/uploads?file_name=' . rawurlencode($fileName)
-            . '&file_length=' . $fileLength
-            . '&file_type=' . rawurlencode($fileType)
-            . '&access_token=' . rawurlencode($accessToken);
+        $graphVersion = trim((string) Config::get('META_GRAPH_VERSION', 'v18.0'));
+        if ($graphVersion === '') {
+            $graphVersion = 'v18.0';
+        }
+
+        $sessionUrl = 'https://graph.facebook.com/' . $graphVersion . '/' . rawurlencode($appId)
+            . '/uploads?' . http_build_query([
+                'file_name' => $fileName,
+                'file_length' => $fileLength,
+                'file_type' => $fileType,
+                'access_token' => $accessToken,
+            ], '', '&', PHP_QUERY_RFC3986);
 
         $ch = curl_init($sessionUrl);
         curl_setopt_array($ch, [
@@ -163,38 +264,58 @@ final class ApiSupport
             ];
         }
 
-        $ch = curl_init('https://graph.facebook.com/v18.0/' . rawurlencode($uploadSessionId));
-        curl_setopt_array($ch, [
-            CURLOPT_POST => true,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 60,
-            CURLOPT_HTTPHEADER => [
-                'Authorization: OAuth ' . $accessToken,
-                'file_offset: 0',
-                'Content-Type: application/octet-stream',
-            ],
-            CURLOPT_POSTFIELDS => file_get_contents($filePath),
-        ]);
-        $handleResponse = curl_exec($ch);
-        $handleHttpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $handleError = curl_error($ch);
-        curl_close($ch);
-
-        $handleData = json_decode((string) $handleResponse, true);
-        $mediaHandle = (string) ($handleData['h'] ?? '');
-
-        if ($handleError !== '' || $handleHttpStatus < 200 || $handleHttpStatus >= 300 || $mediaHandle === '') {
+        $fileContents = file_get_contents($filePath);
+        if ($fileContents === false) {
             return [
                 'ok' => false,
                 'handle' => null,
-                'error' => $handleData['error']['message'] ?? ($handleError !== '' ? $handleError : 'Meta did not return a media handle.'),
+                'error' => 'Unable to read the uploaded file.',
             ];
         }
 
+        $uploadUrl = 'https://graph.facebook.com/' . $graphVersion . '/' . rawurlencode($uploadSessionId);
+        $authHeaders = [
+            'Authorization: Bearer ' . $accessToken,
+            'Authorization: OAuth ' . $accessToken,
+        ];
+        $lastError = 'Meta did not return a media handle.';
+
+        foreach ($authHeaders as $authHeader) {
+            $ch = curl_init($uploadUrl);
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 60,
+                CURLOPT_HTTPHEADER => [
+                    $authHeader,
+                    'file_offset: 0',
+                    'Content-Type: application/octet-stream',
+                ],
+                CURLOPT_POSTFIELDS => $fileContents,
+            ]);
+            $handleResponse = curl_exec($ch);
+            $handleHttpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $handleError = curl_error($ch);
+            curl_close($ch);
+
+            $handleData = json_decode((string) $handleResponse, true);
+            $mediaHandle = (string) ($handleData['h'] ?? '');
+
+            if ($handleError === '' && $handleHttpStatus >= 200 && $handleHttpStatus < 300 && $mediaHandle !== '') {
+                return [
+                    'ok' => true,
+                    'handle' => $mediaHandle,
+                    'error' => null,
+                ];
+            }
+
+            $lastError = $handleData['error']['message'] ?? ($handleError !== '' ? $handleError : $lastError);
+        }
+
         return [
-            'ok' => true,
-            'handle' => $mediaHandle,
-            'error' => null,
+            'ok' => false,
+            'handle' => null,
+            'error' => $lastError,
         ];
     }
 

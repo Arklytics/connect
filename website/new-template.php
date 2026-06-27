@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $localPath = $uploadDir . $safeName;
 
             if (move_uploaded_file($tmpPath, $localPath)) {
-                $uploadedMediaPreviewUrl = app_url('website/uploads/media/' . $safeName);
+                $uploadedMediaPreviewUrl = app_public_url('website/uploads/media/' . $safeName);
                 $uploadResult = ApiSupport::metaUploadMediaHandle(
                     (string) $appId,
                     (string) $access_token,
@@ -256,13 +256,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $apiCategory = (string) ($apiResponse['category'] ?? $category);
                 $buttonsJson = json_encode($buttons);
                 $placeholdersJson = json_encode([
+                    'header_type' => $header_type,
+                    'header_text' => $header_text,
                     'header_sample' => $header_sample,
+                    'header_media_handle' => $header_media_handle,
+                    'header_media_url' => $header_media_url,
                     'body_samples' => $body_samples,
+                    'body_placeholder_numbers' => $bodyVariableNumbers,
+                    'buttons' => $buttons,
                     'payload' => $payload,
-                ]);
+                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
                 $stmt = $db->prepare('INSERT INTO gd_whatsapp_templates (biz_id, template_id, template_name, message_title, message_body, placeholders, subtitle, media_url, status, category, buttons) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $message_title = $header_type === 'TEXT' ? $header_text : ucfirst(strtolower($header_type)) . ' Header';
+                $message_title = $header_type === 'TEXT' ? $header_text : ($header_type !== 'NONE' ? ucfirst(strtolower($header_type)) . ' Header' : 'Template');
                 $media_url = $header_media_url;
                 $stmt->bind_param('issssssssss', $biz_id, $template_id, $template_name, $message_title, $body_text, $placeholdersJson, $footer_text, $media_url, $status, $apiCategory, $buttonsJson);
 

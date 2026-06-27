@@ -121,6 +121,18 @@ class MessageController extends Controller
             return back()->with('warning', 'Template not found for this business.');
         }
 
+        $templateMeta = json_decode((string) ($template->placeholders ?? ''), true);
+        $languageCode = is_array($templateMeta) ? (string) ($templateMeta['payload']['language'] ?? 'en_US') : 'en_US';
+        if ($languageCode === '') {
+            $languageCode = 'en_US';
+        }
+
+        $templateComponents = \ApiSupport::buildTemplateSendComponents((array) $template);
+        if (!empty($templateComponents['error'])) {
+            return back()->with('warning', (string) $templateComponents['error']);
+        }
+        $templateSendComponents = is_array($templateComponents['components'] ?? null) ? $templateComponents['components'] : [];
+
         $group = DB::table('gd_groups')
             ->where('id', $data['group_id'])
             ->where('biz_id', $bizId)
@@ -183,7 +195,7 @@ class MessageController extends Controller
                 continue;
             }
 
-            $payload = \ApiSupport::whatsappTemplatePayload($phone, (string) $template->template_name);
+            $payload = \ApiSupport::whatsappTemplatePayload($phone, (string) $template->template_name, $languageCode, $templateSendComponents);
             $response = \ApiSupport::whatsappSendRequest((string) $business->phone_number_id, $whatsappToken, $payload);
 
             $status = $response['ok'] ? 'success' : 'failed';

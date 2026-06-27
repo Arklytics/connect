@@ -133,6 +133,7 @@ $language = trim((string) ($payload['language'] ?? 'en')) ?: 'en';
 $messageBody = trim((string) ($payload['message'] ?? $payload['message_body'] ?? ''));
 $templateName = trim((string) ($payload['template_name'] ?? ''));
 $components = $payload['components'] ?? [];
+$templateRow = [];
 
 if ($bizId <= 0) {
     ApiSupport::jsonResponse(['ok' => false, 'error' => 'biz_id is required.'], 422);
@@ -166,13 +167,27 @@ $templateTitle = '';
 $templateBody = '';
 
 if ($templateName !== '') {
-    $stmt = $db->prepare('SELECT id, message_title, message_body FROM gd_whatsapp_templates WHERE biz_id = ? AND template_name = ? LIMIT 1');
+    $stmt = $db->prepare('SELECT id, message_title, message_body, placeholders FROM gd_whatsapp_templates WHERE biz_id = ? AND template_name = ? LIMIT 1');
     $stmt->bind_param('is', $bizId, $templateName);
     $stmt->execute();
     $templateRow = $stmt->get_result()->fetch_assoc() ?: [];
     $templateId = !empty($templateRow['id']) ? (int) $templateRow['id'] : null;
     $templateTitle = (string) ($templateRow['message_title'] ?? '');
     $templateBody = (string) ($templateRow['message_body'] ?? '');
+}
+
+$templateSendComponents = [];
+if ($isTemplateSend && empty($components) && !empty($templateRow ?? [])) {
+    $builtComponents = ApiSupport::buildTemplateSendComponents($templateRow);
+    if (!empty($builtComponents['error'])) {
+        ApiSupport::jsonResponse(['ok' => false, 'error' => (string) $builtComponents['error']], 422);
+    }
+
+    $templateSendComponents = is_array($builtComponents['components'] ?? null) ? $builtComponents['components'] : [];
+}
+
+if ($isTemplateSend && empty($components) && !empty($templateSendComponents)) {
+    $components = $templateSendComponents;
 }
 
 $sent = 0;
