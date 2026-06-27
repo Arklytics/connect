@@ -145,6 +145,24 @@ final class ApiSupport
 
     public static function buildTemplateSendComponents(array $templateRow): array
     {
+        $meta = self::templateMeta($templateRow);
+        $payloadComponents = [];
+
+        if (isset($meta['payload']['components']) && is_array($meta['payload']['components'])) {
+            $payloadComponents = $meta['payload']['components'];
+        } elseif (isset($meta['components']) && is_array($meta['components'])) {
+            $payloadComponents = $meta['components'];
+        }
+
+        if (!empty($payloadComponents)) {
+            return self::buildComponentsFromPayload($templateRow, $meta, $payloadComponents);
+        }
+
+        return self::buildComponentsFromLegacyTemplate($templateRow, $meta);
+    }
+
+    private static function templateMeta(array $templateRow): array
+    {
         $meta = [];
         if (!empty($templateRow['placeholders'])) {
             $decoded = json_decode((string) $templateRow['placeholders'], true);
@@ -153,9 +171,108 @@ final class ApiSupport
             }
         }
 
+        return $meta;
+    }
+
+    private static function templateExampleValue(array $source, int $index): string
+    {
+        if ($index <= 0) {
+            return '';
+        }
+
+        if (array_is_list($source)) {
+            $offset = $index - 1;
+            if (array_key_exists($offset, $source)) {
+                $value = $source[$offset];
+                if (is_array($value)) {
+                    $value = reset($value);
+                }
+
+                return trim((string) $value);
+            }
+        }
+
+        if (array_key_exists($index, $source)) {
+            $value = $source[$index];
+            if (is_array($value)) {
+                $value = reset($value);
+            }
+
+            return trim((string) $value);
+        }
+
+        $stringKey = (string) $index;
+        if (array_key_exists($stringKey, $source)) {
+            $value = $source[$stringKey];
+            if (is_array($value)) {
+                $value = reset($value);
+            }
+
+            return trim((string) $value);
+        }
+
+        return '';
+    }
+
+    private static function extractComponentExamples(array $component, string $key): array
+    {
+        $examples = $component['example'][$key] ?? [];
+        if (!is_array($examples)) {
+            return [];
+        }
+
+        $first = $examples[0] ?? [];
+        return is_array($first) ? $first : [];
+    }
+
+    private static function buildComponentsFromPayload(array $templateRow, array $meta, array $payloadComponents): array
+    {
         $components = [];
-        $messageBody = (string) ($templateRow['message_body'] ?? '');
-        $bodyNumbers = self::templatePlaceholderNumbers($messageBody);
+        foreach ($payloadComponents as $component) {
+            if (!is_array($component)) {
+                continue;
+            }
+
+            $type = strtoupper(trim((string) ($component['type'] ?? '')));
+            if ($type === 'BODY') {
+                $built = self::buildBodyComponent($templateRow, $meta, $component);
+                if ($built !== null) {
+                    $components[] = $built;
+                }
+                continue;
+            }
+
+            if ($type === 'HEADER') {
+                $built = self::buildHeaderComponent($templateRow, $meta, $component);
+                if ($built !== null) {
+                    $components[] = $built;
+                }
+                continue;
+            }
+
+            if ($type === 'BUTTONS' || $type === 'BUTTON') {
+                $builtButtons = self::buildButtonComponents($templateRow, $meta, $component);
+                if (isset($builtButtons['error'])) {
+                    return $builtButtons;
+                }
+
+                foreach (($builtButtons['components'] ?? []) as $buttonComponent) {
+                    $components[] = $buttonComponent;
+                }
+            }
+        }
+
+        return [
+            'components' => $components,
+            'error' => null,
+        ];
+    }
+
+    private static function buildComponentsFromLegacyTemplate(array $templateRow, array $meta): array
+    {
+        $components = [];
+
+        $bodyNumbers = self::templatePlaceholderNumbers((string) ($templateRow['message_body'] ?? ''));
         if (!empty($bodyNumbers)) {
             $bodySamples = [];
             if (isset($meta['body_samples']) && is_array($meta['body_samples'])) {
@@ -164,7 +281,7 @@ final class ApiSupport
 
             $parameters = [];
             foreach ($bodyNumbers as $number) {
-                $sample = self::sampleValue($bodySamples, $number);
+                $sample = self::templateExampleValue($bodySamples, $number);
                 if ($sample === '') {
                     return [
                         'components' => [],
@@ -207,9 +324,212 @@ final class ApiSupport
             ];
         }
 
+        if (in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
+            $mediaUrl = trim((string) ($meta['header_media_url'] ?? ($templateRow['media_url'] ?? '')));
+            if ($mediaUrl === '') {
+                return [
+                    'components' => [],
+                    'error' => 'This template needs a media URL for the header before it can be sent.',
+                ];
+            }
+
+            $components[] = self::buildMediaHeaderComponent($headerType, $mediaUrl);
+        }
+
         return [
             'components' => $components,
             'error' => null,
+        ];
+    }
+
+    private static function buildBodyComponent(array $templateRow, array $meta, array $component): ?array
+    {
+        $text = (string) ($component['text'] ?? $templateRow['message_body'] ?? '');
+        $numbers = self::templatePlaceholderNumbers($text);
+        if (empty($numbers)) {
+            return null;
+        }
+
+        $examples = self::extractComponentExamples($component, 'body_text');
+        if (empty($examples) && isset($meta['body_samples']) && is_array($meta['body_samples'])) {
+            $examples = $meta['body_samples'];
+        }
+
+        $parameters = [];
+        foreach ($numbers as $number) {
+            $sample = self::templateExampleValue($examples, $number);
+            if ($sample === '') {
+                return null;
+            }
+
+            $parameters[] = [
+                'type' => 'text',
+                'text' => $sample,
+            ];
+        }
+
+        return [
+            'type' => 'body',
+            'parameters' => $parameters,
+        ];
+    }
+
+    private static function buildHeaderComponent(array $templateRow, array $meta, array $component): ?array
+    {
+        $format = strtoupper(trim((string) ($component['format'] ?? 'TEXT')));
+
+        if ($format === 'TEXT') {
+            $text = trim((string) ($component['text'] ?? $templateRow['message_title'] ?? ''));
+            $numbers = self::templatePlaceholderNumbers($text);
+            if (empty($numbers)) {
+                return null;
+            }
+
+            $examples = self::extractComponentExamples($component, 'header_text');
+            if (empty($examples) && isset($meta['header_sample'])) {
+                $examples = [1 => $meta['header_sample']];
+            }
+
+            $parameters = [];
+            foreach ($numbers as $number) {
+                $sample = self::templateExampleValue($examples, $number);
+                if ($sample === '') {
+                    return null;
+                }
+
+                $parameters[] = [
+                    'type' => 'text',
+                    'text' => $sample,
+                ];
+            }
+
+            return [
+                'type' => 'header',
+                'parameters' => $parameters,
+            ];
+        }
+
+        if (in_array($format, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
+            $mediaUrl = trim((string) ($meta['header_media_url'] ?? ($templateRow['media_url'] ?? '')));
+            if ($mediaUrl === '') {
+                return null;
+            }
+
+            return self::buildMediaHeaderComponent($format, $mediaUrl);
+        }
+
+        return null;
+    }
+
+    private static function buildButtonComponents(array $templateRow, array $meta, array $component): array
+    {
+        $buttons = [];
+        if (isset($meta['buttons']) && is_array($meta['buttons'])) {
+            $buttons = $meta['buttons'];
+        } elseif (isset($templateRow['buttons'])) {
+            $decodedButtons = json_decode((string) $templateRow['buttons'], true);
+            if (is_array($decodedButtons)) {
+                $buttons = $decodedButtons;
+            }
+        }
+
+        if (empty($buttons) && isset($component['buttons']) && is_array($component['buttons'])) {
+            $buttons = $component['buttons'];
+        }
+
+        if (empty($buttons)) {
+            return [
+                'components' => [],
+                'error' => null,
+            ];
+        }
+
+        $sendComponents = [];
+        foreach (array_values($buttons) as $index => $button) {
+            if (!is_array($button)) {
+                continue;
+            }
+
+            $buttonType = strtoupper(trim((string) ($button['type'] ?? '')));
+            if ($buttonType !== 'URL') {
+                continue;
+            }
+
+            $url = trim((string) ($button['url'] ?? $button['link'] ?? ''));
+            if ($url === '') {
+                continue;
+            }
+
+            $numbers = self::templatePlaceholderNumbers($url);
+            if (empty($numbers)) {
+                continue;
+            }
+
+            $sampleUrl = $url;
+            foreach ($numbers as $number) {
+                $replacement = self::templateExampleValue(
+                    isset($meta['body_samples']) && is_array($meta['body_samples']) ? $meta['body_samples'] : [],
+                    $number
+                );
+                if ($replacement === '') {
+                    $replacement = self::templateExampleValue(
+                        isset($meta['button_samples']) && is_array($meta['button_samples']) ? $meta['button_samples'] : [],
+                        $number
+                    );
+                }
+
+                if ($replacement === '') {
+                    return [
+                        'components' => [],
+                        'error' => 'This template needs sample values for dynamic button URLs before it can be sent.',
+                    ];
+                }
+
+                $sampleUrl = preg_replace('/\{\{\s*' . $number . '\s*\}\}/', $replacement, $sampleUrl) ?? $sampleUrl;
+            }
+
+            $sendComponents[] = [
+                'type' => 'button',
+                'sub_type' => 'url',
+                'index' => (string) $index,
+                'parameters' => [
+                    [
+                        'type' => 'text',
+                        'text' => $sampleUrl,
+                    ],
+                ],
+            ];
+        }
+
+        return [
+            'components' => $sendComponents,
+            'error' => null,
+        ];
+    }
+
+    private static function buildMediaHeaderComponent(string $format, string $mediaUrl): array
+    {
+        $type = strtolower($format);
+        $mimeType = $type;
+        $parameter = [
+            'type' => $mimeType,
+            $mimeType => [
+                'link' => $mediaUrl,
+            ],
+        ];
+
+        if ($type === 'document') {
+            $filename = basename(parse_url($mediaUrl, PHP_URL_PATH) ?: $mediaUrl);
+            if ($filename !== '') {
+                $parameter['document']['filename'] = $filename;
+            }
+        }
+
+        return [
+            'type' => 'header',
+            'parameters' => [
+                $parameter,
+            ],
         ];
     }
 
