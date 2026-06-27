@@ -120,6 +120,10 @@ try {
                         <i class="bi bi-key"></i>
                         <span><strong>API Settings</strong><span>Connect WhatsApp and internal APIs</span></span>
                     </a>
+ <a class="wg-card wg-action-card" href="<?php echo h(app_url('master/packages')); ?>">
+                        <i class="bi bi-box-seam"></i>
+                        <span><strong>Packages</strong><span>Assign plans to businesses</span></span>
+                    </a>
                 </div>
             </div>
         </main>

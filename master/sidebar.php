@@ -41,6 +41,9 @@
     </button>
     <div class="collapse" id="settingsMenu">
       <div class="list-group mt-2 ms-3">
+        <a href="<?php echo h(app_url('master/packages')); ?>" class="list-group-item list-group-item-action">
+          <i class="bi bi-box-seam"></i> Packages
+        </a>
         <a href="<?php echo h(app_url('master/setting-token')); ?>" class="list-group-item list-group-item-action">
           <i class="bi bi-key"></i> API Settings
         </a>
