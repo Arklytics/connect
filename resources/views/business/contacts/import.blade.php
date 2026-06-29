@@ -10,6 +10,15 @@
 
   <div class="card shadow-sm mt-4">
     <div class="card-body">
+      <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+        <div class="text-muted small">
+          Download the sample CSV to see the exact column names and a valid example row.
+        </div>
+        <a href="{{ route('business.contacts.import.sample') }}" class="btn btn-outline-success">
+          <i class="bi bi-download me-1"></i> Download Sample CSV
+        </a>
+      </div>
+
       <form action="{{ route('business.contacts.import.store') }}" method="post" enctype="multipart/form-data" class="row g-3">
         @csrf
         <div class="col-md-4">

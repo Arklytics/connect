@@ -46,6 +46,7 @@ Route::prefix('business')->name('business.')->group(function () {
 
         Route::get('contacts', [ContactController::class, 'create'])->name('contacts.index');
         Route::get('contacts/import', [ContactController::class, 'importForm'])->name('contacts.import');
+        Route::get('contacts/import/sample', [ContactController::class, 'importSample'])->name('contacts.import.sample');
         Route::post('contacts/import', [ContactController::class, 'import'])->name('contacts.import.store');
         Route::get('contacts/group/{group}', [ContactController::class, 'group'])->name('contacts.group');
         Route::resource('contacts', ContactController::class)->only(['create', 'store']);

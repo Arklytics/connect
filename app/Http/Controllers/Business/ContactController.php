@@ -140,6 +140,42 @@ class ContactController extends Controller
         return view('business.contacts.import', compact('groups'));
     }
 
+    public function importSample(Request $request)
+    {
+        $fileName = 'contact-import-sample.csv';
+        $headers = [
+            'full_name',
+            'phone_number',
+            'email',
+            'lead_stage',
+            'lead_status',
+            'source',
+            'next_follow_up_at',
+            'whatsapp_opt_in',
+            'notes',
+        ];
+        $sampleRow = [
+            'John Doe',
+            '+919876543210',
+            'john@example.com',
+            'lead',
+            'new',
+            'Website',
+            now()->addDays(2)->format('Y-m-d H:i:s'),
+            '1',
+            'Interested in the starter plan',
+        ];
+
+        return response()->streamDownload(function () use ($headers, $sampleRow) {
+            $output = fopen('php://output', 'w');
+            fputcsv($output, $headers);
+            fputcsv($output, $sampleRow);
+            fclose($output);
+        }, $fileName, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
     public function import(Request $request)
     {
         $data = $request->validate([
