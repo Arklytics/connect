@@ -36,6 +36,10 @@
       <i class="bi bi-whatsapp"></i> Messages
     </span>
 
+    <a href="<?php echo h(app_url('master/ai-knowledge')); ?>" class="list-group-item list-group-item-action">
+      <i class="bi bi-robot"></i> AI Auto Replies
+    </a>
+
     <button type="button" class="list-group-item list-group-item-action dropdown-toggle" id="settingsDropdown" style="cursor: pointer;">
       <i class="bi bi-gear-fill"></i> Settings
     </button>

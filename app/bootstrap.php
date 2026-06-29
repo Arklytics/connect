@@ -10,6 +10,7 @@ require_once __DIR__ . '/Flash.php';
 require_once __DIR__ . '/Crm.php';
 require_once __DIR__ . '/AppSettings.php';
 require_once __DIR__ . '/ApiSupport.php';
+require_once __DIR__ . '/AiAutoReply.php';
 
 Config::load(dirname(__DIR__) . '/.env');
 Security::startSession();

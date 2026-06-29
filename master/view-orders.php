@@ -64,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_business_id'])
         } else {
             foreach ([
                 'gd_contact_followups',
+                'gd_ai_knowledge_sections',
                 'gd_whatsapp_sequence_plans',
                 'gd_sent_messages',
                 'gd_whatsapp_templates',

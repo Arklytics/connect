@@ -374,6 +374,57 @@ function incomingUpdateMessageDelivery(mysqli $db, int $bizId, array $statusRow)
     $stmt->execute();
 }
 
+function incomingSendAiAutoReply(mysqli $db, int $bizId, string $to, string $question, array $contact = []): bool
+{
+    $question = trim($question);
+    $to = Crm::normalizePhone($to);
+    if ($question === '' || $to === '') {
+        return false;
+    }
+
+    $reply = AiAutoReply::generateReply($db, $bizId, $question, $contact);
+    if ($reply === null || trim($reply) === '') {
+        return false;
+    }
+
+    $credentials = ApiSupport::businessCredentials($db, $bizId);
+    $phoneNumberId = trim((string) ($credentials['phone_number_id'] ?? ''));
+    $accessToken = trim((string) ($credentials['auth_token'] ?? ''));
+    if ($phoneNumberId === '' || $accessToken === '') {
+        error_log('AI auto reply skipped: missing WhatsApp credentials for business ' . $bizId);
+        return false;
+    }
+
+    $result = ApiSupport::whatsappSendRequest(
+        $phoneNumberId,
+        $accessToken,
+        ApiSupport::whatsappTextPayload($to, $reply)
+    );
+
+    $status = $result['ok'] ? 'sent' : 'failed';
+    ApiSupport::storeSentMessage(
+        $db,
+        $bizId,
+        $to,
+        null,
+        'AI Auto Reply',
+        $reply,
+        $status,
+        $result['ok'] ? 'sent' : null,
+        $result['error'] ?? null,
+        $result['message_id'] ?? null,
+        date('Y-m-d H:i:s')
+    );
+
+    if ($result['ok']) {
+        ApiSupport::consumeMessageCredit($db, $bizId);
+        return true;
+    }
+
+    error_log('AI auto reply WhatsApp send failed: ' . ($result['error'] ?? 'Unknown WhatsApp error'));
+    return false;
+}
+
 $db = Database::connectOrNull();
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -428,19 +479,19 @@ foreach (($payload['entry'] ?? []) as $entry) {
             $replyAt = (new DateTimeImmutable())->setTimestamp($timestamp);
 
             $contact = incomingFindContact($db, $bizId, $from);
-            if (!$contact) {
-                continue;
+            if ($contact) {
+                $lastTouch = incomingLastOutboundTouch($db, $bizId, (string) $contact['phone_number']);
+                $responseMinutes = null;
+                if ($lastTouch instanceof DateTimeImmutable) {
+                    $responseMinutes = max(0, (int) round(($replyAt->getTimestamp() - $lastTouch->getTimestamp()) / 60));
+                }
+
+                $temperature = Crm::responseTemperature($responseMinutes);
+                incomingUpdateContact($db, $contact, $responseMinutes, $temperature, $replyText);
+                incomingQueueReplyDrivenSequence($db, $bizId, $contact, $replyAt, $responseMinutes, $replyText);
             }
 
-            $lastTouch = incomingLastOutboundTouch($db, $bizId, (string) $contact['phone_number']);
-            $responseMinutes = null;
-            if ($lastTouch instanceof DateTimeImmutable) {
-                $responseMinutes = max(0, (int) round(($replyAt->getTimestamp() - $lastTouch->getTimestamp()) / 60));
-            }
-
-            $temperature = Crm::responseTemperature($responseMinutes);
-            incomingUpdateContact($db, $contact, $responseMinutes, $temperature, $replyText);
-            incomingQueueReplyDrivenSequence($db, $bizId, $contact, $replyAt, $responseMinutes, $replyText);
+            incomingSendAiAutoReply($db, $bizId, $from, $replyText, $contact ?: []);
             $processed++;
         }
 
