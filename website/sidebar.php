@@ -1,3 +1,21 @@
+<?php
+$sidebarAiKnowledgeEnabled = false;
+try {
+    $sidebarBizId = (int) ($_SESSION['biz_id'] ?? 0);
+    if ($sidebarBizId > 0 && isset($db) && $db instanceof mysqli) {
+        $columns = Crm::tableColumns($db, 'gd_orders');
+        if (in_array('ai_auto_reply_enabled', $columns, true)) {
+            $stmt = $db->prepare('SELECT ai_auto_reply_enabled FROM gd_orders WHERE id = ? LIMIT 1');
+            $stmt->bind_param('i', $sidebarBizId);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            $sidebarAiKnowledgeEnabled = (int) ($row['ai_auto_reply_enabled'] ?? 0) === 1;
+        }
+    }
+} catch (Throwable $exception) {
+    $sidebarAiKnowledgeEnabled = false;
+}
+?>
 <aside class="text-light">
   <ul class="list-group list-group-flush">
  <a href="<?php echo h(app_url('business')); ?>" class="text-decoration-none">
@@ -29,6 +47,9 @@
     <ul class="list-group collapse" id="settingsMenu">
  <a href="<?php echo h(app_url('business/profile')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-person-badge"></i> Profile Settings</li></a>
  <a href="<?php echo h(app_url('business/connect-whatsapp')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-whatsapp"></i> WhatsApp Connection</li></a>
+<?php if ($sidebarAiKnowledgeEnabled): ?>
+ <a href="<?php echo h(app_url('business/ai-knowledge')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-robot"></i> AI Knowledge</li></a>
+<?php endif; ?>
       <li class="list-group-item text-muted"><i class="bi bi-credit-card"></i> Payment Settings <span class="badge bg-secondary ms-2">Soon</span></li>
     </ul>
 
