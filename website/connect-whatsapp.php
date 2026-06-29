@@ -85,6 +85,38 @@ function fetchMetaWhatsAppDetails(string $accessToken): array
     return $results;
 }
 
+function registerPhoneNumber($phoneNumberId, $accessToken, $pin = '123456')
+{
+    $url = "https://graph.facebook.com/v23.0/{$phoneNumberId}/register";
+
+    $data = [
+        "messaging_product" => "whatsapp",
+        "pin" => $pin
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            "Authorization: Bearer {$accessToken}",
+            "Content-Type: application/json"
+        ],
+        CURLOPT_POSTFIELDS => json_encode($data),
+        CURLOPT_TIMEOUT => 30,
+    ]);
+
+    $response = curl_exec($ch);
+    $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    return [
+        'http' => $http,
+        'response' => json_decode($response, true)
+    ];
+}
+
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Security::verifyCsrf();
 
@@ -136,6 +168,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($message_type !== 'warning') {
                 $message_type = 'warning';
             }
+        }
+    }
+
+    if (!empty($phoneNumberId)) {
+        $register = registerPhoneNumber($phoneNumberId, $accessToken);
+
+        error_log("REGISTER RESPONSE: " . json_encode($register));
+
+        if ($register['http'] != 200) {
+            $message = "Registration failed: " . json_encode($register['response']);
+            $message_type = "warning";
         }
     }
 
