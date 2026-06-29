@@ -148,7 +148,10 @@ public static function buildTemplateSendComponents(array $templateRow): array
     $meta = [];
 
     if (!empty($templateRow['placeholders'])) {
-        $meta = json_decode($templateRow['placeholders'], true) ?: [];
+        $decoded = json_decode((string)$templateRow['placeholders'], true);
+        if (is_array($decoded)) {
+            $meta = $decoded;
+        }
     }
 
     $components = [];
@@ -159,55 +162,64 @@ public static function buildTemplateSendComponents(array $templateRow): array
     |--------------------------------------------------------------------------
     */
 
-    $headerType = strtoupper($meta['header_type'] ?? '');
+    $headerType = strtoupper(trim((string)($meta['header_type'] ?? '')));
 
-    if ($headerType === 'TEXT') {
+    switch ($headerType) {
 
-        $headerText = $meta['header_text'] ?? '';
-        preg_match_all('/{{\s*(\d+)\s*}}/', $headerText, $matches);
+        case 'TEXT':
 
-        if (!empty($matches[1])) {
+            $headerText = (string)($meta['header_text'] ?? '');
 
-            $components[] = [
-                'type' => 'header',
-                'parameters' => [[
-                    'type' => 'text',
-                    'text' => $meta['header_sample'] ?? '',
-                ]]
-            ];
-        }
+            preg_match_all('/{{\s*(\d+)\s*}}/', $headerText, $matches);
 
-    } elseif (in_array($headerType, ['IMAGE','VIDEO','DOCUMENT'])) {
+            if (!empty($matches[1])) {
 
-        /*
-         * IMPORTANT
-         * Template messages require a MEDIA ID here,
-         * NOT the header_handle.
-         *
-         * Upload the media using:
-         * POST /PHONE_NUMBER_ID/media
-         *
-         * Then use:
-         *
-         * image.id
-         */
+                $components[] = [
+                    'type' => 'header',
+                    'parameters' => [[
+                        'type' => 'text',
+                        'text' => trim((string)($meta['header_sample'] ?? ''))
+                    ]]
+                ];
+            }
 
-$type = strtolower($headerType);
+            break;
 
-$mediaUrl = trim((string)($meta['header_media_url'] ?? $templateRow['media_url'] ?? ''));
+        case 'IMAGE':
+        case 'VIDEO':
+        case 'DOCUMENT':
 
-if ($mediaUrl !== '') {
+            $type = strtolower($headerType);
 
-    $components[] = [
-        'type' => 'header',
-        'parameters' => [[
-            'type' => $type,
-            $type => [
-                'link' => $mediaUrl
-            ]
-        ]]
-    ];
-}
+            $mediaUrl = trim(
+                (string)(
+                    $meta['header_media_url']
+                    ?? $templateRow['media_url']
+                    ?? ''
+                )
+            );
+
+            if ($mediaUrl !== '') {
+
+                $parameter = [
+                    'type' => $type,
+                    $type => [
+                        'link' => $mediaUrl
+                    ]
+                ];
+
+                if ($type === 'document') {
+                    $parameter['document']['filename'] =
+                        basename(parse_url($mediaUrl, PHP_URL_PATH));
+                }
+
+                $components[] = [
+                    'type' => 'header',
+                    'parameters' => [$parameter]
+                ];
+            }
+
+            break;
     }
 
     /*
@@ -216,7 +228,7 @@ if ($mediaUrl !== '') {
     |--------------------------------------------------------------------------
     */
 
-    $body = $templateRow['message_body'] ?? '';
+    $body = (string)($templateRow['message_body'] ?? '');
 
     preg_match_all('/{{\s*(\d+)\s*}}/', $body, $matches);
 
@@ -226,7 +238,14 @@ if ($mediaUrl !== '') {
 
         foreach ($matches[1] as $number) {
 
-            $value = $meta['body_samples'][$number] ?? '';
+            $value = self::templateExampleValue(
+                $meta['body_samples'] ?? [],
+                (int)$number
+            );
+
+            if ($value === '') {
+                $value = 'Sample';
+            }
 
             $parameters[] = [
                 'type' => 'text',
@@ -240,77 +259,38 @@ if ($mediaUrl !== '') {
         ];
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | BUTTONS
+    |--------------------------------------------------------------------------
+    */
+
+    if (!empty($meta['buttons']) && is_array($meta['buttons'])) {
+
+        foreach ($meta['buttons'] as $index => $button) {
+
+            $buttonType = strtoupper($button['type'] ?? '');
+
+            if ($buttonType === 'URL') {
+
+                $components[] = [
+                    'type' => 'button',
+                    'sub_type' => 'url',
+                    'index' => (string)$index,
+                    'parameters' => [[
+                        'type' => 'text',
+                        'text' => $button['sample'] ?? ''
+                    ]]
+                ];
+            }
+        }
+    }
+
     return [
         'components' => $components,
         'error' => null
     ];
 }
-
-
-    private static function templateMeta(array $templateRow): array
-    {
-        $meta = [];
-        if (!empty($templateRow['placeholders'])) {
-            $decoded = json_decode((string) $templateRow['placeholders'], true);
-            if (is_array($decoded)) {
-                $meta = $decoded;
-            }
-        }
-
-        return $meta;
-    }
-
-    private static function templateExampleValue(array $source, int $index): string
-    {
-        if ($index <= 0) {
-            return '';
-        }
-
-        if (array_is_list($source)) {
-            $offset = $index - 1;
-            if (array_key_exists($offset, $source)) {
-                $value = $source[$offset];
-                if (is_array($value)) {
-                    $value = reset($value);
-                }
-
-                return trim((string) $value);
-            }
-        }
-
-        if (array_key_exists($index, $source)) {
-            $value = $source[$index];
-            if (is_array($value)) {
-                $value = reset($value);
-            }
-
-            return trim((string) $value);
-        }
-
-        $stringKey = (string) $index;
-        if (array_key_exists($stringKey, $source)) {
-            $value = $source[$stringKey];
-            if (is_array($value)) {
-                $value = reset($value);
-            }
-
-            return trim((string) $value);
-        }
-
-        return '';
-    }
-
-    private static function extractComponentExamples(array $component, string $key): array
-    {
-        $examples = $component['example'][$key] ?? [];
-        if (!is_array($examples)) {
-            return [];
-        }
-
-        $first = $examples[0] ?? [];
-        return is_array($first) ? $first : [];
-    }
-
     private static function buildComponentsFromPayload(array $templateRow, array $meta, array $payloadComponents): array
     {
         $components = [];

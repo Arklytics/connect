@@ -13,6 +13,7 @@
     --wg-navy: #08111f;
     --wg-navy-soft: #0f172a;
     --wg-warning: #d99322;
+    --wg-header-height: 64px;
     --wg-radius: 18px;
     --wg-shadow: 0 18px 40px rgba(15, 23, 42, 0.09);
     --wg-shadow-soft: 0 10px 28px rgba(15, 23, 42, 0.06);
@@ -44,11 +45,11 @@ a {
     letter-spacing: 0;
     text-decoration: none;
     min-width: 0;
-    padding: 4px 10px 4px 6px;
-    background: rgba(255, 255, 255, 0.98);
+    padding: 4px 8px;
+    background: #ffffff;
     border: 1px solid rgba(15, 143, 99, 0.1);
-    border-radius: 14px;
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+    border-radius: 12px;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
 }
 
 .wg-brand-mark {
@@ -66,11 +67,11 @@ a {
 .wg-brand-logo {
     display: block;
     width: auto;
-    height: clamp(48px, 3.8vw, 60px);
-    max-width: 100%;
+    height: 44px;
+    max-width: min(230px, 56vw);
     flex-shrink: 0;
     object-fit: contain;
-    border-radius: 12px;
+    border-radius: 0;
     filter: none;
 }
 
@@ -124,16 +125,15 @@ a {
     position: sticky;
     top: 0;
     z-index: 20;
-    min-height: 68px;
-    padding-top: 8px;
-    padding-bottom: 8px;
+    min-height: var(--wg-header-height);
+    padding-top: 7px;
+    padding-bottom: 7px;
     background:
-        linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(245, 251, 248, 0.98)),
-        radial-gradient(circle at left top, rgba(15, 143, 99, 0.14), transparent 30%),
-        linear-gradient(90deg, rgba(15, 143, 99, 0.92) 0, rgba(15, 143, 99, 0.92) 4px, transparent 4px);
-    border-bottom: 1px solid rgba(15, 143, 99, 0.1);
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
-    backdrop-filter: blur(14px);
+        linear-gradient(90deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.98) 54%, rgba(235, 249, 242, 0.98) 100%),
+        linear-gradient(90deg, rgba(15, 143, 99, 0.95) 0, rgba(15, 143, 99, 0.95) 4px, transparent 4px);
+    border-bottom: 1px solid rgba(15, 143, 99, 0.14);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+    backdrop-filter: blur(12px);
 }
 
 .wg-topbar::after {
@@ -141,7 +141,7 @@ a {
     position: absolute;
     inset: auto 0 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+    background: linear-gradient(90deg, rgba(15, 143, 99, 0), rgba(15, 143, 99, 0.35), rgba(15, 143, 99, 0));
     pointer-events: none;
 }
 
@@ -163,20 +163,19 @@ a {
 }
 
 .wg-topbar .badge {
-    padding: 7px 12px;
+    padding: 7px 11px;
     font-size: 0.72rem;
     font-weight: 800;
     letter-spacing: 0.02em;
     text-transform: uppercase;
-    color: #ffffff !important;
-    background: linear-gradient(135deg, var(--wg-primary), #15b278) !important;
+    color: var(--wg-primary-dark) !important;
+    background: linear-gradient(135deg, #ffffff, #effaf5) !important;
     border: 1px solid rgba(15, 143, 99, 0.18) !important;
-    box-shadow: 0 10px 18px rgba(15, 143, 99, 0.18);
-    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06);
 }
 
 .wg-shell {
-    min-height: calc(100vh - 68px);
+    min-height: calc(100vh - var(--wg-header-height));
 }
 
 .wg-shell.container-fluid {
@@ -196,24 +195,23 @@ a {
 
 .wg-sidebar {
     position: sticky;
-    top: 68px;
+    top: var(--wg-header-height);
     align-self: flex-start;
-    height: calc(100vh - 68px);
+    height: calc(100vh - var(--wg-header-height));
     overflow-y: auto;
-    min-height: calc(100vh - 68px);
-    padding: 18px 16px;
+    min-height: calc(100vh - var(--wg-header-height));
+    padding: 14px 12px;
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 250, 247, 0.98)),
-        radial-gradient(circle at top, rgba(15, 143, 99, 0.12), transparent 38%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.65), rgba(15, 143, 99, 0.03));
-    border-right: 1px solid rgba(15, 143, 99, 0.08);
+        linear-gradient(180deg, #ffffff 0%, #f7fcf9 44%, #edf8f2 100%),
+        linear-gradient(90deg, rgba(15, 143, 99, 0.08), rgba(15, 143, 99, 0));
+    border-right: 1px solid rgba(15, 143, 99, 0.12);
     box-shadow:
         inset -1px 0 0 rgba(255, 255, 255, 0.9),
-        inset 0 1px 0 rgba(15, 143, 99, 0.04);
+        8px 0 22px rgba(15, 23, 42, 0.03);
 }
 
 .wg-sidebar .list-group {
-    gap: 8px;
+    gap: 6px;
 }
 
 .list-group-item {
@@ -223,66 +221,104 @@ a {
 }
 
 .wg-sidebar .list-group-item {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 10px;
-    min-height: 48px;
-    color: #355247 !important;
-    padding: 12px 14px;
-    border: 1px solid rgba(15, 143, 99, 0.08);
-    background: #ffffff;
-    backdrop-filter: blur(10px);
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+    gap: 11px;
+    min-height: 44px;
+    color: #315448 !important;
+    padding: 10px 12px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: none;
     transition:
         transform 0.18s ease,
         background 0.18s ease,
         border-color 0.18s ease,
         box-shadow 0.18s ease,
         color 0.18s ease;
-    font-weight: 600;
+    font-weight: 650;
+}
+
+.wg-sidebar .list-group-item i {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    color: var(--wg-primary);
+    background: rgba(15, 143, 99, 0.09);
+    flex: 0 0 26px;
+    font-size: 15px;
+}
+
+.wg-sidebar .list-group-item::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 10px;
+    bottom: 10px;
+    width: 3px;
+    border-radius: 999px;
+    background: transparent;
 }
 
 .wg-sidebar .list-group-item:hover,
 .wg-sidebar .list-group-item:focus,
 .wg-sidebar .list-group-item.active {
-    background: linear-gradient(135deg, rgba(15, 143, 99, 0.98), rgba(21, 178, 120, 0.96));
-    color: #ffffff !important;
-    border-color: rgba(15, 143, 99, 0.26);
-    transform: translateX(2px);
-    box-shadow: 0 10px 22px rgba(15, 143, 99, 0.14);
+    background: linear-gradient(135deg, #ffffff 0%, #eefaf4 100%);
+    color: var(--wg-primary-dark) !important;
+    border-color: rgba(15, 143, 99, 0.18);
+    transform: translateX(1px);
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.07);
+}
+
+.wg-sidebar .list-group-item:hover::before,
+.wg-sidebar .list-group-item:focus::before,
+.wg-sidebar .list-group-item.active::before {
+    background: linear-gradient(180deg, var(--wg-primary), #22c68b);
+}
+
+.wg-sidebar .list-group-item:hover i,
+.wg-sidebar .list-group-item:focus i,
+.wg-sidebar .list-group-item.active i {
+    color: #ffffff;
+    background: linear-gradient(135deg, var(--wg-primary), #19b87d);
 }
 
 .wg-sidebar .list-group .list-group {
-    margin: 2px 0 10px 12px;
+    margin: 2px 0 8px 18px;
     padding-left: 10px;
-    border-left: 1px solid rgba(15, 143, 99, 0.16);
+    border-left: 1px solid rgba(15, 143, 99, 0.14);
 }
 
 .wg-sidebar .list-group .list-group .list-group-item {
-    min-height: 40px;
-    padding: 9px 11px;
-    font-size: 14px;
+    min-height: 38px;
+    padding: 8px 10px;
+    font-size: 13px;
     color: #4b635a !important;
-    background: #f8fcfa;
+    background: transparent;
     box-shadow: none;
 }
 
 .wg-sidebar .list-group .list-group .list-group-item:hover,
 .wg-sidebar .list-group .list-group .list-group-item:focus {
-    background: linear-gradient(135deg, rgba(15, 143, 99, 0.95), rgba(21, 178, 120, 0.92));
-    color: #ffffff !important;
+    background: #ffffff;
+    color: var(--wg-primary-dark) !important;
 }
 
 .wg-main {
     padding: 28px;
     background: linear-gradient(180deg, var(--wg-bg-accent), var(--wg-bg));
-    min-height: calc(100vh - 68px);
+    min-height: calc(100vh - var(--wg-header-height));
 }
 
 .wg-shell .wg-sidebar + [class*="col-"] {
     padding: 28px;
     background: linear-gradient(180deg, var(--wg-bg-accent), var(--wg-bg));
-    min-height: calc(100vh - 68px);
+    min-height: calc(100vh - var(--wg-header-height));
 }
 
 @media (max-width: 767.98px) {
@@ -759,13 +795,14 @@ textarea.form-control {
 
 @media (max-width: 575px) {
     .wg-topbar {
-        min-height: 64px;
-        padding-top: 7px;
-        padding-bottom: 7px;
+        min-height: 60px;
+        padding-top: 6px;
+        padding-bottom: 6px;
     }
 
     .wg-brand-logo {
-        height: 44px;
+        height: 38px;
+        max-width: 190px;
     }
 
     .wg-brand-title {
