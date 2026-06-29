@@ -17,10 +17,14 @@
     
 
 <nav class="navbar wg-topbar px-3">
-  <div class="container-fluid">
- <a class="navbar-brand wg-brand text-dark" href="<?php echo h(app_url('master')); ?>">
- <img class="wg-brand-logo" src="<?php echo h(app_url('master/uploads/connect-logo.png')); ?>" alt="Connect logo">
+  <div class="container-fluid align-items-center">
+    <a class="navbar-brand wg-brand" href="<?php echo h(app_url('master')); ?>" aria-label="Arklytics Connect admin home">
+      <img class="wg-brand-logo" src="<?php echo h(app_url('master/uploads/connect-logo.png')); ?>" alt="Arklytics Connect logo">
+      <span class="wg-brand-copy">
+        <span class="wg-brand-title">Arklytics Connect</span>
+        <span class="wg-brand-subtitle">Admin Console</span>
+      </span>
     </a>
-    <span class="badge bg-light text-dark border">Admin Console</span>
+    <span class="badge rounded-pill bg-light text-dark border">CRM Dashboard</span>
   </div>
 </nav>
