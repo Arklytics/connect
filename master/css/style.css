@@ -39,7 +39,7 @@ a {
 .wg-brand {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     font-weight: 700;
     letter-spacing: 0;
     text-decoration: none;
@@ -61,12 +61,12 @@ a {
 .wg-brand-logo {
     display: block;
     width: auto;
-    height: clamp(56px, 4.8vw, 78px);
+    height: clamp(62px, 5vw, 86px);
     max-width: 100%;
     flex-shrink: 0;
     object-fit: contain;
     border-radius: 12px;
-    filter: drop-shadow(0 10px 22px rgba(15, 23, 42, 0.16));
+    filter: drop-shadow(0 12px 26px rgba(8, 17, 31, 0.22));
 }
 
 .wg-brand-copy {
@@ -119,19 +119,42 @@ a {
     position: sticky;
     top: 0;
     z-index: 20;
-    min-height: 84px;
-    padding-top: 12px;
-    padding-bottom: 12px;
+    min-height: 92px;
+    padding-top: 14px;
+    padding-bottom: 14px;
     background:
-        linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 246, 0.94)),
-        radial-gradient(circle at top left, rgba(15, 143, 99, 0.08), transparent 34%);
-    border-bottom: 1px solid rgba(217, 226, 236, 0.9);
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
-    backdrop-filter: blur(20px);
+        linear-gradient(135deg, rgba(8, 17, 31, 0.98), rgba(12, 33, 28, 0.97) 52%, rgba(15, 143, 99, 0.92)),
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.16), transparent 28%),
+        radial-gradient(circle at right, rgba(255, 255, 255, 0.08), transparent 30%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow: 0 16px 34px rgba(8, 17, 31, 0.22);
+    backdrop-filter: blur(18px);
+}
+
+.wg-topbar::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+    pointer-events: none;
 }
 
 .wg-topbar .container-fluid {
     gap: 16px;
+}
+
+.wg-topbar .navbar-brand {
+    margin-right: 0;
+}
+
+.wg-topbar .wg-brand-title,
+.wg-topbar .wg-brand-subtitle {
+    color: #fff;
+}
+
+.wg-topbar .wg-brand-subtitle {
+    color: rgba(226, 232, 240, 0.8);
 }
 
 .wg-topbar .badge {
@@ -140,14 +163,15 @@ a {
     font-weight: 800;
     letter-spacing: 0.02em;
     text-transform: uppercase;
-    color: var(--wg-navy) !important;
-    background: rgba(255, 255, 255, 0.86) !important;
-    border-color: rgba(217, 226, 236, 0.95) !important;
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+    color: #ecfdf5 !important;
+    background: rgba(255, 255, 255, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    box-shadow: 0 10px 20px rgba(8, 17, 31, 0.16);
+    backdrop-filter: blur(12px);
 }
 
 .wg-shell {
-    min-height: calc(100vh - 74px);
+    min-height: calc(100vh - 92px);
 }
 
 .wg-shell.container-fluid {
@@ -167,17 +191,20 @@ a {
 
 .wg-sidebar {
     position: sticky;
-    top: 74px;
+    top: 92px;
     align-self: flex-start;
-    height: calc(100vh - 74px);
+    height: calc(100vh - 92px);
     overflow-y: auto;
-    min-height: calc(100vh - 74px);
-    padding: 16px;
+    min-height: calc(100vh - 92px);
+    padding: 18px 16px;
     background:
-        linear-gradient(180deg, rgba(8, 17, 31, 0.98), rgba(17, 24, 39, 0.97)),
-        radial-gradient(circle at top, rgba(15, 143, 99, 0.18), transparent 40%);
+        linear-gradient(180deg, rgba(7, 15, 27, 0.98), rgba(10, 21, 37, 0.98) 58%, rgba(10, 41, 31, 0.98)),
+        radial-gradient(circle at top, rgba(15, 143, 99, 0.2), transparent 36%),
+        radial-gradient(circle at bottom, rgba(255, 255, 255, 0.05), transparent 28%);
     border-right: 1px solid rgba(255, 255, 255, 0.06);
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03);
+    box-shadow:
+        inset -1px 0 0 rgba(255, 255, 255, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .wg-sidebar .list-group {
@@ -194,31 +221,36 @@ a {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 46px;
-    color: rgba(241, 245, 249, 0.88) !important;
+    min-height: 48px;
+    color: rgba(241, 245, 249, 0.86) !important;
     padding: 12px 14px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.035);
     backdrop-filter: blur(10px);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
-    transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.1);
+    transition:
+        transform 0.18s ease,
+        background 0.18s ease,
+        border-color 0.18s ease,
+        box-shadow 0.18s ease,
+        color 0.18s ease;
     font-weight: 600;
 }
 
 .wg-sidebar .list-group-item:hover,
 .wg-sidebar .list-group-item:focus,
 .wg-sidebar .list-group-item.active {
-    background: linear-gradient(135deg, rgba(15, 143, 99, 0.28), rgba(15, 143, 99, 0.14));
+    background: linear-gradient(135deg, rgba(15, 143, 99, 0.46), rgba(54, 185, 145, 0.18));
     color: #ffffff !important;
-    border-color: rgba(15, 143, 99, 0.38);
-    transform: translateX(2px);
-    box-shadow: 0 10px 24px rgba(15, 143, 99, 0.14);
+    border-color: rgba(99, 246, 188, 0.34);
+    transform: translateX(3px);
+    box-shadow: 0 12px 26px rgba(15, 143, 99, 0.18);
 }
 
 .wg-sidebar .list-group .list-group {
     margin: 2px 0 10px 12px;
     padding-left: 10px;
-    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    border-left: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .wg-sidebar .list-group .list-group .list-group-item {
@@ -226,13 +258,13 @@ a {
     padding: 9px 11px;
     font-size: 14px;
     color: rgba(226, 232, 240, 0.78) !important;
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.03);
     box-shadow: none;
 }
 
 .wg-sidebar .list-group .list-group .list-group-item:hover,
 .wg-sidebar .list-group .list-group .list-group-item:focus {
-    background: rgba(15, 143, 99, 0.16);
+    background: rgba(15, 143, 99, 0.2);
     color: #ffffff !important;
 }
 
@@ -245,7 +277,7 @@ a {
 .wg-shell .wg-sidebar + [class*="col-"] {
     padding: 28px;
     background: linear-gradient(180deg, var(--wg-bg-accent), var(--wg-bg));
-    min-height: calc(100vh - 74px);
+    min-height: calc(100vh - 92px);
 }
 
 @media (max-width: 767.98px) {
@@ -722,13 +754,13 @@ textarea.form-control {
 
 @media (max-width: 575px) {
     .wg-topbar {
-        min-height: 78px;
+        min-height: 80px;
         padding-top: 10px;
         padding-bottom: 10px;
     }
 
     .wg-brand-logo {
-        height: 52px;
+        height: 56px;
     }
 
     .wg-brand-title {

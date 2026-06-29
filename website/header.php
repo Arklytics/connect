@@ -20,11 +20,7 @@
   <div class="container-fluid align-items-center">
     <a class="navbar-brand wg-brand" href="<?php echo h(app_url('business')); ?>" aria-label="Arklytics Connect business home">
       <img class="wg-brand-logo" src="<?php echo h(app_url('website/uploads/connect-logo.png')); ?>" alt="Arklytics Connect logo">
-      <span class="wg-brand-copy">
-        <span class="wg-brand-title">Arklytics Connect</span>
-        <span class="wg-brand-subtitle">Business Workspace</span>
-      </span>
     </a>
-    <span class="badge rounded-pill bg-light text-dark border">CRM Suite</span>
+    <span class="badge rounded-pill">CRM Suite</span>
   </div>
 </nav>
