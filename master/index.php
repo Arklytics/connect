@@ -124,6 +124,10 @@ try {
                         <i class="bi bi-box-seam"></i>
                         <span><strong>Packages</strong><span>Assign plans to businesses</span></span>
                     </a>
+ <a class="wg-card wg-action-card" href="<?php echo h(app_url('master/webhook-logs')); ?>">
+                        <i class="bi bi-chat-left-text"></i>
+                        <span><strong>Webhook Logs</strong><span>Review inbound webhooks and full message history</span></span>
+                    </a>
                 </div>
             </div>
         </main>

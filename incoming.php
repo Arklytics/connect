@@ -425,6 +425,73 @@ function incomingSendAiAutoReply(mysqli $db, int $bizId, string $to, string $que
     return false;
 }
 
+function incomingWebhookColumns(mysqli $db): array
+{
+    return Crm::tableColumns($db, 'gd_webhook_logs') ?: [];
+}
+
+function incomingStoreWebhookLog(mysqli $db, array $data): void
+{
+    $columns = incomingWebhookColumns($db);
+    if (!$columns) {
+        return;
+    }
+
+    $now = date('Y-m-d H:i:s');
+    $fields = [
+        'biz_id' => $data['biz_id'] ?? null,
+        'contact_id' => $data['contact_id'] ?? null,
+        'phone_number_id' => $data['phone_number_id'] ?? null,
+        'whatsapp_business_account_id' => $data['whatsapp_business_account_id'] ?? null,
+        'event_type' => $data['event_type'] ?? 'message',
+        'direction' => $data['direction'] ?? 'inbound',
+        'from_phone' => $data['from_phone'] ?? null,
+        'message_id' => $data['message_id'] ?? null,
+        'delivery_status' => $data['delivery_status'] ?? null,
+        'message_text' => $data['message_text'] ?? null,
+        'payload_json' => array_key_exists('payload_json', $data)
+            ? $data['payload_json']
+            : (isset($data['payload']) ? json_encode($data['payload'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null),
+        'notes' => $data['notes'] ?? null,
+        'webhook_at' => $data['webhook_at'] ?? $now,
+        'created_at' => $data['created_at'] ?? $now,
+        'updated_at' => $data['updated_at'] ?? $now,
+    ];
+
+    $insertColumns = [];
+    $placeholders = [];
+    $types = '';
+    $values = [];
+
+    foreach ($fields as $column => $value) {
+        if (!in_array($column, $columns, true)) {
+            continue;
+        }
+
+        if ($value === null) {
+            continue;
+        }
+
+        $insertColumns[] = $column;
+        $placeholders[] = '?';
+        $values[] = $value;
+        $types .= in_array($column, ['biz_id', 'contact_id'], true) ? 'i' : 's';
+    }
+
+    if (!$insertColumns) {
+        return;
+    }
+
+    $sql = 'INSERT INTO gd_webhook_logs (`' . implode('`, `', $insertColumns) . '`) VALUES (' . implode(', ', $placeholders) . ')';
+    $stmt = $db->prepare($sql);
+    $bind = [$types];
+    foreach ($values as $index => $value) {
+        $bind[] = &$values[$index];
+    }
+    $stmt->bind_param(...$bind);
+    $stmt->execute();
+}
+
 $db = Database::connectOrNull();
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -467,6 +534,18 @@ foreach (($payload['entry'] ?? []) as $entry) {
         $phoneNumberId = (string) ($metadata['phone_number_id'] ?? $value['phone_number_id'] ?? '');
         $whatsappId = (string) ($metadata['whatsapp_business_account_id'] ?? $value['whatsapp_business_account_id'] ?? '');
         $bizId = incomingBusinessId($db, $phoneNumberId, $whatsappId);
+        $incomingAt = new DateTimeImmutable();
+
+        incomingStoreWebhookLog($db, [
+            'biz_id' => $bizId ?: null,
+            'phone_number_id' => $phoneNumberId !== '' ? $phoneNumberId : null,
+            'whatsapp_business_account_id' => $whatsappId !== '' ? $whatsappId : null,
+            'event_type' => 'change',
+            'direction' => 'webhook',
+            'payload' => $value,
+            'notes' => $bizId ? 'Webhook change received.' : 'Webhook change received, but no matching business was found.',
+            'webhook_at' => $incomingAt->format('Y-m-d H:i:s'),
+        ]);
 
         if (!$bizId) {
             continue;
@@ -491,6 +570,21 @@ foreach (($payload['entry'] ?? []) as $entry) {
                 incomingQueueReplyDrivenSequence($db, $bizId, $contact, $replyAt, $responseMinutes, $replyText);
             }
 
+            incomingStoreWebhookLog($db, [
+                'biz_id' => $bizId,
+                'contact_id' => $contact ? (int) $contact['id'] : null,
+                'phone_number_id' => $phoneNumberId !== '' ? $phoneNumberId : null,
+                'whatsapp_business_account_id' => $whatsappId !== '' ? $whatsappId : null,
+                'event_type' => 'message',
+                'direction' => 'inbound',
+                'from_phone' => $from !== '' ? $from : null,
+                'message_id' => (string) ($message['id'] ?? $message['message_id'] ?? ''),
+                'message_text' => $replyText !== '' ? $replyText : null,
+                'payload' => $message,
+                'notes' => $contact ? 'Inbound message matched a contact.' : 'Inbound message did not match any contact.',
+                'webhook_at' => $replyAt->format('Y-m-d H:i:s'),
+            ]);
+
             incomingSendAiAutoReply($db, $bizId, $from, $replyText, $contact ?: []);
             $processed++;
         }
@@ -501,6 +595,20 @@ foreach (($payload['entry'] ?? []) as $entry) {
             }
 
             incomingUpdateMessageDelivery($db, $bizId, $statusRow);
+            incomingStoreWebhookLog($db, [
+                'biz_id' => $bizId,
+                'phone_number_id' => $phoneNumberId !== '' ? $phoneNumberId : null,
+                'whatsapp_business_account_id' => $whatsappId !== '' ? $whatsappId : null,
+                'event_type' => 'status',
+                'direction' => 'delivery',
+                'message_id' => (string) ($statusRow['id'] ?? $statusRow['message_id'] ?? ''),
+                'delivery_status' => strtolower(trim((string) ($statusRow['status'] ?? ''))),
+                'payload' => $statusRow,
+                'notes' => 'Delivery status webhook received.',
+                'webhook_at' => !empty($statusRow['timestamp'])
+                    ? (new DateTimeImmutable())->setTimestamp((int) $statusRow['timestamp'])->format('Y-m-d H:i:s')
+                    : date('Y-m-d H:i:s'),
+            ]);
             $processed++;
         }
     }

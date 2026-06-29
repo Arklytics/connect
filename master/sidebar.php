@@ -60,7 +60,9 @@
     <div class="collapse" id="reportsMenu">
       <div class="list-group mt-2 ms-3">
         <span class="list-group-item"><i class="bi bi-credit-card"></i> Payments</span>
-        <span class="list-group-item"><i class="bi bi-chat-left-text"></i> Messages</span>
+        <a href="<?php echo h(app_url('master/webhook-logs')); ?>" class="list-group-item list-group-item-action">
+          <i class="bi bi-chat-left-text"></i> Webhook Logs
+        </a>
         <span class="list-group-item"><i class="bi bi-file-earmark-text"></i> Templates</span>
         <span class="list-group-item"><i class="bi bi-bag"></i> Orders</span>
       </div>
