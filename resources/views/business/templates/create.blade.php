@@ -51,11 +51,11 @@
               </div>
               <div class="col-md-8 header-text-field d-none">
                 <label class="form-label" for="header_text">Header Text</label>
-                <input type="text" name="header_text" id="header_text" class="form-control" placeholder="Hello [1]" value="{{ old('header_text') }}" oninput="renderTemplateBuilder()">
+                <input type="text" name="header_text" id="header_text" class="form-control" placeholder="Hello @{{1}}" value="{{ old('header_text') }}" oninput="renderTemplateBuilder()">
               </div>
               <div class="col-md-12 header-text-field d-none">
                 <label class="form-label" for="header_sample">Header Variable Example</label>
-                <input type="text" name="header_sample" id="header_sample" class="form-control" placeholder="Example value for [1]" value="{{ old('header_sample') }}">
+                <input type="text" name="header_sample" id="header_sample" class="form-control" placeholder="Example value for @{{1}}" value="{{ old('header_sample') }}">
               </div>
               <div class="col-md-7 header-media-field d-none">
                 <label class="form-label" for="header_media_handle">Media Handle</label>
@@ -74,7 +74,7 @@
             <div class="row g-3 mt-1">
               <div class="col-md-12">
                 <label class="form-label" for="body_text">Body Text</label>
-                <textarea name="body_text" id="body_text" class="form-control" rows="7" required placeholder="Hi [1], your order [2] is ready." oninput="renderTemplateBuilder()">{{ old('body_text') }}</textarea>
+                <textarea name="body_text" id="body_text" class="form-control" rows="7" required placeholder="Hi @{{1}}, your order @{{2}} is ready." oninput="renderTemplateBuilder()">{{ old('body_text') }}</textarea>
               </div>
             </div>
 
@@ -130,9 +130,18 @@
   let buttonCounter = 0;
 
   function variableNumbers(text) {
-    const placeholderRegex = new RegExp('\\{\\{\\s*(\\d+)\\s*\\}\\}', 'g');
-    const matches = [...(text || '').matchAll(placeholderRegex)].map(match => Number(match[1]));
+    const placeholderRegex = new RegExp('\\{\\{\\s*(\\d+)\\s*\\}\\}|\\[\\s*(\\d+)\\s*\\]', 'g');
+    const matches = [...(text || '').matchAll(placeholderRegex)].map(match => Number(match[1] || match[2]));
     return [...new Set(matches)].sort((a, b) => a - b);
+  }
+
+  function normalizeTemplateText(text) {
+    return (text || '')
+      .trim()
+      .replace(/\[\s*(\d+)\s*\]/g, '{{ $1 }}')
+      .replace(/\{\s*(\d+)\s*\}/g, '{{ $1 }}')
+      .replace(/\{\{\s+(\d+)\s+\}\}/g, '{{$1}}')
+      .replace(/\{\{\s*(\d+)\s*\}\}/g, '{{$1}}');
   }
 
   function toggleHeader() {
@@ -184,9 +193,9 @@
     const category = document.getElementById('category').value;
     const language = document.getElementById('language').value;
     const headerType = document.getElementById('header_type').value;
-    const headerText = document.getElementById('header_text').value;
+    const headerText = normalizeTemplateText(document.getElementById('header_text').value);
     const headerMediaHandle = document.getElementById('header_media_handle').value;
-    const bodyText = document.getElementById('body_text').value;
+    const bodyText = normalizeTemplateText(document.getElementById('body_text').value);
     const footerText = document.getElementById('footer_text').value;
     const components = [];
 
@@ -220,10 +229,10 @@
 
   function renderTemplateBuilder() {
     const headerType = document.getElementById('header_type').value;
-    const headerText = document.getElementById('header_text').value;
+    const headerText = normalizeTemplateText(document.getElementById('header_text').value);
     const headerMediaUrl = document.getElementById('header_media_url').value;
     const headerMediaFile = document.getElementById('header_media_file');
-    const bodyText = document.getElementById('body_text').value;
+    const bodyText = normalizeTemplateText(document.getElementById('body_text').value);
     const footerText = document.getElementById('footer_text').value;
     const mediaPreview = document.getElementById('previewMediaUrl');
     const sampleWrap = document.getElementById('variableSamples');
@@ -330,6 +339,14 @@
   document.getElementById('header_text').addEventListener('input', renderTemplateBuilder);
   document.getElementById('header_media_handle').addEventListener('input', renderTemplateBuilder);
   document.getElementById('header_media_url').addEventListener('input', renderTemplateBuilder);
+  document.getElementById('body_text').addEventListener('blur', function () {
+    this.value = normalizeTemplateText(this.value);
+    renderTemplateBuilder();
+  });
+  document.getElementById('header_text').addEventListener('blur', function () {
+    this.value = normalizeTemplateText(this.value);
+    renderTemplateBuilder();
+  });
 
   toggleHeader();
 </script>

@@ -64,11 +64,11 @@ class TemplateController extends Controller
             ->value('setting_value') ?: \Config::get('META_APP_ID', '')));
 
         $headerType = strtoupper(trim((string) ($data['header_type'] ?? 'NONE')));
-        $headerText = trim((string) ($data['header_text'] ?? ''));
+        $headerText = $this->normalizeTemplateText((string) ($data['header_text'] ?? ''));
         $headerSample = trim((string) ($data['header_sample'] ?? ''));
         $headerMediaHandle = trim((string) ($data['header_media_handle'] ?? ''));
         $headerMediaUrl = trim((string) ($data['header_media_url'] ?? ''));
-        $bodyText = trim((string) ($data['body_text'] ?? ''));
+        $bodyText = $this->normalizeTemplateText((string) ($data['body_text'] ?? ''));
         $footerText = trim((string) ($data['footer_text'] ?? ''));
         $bodySamples = is_array($data['body_samples'] ?? null) ? $data['body_samples'] : [];
         $buttonsInput = is_array($data['buttons'] ?? null) ? $data['buttons'] : [];
@@ -338,11 +338,23 @@ class TemplateController extends Controller
 
     private function templatePlaceholderNumbers(string $text): array
     {
-        preg_match_all('/{{\s*(\d+)\s*}}/', $text, $matches);
-        $numbers = array_map('intval', $matches[1] ?? []);
+        preg_match_all('/{{\s*(\d+)\s*}}|\[\s*(\d+)\s*\]/', $text, $matches, PREG_SET_ORDER);
+        $numbers = [];
+        foreach ($matches as $match) {
+            $numbers[] = isset($match[1]) && $match[1] !== '' ? (int) $match[1] : (int) ($match[2] ?? 0);
+        }
         $numbers = array_values(array_unique($numbers));
         sort($numbers);
 
         return $numbers;
+    }
+
+    private function normalizeTemplateText(string $text): string
+    {
+        $text = trim($text);
+        $text = preg_replace('/\[\s*(\d+)\s*\]/', '{{$1}}', $text) ?? $text;
+        $text = preg_replace('/\{\s*(\d+)\s*\}/', '{{$1}}', $text) ?? $text;
+
+        return $text;
     }
 }

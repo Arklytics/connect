@@ -147,8 +147,11 @@ final class ApiSupport
 
     public static function templatePlaceholderNumbers(string $text): array
     {
-        preg_match_all('/{{\s*(\d+)\s*}}/', $text, $matches);
-        $numbers = array_map('intval', $matches[1] ?? []);
+        preg_match_all('/{{\s*(\d+)\s*}}|\[\s*(\d+)\s*\]/', $text, $matches, PREG_SET_ORDER);
+        $numbers = [];
+        foreach ($matches as $match) {
+            $numbers[] = isset($match[1]) && $match[1] !== '' ? (int) $match[1] : (int) ($match[2] ?? 0);
+        }
         $numbers = array_values(array_unique($numbers));
         sort($numbers);
 
