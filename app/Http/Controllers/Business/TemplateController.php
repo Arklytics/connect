@@ -138,6 +138,18 @@ class TemplateController extends Controller
             }
         }
 
+        $validationErrors = [];
+        if (strtoupper(trim((string) ($data['category'] ?? 'MARKETING'))) === 'AUTHENTICATION') {
+            $validationErrors[] = 'Authentication templates need Meta OTP formatting. Use Marketing or Utility for text, image, video, or document templates.';
+        }
+
+        $headerVariableNumbers = $this->templatePlaceholderNumbers($headerText);
+        $bodyVariableNumbers = $this->templatePlaceholderNumbers($bodyText);
+        $bodySequenceError = $this->sequentialVariableError($bodyVariableNumbers, 'Body');
+        if ($bodySequenceError !== '') {
+            $validationErrors[] = $bodySequenceError;
+        }
+
         if ($headerType === 'TEXT' && $headerText !== '') {
             $header = [
                 'type' => 'HEADER',
@@ -145,7 +157,9 @@ class TemplateController extends Controller
                 'text' => $headerText,
             ];
 
-            if ($this->templatePlaceholderNumbers($headerText) !== []) {
+            if (count($headerVariableNumbers) > 1) {
+                $validationErrors[] = 'Text header can contain only one variable.';
+            } elseif ($headerVariableNumbers !== []) {
                 if ($headerSample === '') {
                     return back()->withInput()->with('error', 'Header variable example is required.');
                 }
@@ -173,7 +187,6 @@ class TemplateController extends Controller
             'text' => $bodyText,
         ];
 
-        $bodyVariableNumbers = $this->templatePlaceholderNumbers($bodyText);
         if (!empty($bodyVariableNumbers)) {
             $sampleRow = [];
             foreach ($bodyVariableNumbers as $number) {
@@ -203,18 +216,35 @@ class TemplateController extends Controller
 
             $buttonType = strtoupper(trim((string) ($button['type'] ?? '')));
             $buttonText = trim((string) ($button['text'] ?? ''));
-            $buttonValue = trim((string) ($button['value'] ?? ''));
+            $buttonValue = $this->normalizeTemplateText((string) ($button['value'] ?? ''));
 
             if ($buttonType === '' || $buttonText === '') {
                 continue;
             }
 
             if ($buttonType === 'URL' && $buttonValue !== '') {
-                $buttons[] = [
+                $urlButton = [
                     'type' => 'URL',
                     'text' => $buttonText,
                     'url' => $buttonValue,
                 ];
+
+                $buttonNumbers = $this->templatePlaceholderNumbers($buttonValue);
+                if (!empty($buttonNumbers)) {
+                    if (count($buttonNumbers) > 1 || $buttonNumbers !== [1]) {
+                        $validationErrors[] = 'Dynamic URL buttons can use only {{1}}.';
+                    } else {
+                        $urlExample = preg_replace('/{{\s*1\s*}}/', trim((string) ($bodySamples[1] ?? $bodySamples['1'] ?? 'sample')), $buttonValue) ?? $buttonValue;
+                        $urlButton['example'] = [$urlExample];
+                        if (!$this->validTemplateUrlExample($urlExample)) {
+                            $validationErrors[] = 'URL button example must be a valid http or https URL.';
+                        }
+                    }
+                } elseif (!$this->validTemplateUrlExample($buttonValue)) {
+                    $validationErrors[] = 'URL button must be a valid http or https URL.';
+                }
+
+                $buttons[] = $urlButton;
             } elseif ($buttonType === 'PHONE_NUMBER' && $buttonValue !== '') {
                 $buttons[] = [
                     'type' => 'PHONE_NUMBER',
@@ -234,6 +264,10 @@ class TemplateController extends Controller
                 'type' => 'BUTTONS',
                 'buttons' => $buttons,
             ];
+        }
+
+        if (!empty($validationErrors)) {
+            return back()->withInput()->with('error', implode(' ', $validationErrors));
         }
 
         if ($whatsappBusinessId === '' || $accessToken === '') {
@@ -271,6 +305,10 @@ class TemplateController extends Controller
 
         if ($httpStatus < 200 || $httpStatus >= 300 || isset($apiResponse['error'])) {
             $apiError = $apiResponse['error']['message'] ?? 'Unexpected WhatsApp API error.';
+            $apiDetails = $apiResponse['error']['error_data']['details'] ?? $apiResponse['error']['error_user_msg'] ?? '';
+            if (is_string($apiDetails) && trim($apiDetails) !== '') {
+                $apiError .= ' Details: ' . trim($apiDetails);
+            }
             return back()->withInput()->with('error', 'WhatsApp API rejected the template: ' . $apiError);
         }
 
@@ -352,9 +390,26 @@ class TemplateController extends Controller
     private function normalizeTemplateText(string $text): string
     {
         $text = trim($text);
+        $text = preg_replace('/{{\s*(\d+)\s*}}/', '{{$1}}', $text) ?? $text;
         $text = preg_replace('/\[\s*(\d+)\s*\]/', '{{$1}}', $text) ?? $text;
-        $text = preg_replace('/\{\s*(\d+)\s*\}/', '{{$1}}', $text) ?? $text;
+        $text = preg_replace('/(?<!\{)\{\s*(\d+)\s*\}(?!\})/', '{{$1}}', $text) ?? $text;
 
         return $text;
+    }
+
+    private function sequentialVariableError(array $numbers, string $label): string
+    {
+        if (empty($numbers)) {
+            return '';
+        }
+
+        return $numbers === range(1, count($numbers)) ? '' : $label . ' variables must start at {{1}} and continue without gaps.';
+    }
+
+    private function validTemplateUrlExample(string $url): bool
+    {
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+
+        return filter_var($url, FILTER_VALIDATE_URL) !== false && in_array($scheme, ['http', 'https'], true);
     }
 }

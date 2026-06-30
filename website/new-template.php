@@ -23,11 +23,43 @@ function normalizeTemplateName(string $name): string
 
 function variableNumbers(string $text): array
 {
-    preg_match_all('/{{\s*(\d+)\s*}}/', $text, $matches);
-    $numbers = array_map('intval', $matches[1] ?? []);
+    preg_match_all('/{{\s*(\d+)\s*}}|\[\s*(\d+)\s*\]/', $text, $matches, PREG_SET_ORDER);
+    $numbers = [];
+    foreach ($matches as $match) {
+        $numbers[] = isset($match[1]) && $match[1] !== '' ? (int) $match[1] : (int) ($match[2] ?? 0);
+    }
     $numbers = array_values(array_unique($numbers));
     sort($numbers);
     return $numbers;
+}
+
+function normalizeTemplateText(string $text): string
+{
+    $text = trim($text);
+    $text = preg_replace('/{{\s*(\d+)\s*}}/', '{{$1}}', $text) ?? $text;
+    $text = preg_replace('/\[\s*(\d+)\s*\]/', '{{$1}}', $text) ?? $text;
+    $text = preg_replace('/(?<!\{)\{\s*(\d+)\s*\}(?!\})/', '{{$1}}', $text) ?? $text;
+    return $text;
+}
+
+function sequentialVariableError(array $numbers, string $label): string
+{
+    if (empty($numbers)) {
+        return '';
+    }
+
+    $expected = range(1, count($numbers));
+    return $numbers === $expected ? '' : $label . ' variables must start at {{1}} and continue without gaps.';
+}
+
+function templateExampleValue(array $samples, int $number): string
+{
+    return trim((string) ($samples[$number] ?? $samples[(string) $number] ?? ''));
+}
+
+function validTemplateUrlExample(string $url): bool
+{
+    return filter_var($url, FILTER_VALIDATE_URL) !== false && in_array(strtolower((string) parse_url($url, PHP_URL_SCHEME)), ['http', 'https'], true);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -37,11 +69,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $category = strtoupper(trim((string) ($_POST['category'] ?? 'MARKETING')));
     $language = trim((string) ($_POST['language'] ?? 'en_US'));
     $header_type = strtoupper(trim((string) ($_POST['header_type'] ?? 'NONE')));
-    $header_text = trim((string) ($_POST['header_text'] ?? ''));
+    $header_text = normalizeTemplateText((string) ($_POST['header_text'] ?? ''));
     $header_media_handle = trim((string) ($_POST['header_media_handle'] ?? ''));
     $header_media_url = trim((string) ($_POST['header_media_url'] ?? ''));
     $header_media_file = $_FILES['header_media_file'] ?? null;
-    $body_text = trim((string) ($_POST['body_text'] ?? ''));
+    $body_text = normalizeTemplateText((string) ($_POST['body_text'] ?? ''));
     $footer_text = trim((string) ($_POST['footer_text'] ?? ''));
     $header_sample = trim((string) ($_POST['header_sample'] ?? ''));
     $body_samples = $_POST['body_samples'] ?? [];
@@ -128,6 +160,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $validationErrors[] = $mediaUploadError;
         }
 
+        if ($category === 'AUTHENTICATION') {
+            $validationErrors[] = 'Authentication templates need Meta OTP formatting. Use Marketing or Utility for text, image, video, or document templates.';
+        }
+
+        $headerVariableNumbers = variableNumbers($header_text);
+        $bodyVariableNumbers = variableNumbers($body_text);
+        $bodySequenceError = sequentialVariableError($bodyVariableNumbers, 'Body');
+        if ($bodySequenceError !== '') {
+            $validationErrors[] = $bodySequenceError;
+        }
+
         if ($header_type === 'TEXT' && $header_text !== '') {
             $header = [
                 'type' => 'HEADER',
@@ -135,9 +178,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'text' => $header_text,
             ];
 
-            if (!empty(variableNumbers($header_text)) && $header_sample === '') {
+            if (count($headerVariableNumbers) > 1) {
+                $validationErrors[] = 'Text header can contain only one variable.';
+            } elseif (!empty($headerVariableNumbers) && $header_sample === '') {
                 $validationErrors[] = 'Header variable example is required.';
-            } elseif (!empty(variableNumbers($header_text))) {
+            } elseif (!empty($headerVariableNumbers)) {
                 $header['example'] = ['header_text' => [$header_sample]];
             }
 
@@ -161,11 +206,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'text' => $body_text,
         ];
 
-        $bodyVariableNumbers = variableNumbers($body_text);
         if (!empty($bodyVariableNumbers)) {
             $sampleRow = [];
             foreach ($bodyVariableNumbers as $number) {
-                $sampleRow[] = trim((string) ($body_samples[$number] ?? ''));
+                $sampleRow[] = templateExampleValue(is_array($body_samples) ? $body_samples : [], $number);
             }
 
             if (in_array('', $sampleRow, true)) {
@@ -185,20 +229,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         foreach ($buttonsInput as $button) {
+            if (!is_array($button)) {
+                continue;
+            }
+
             $buttonType = strtoupper(trim((string) ($button['type'] ?? '')));
             $buttonText = trim((string) ($button['text'] ?? ''));
-            $buttonValue = trim((string) ($button['value'] ?? ''));
+            $buttonValue = normalizeTemplateText((string) ($button['value'] ?? ''));
 
             if ($buttonType === '' || $buttonText === '') {
                 continue;
             }
 
             if ($buttonType === 'URL' && $buttonValue !== '') {
-                $buttons[] = [
+                $urlButton = [
                     'type' => 'URL',
                     'text' => $buttonText,
                     'url' => $buttonValue,
                 ];
+
+                $buttonNumbers = variableNumbers($buttonValue);
+                if (!empty($buttonNumbers)) {
+                    if (count($buttonNumbers) > 1 || $buttonNumbers !== [1]) {
+                        $validationErrors[] = 'Dynamic URL buttons can use only {{1}}.';
+                    } else {
+                        $urlExample = preg_replace('/{{\s*1\s*}}/', templateExampleValue(is_array($body_samples) ? $body_samples : [], 1) ?: 'sample', $buttonValue) ?? $buttonValue;
+                        $urlButton['example'] = [$urlExample];
+                        if (!validTemplateUrlExample($urlExample)) {
+                            $validationErrors[] = 'URL button example must be a valid http or https URL.';
+                        }
+                    }
+                } elseif (!validTemplateUrlExample($buttonValue)) {
+                    $validationErrors[] = 'URL button must be a valid http or https URL.';
+                }
+
+                $buttons[] = $urlButton;
             } elseif ($buttonType === 'PHONE_NUMBER' && $buttonValue !== '') {
                 $buttons[] = [
                     'type' => 'PHONE_NUMBER',
@@ -260,6 +325,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message_type = 'danger';
             } elseif ($httpStatus < 200 || $httpStatus >= 300 || isset($apiResponse['error'])) {
                 $apiError = $apiResponse['error']['message'] ?? 'Unexpected WhatsApp API error.';
+                $apiDetails = $apiResponse['error']['error_data']['details'] ?? $apiResponse['error']['error_user_msg'] ?? '';
+                if (is_string($apiDetails) && trim($apiDetails) !== '') {
+                    $apiError .= ' Details: ' . trim($apiDetails);
+                }
                 $message = 'WhatsApp API rejected the template: ' . $apiError;
                 $message_type = 'danger';
             } else {
@@ -435,8 +504,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 let buttonCounter = 0;
 
 function variableNumbers(text) {
-  const matches = [...text.matchAll(/{{\s*(\d+)\s*}}/g)].map(match => Number(match[1]));
+  const matches = [...(text || '').matchAll(/{{\s*(\d+)\s*}}|\[\s*(\d+)\s*\]/g)].map(match => Number(match[1] || match[2]));
   return [...new Set(matches)].sort((a, b) => a - b);
+}
+
+function normalizeTemplateText(text) {
+  const open = String.fromCharCode(123, 123);
+  const close = String.fromCharCode(125, 125);
+
+  return (text || '')
+    .trim()
+    .replace(/\{\{\s*(\d+)\s*\}\}/g, function (_, number) {
+      return open + number + close;
+    })
+    .replace(/\[\s*(\d+)\s*\]/g, function (_, number) {
+      return open + number + close;
+    })
+    .replace(/(^|[^{])\{\s*(\d+)\s*\}(?!})/g, function (_, prefix, number) {
+      return prefix + open + number + close;
+    });
+}
+
+function sampleValuesByNumber() {
+  const samples = {};
+  document.querySelectorAll('#variableSamples input').forEach(function (input) {
+    samples[input.dataset.variable] = input.value;
+  });
+  return samples;
 }
 
 function toggleHeader() {
@@ -454,10 +548,10 @@ function toggleHeader() {
 
 function renderTemplateBuilder() {
   const headerType = document.getElementById('header_type').value;
-  const headerText = document.getElementById('header_text').value;
+  const headerText = normalizeTemplateText(document.getElementById('header_text').value);
   const headerMediaUrl = document.getElementById('header_media_url').value;
   const headerMediaFile = document.getElementById('header_media_file');
-  const bodyText = document.getElementById('body_text').value;
+  const bodyText = normalizeTemplateText(document.getElementById('body_text').value);
   const footerText = document.getElementById('footer_text').value;
   const mediaPreview = document.getElementById('previewMediaUrl');
   const sampleWrap = document.getElementById('variableSamples');
@@ -473,7 +567,7 @@ function renderTemplateBuilder() {
     col.className = 'col-md-6';
     col.innerHTML = `
       <label class="form-label">Body {{${number}}} Example</label>
-      <input type="text" class="form-control" name="body_samples[${number}]" data-variable="${number}" value="${existing[number] || ''}" placeholder="Sample value for {{${number}}}">
+      <input type="text" class="form-control" name="body_samples[${number}]" data-variable="${number}" value="${existing[number] || ''}" placeholder="Sample value for {{${number}}}" oninput="renderPayloadPreview()">
     `;
     sampleWrap.appendChild(col);
   });
@@ -560,7 +654,7 @@ function collectButtons() {
   document.querySelectorAll('.wg-button-row').forEach(function (row) {
     const type = row.querySelector('select').value;
     const text = row.querySelector('input[name$="[text]"]').value;
-    const value = row.querySelector('input[name$="[value]"]').value;
+    const value = normalizeTemplateText(row.querySelector('input[name$="[value]"]').value);
     if (!text) {
       return;
     }
@@ -593,14 +687,20 @@ function renderPayloadPreview() {
   const category = document.getElementById('category').value;
   const language = document.getElementById('language').value;
   const headerType = document.getElementById('header_type').value;
-  const headerText = document.getElementById('header_text').value;
+  const headerText = normalizeTemplateText(document.getElementById('header_text').value);
+  const headerSample = document.getElementById('header_sample').value;
   const headerMediaHandle = document.getElementById('header_media_handle').value;
-  const bodyText = document.getElementById('body_text').value;
+  const bodyText = normalizeTemplateText(document.getElementById('body_text').value);
   const footerText = document.getElementById('footer_text').value;
+  const bodySamples = sampleValuesByNumber();
   const components = [];
 
   if (headerType === 'TEXT' && headerText) {
-    components.push({ type: 'HEADER', format: 'TEXT', text: headerText });
+    const header = { type: 'HEADER', format: 'TEXT', text: headerText };
+    if (variableNumbers(headerText).length) {
+      header.example = { header_text: [headerSample || '<header_example_required>'] };
+    }
+    components.push(header);
   } else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType)) {
     components.push({
       type: 'HEADER',
@@ -611,7 +711,16 @@ function renderPayloadPreview() {
     });
   }
   if (bodyText) {
-    components.push({ type: 'BODY', text: bodyText });
+    const body = { type: 'BODY', text: bodyText };
+    const numbers = variableNumbers(bodyText);
+    if (numbers.length) {
+      body.example = {
+        body_text: [numbers.map(function (number) {
+          return bodySamples[number] || '<example_required>';
+        })]
+      };
+    }
+    components.push(body);
   }
   if (footerText) {
     components.push({ type: 'FOOTER', text: footerText });
@@ -627,7 +736,16 @@ function renderPayloadPreview() {
 document.getElementById('template_name').addEventListener('input', renderPayloadPreview);
 document.getElementById('category').addEventListener('change', renderPayloadPreview);
 document.getElementById('language').addEventListener('change', renderPayloadPreview);
+document.getElementById('header_sample').addEventListener('input', renderPayloadPreview);
 document.getElementById('header_media_file').addEventListener('change', renderTemplateBuilder);
+document.getElementById('header_text').addEventListener('blur', function () {
+  this.value = normalizeTemplateText(this.value);
+  renderTemplateBuilder();
+});
+document.getElementById('body_text').addEventListener('blur', function () {
+  this.value = normalizeTemplateText(this.value);
+  renderTemplateBuilder();
+});
 renderTemplateBuilder();
 </script>
 

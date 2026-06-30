@@ -136,12 +136,28 @@
   }
 
   function normalizeTemplateText(text) {
+    const open = String.fromCharCode(123, 123);
+    const close = String.fromCharCode(125, 125);
+
     return (text || '')
       .trim()
-      .replace(/\[\s*(\d+)\s*\]/g, '{{ $1 }}')
-      .replace(/\{\s*(\d+)\s*\}/g, '{{ $1 }}')
-      .replace(/\{\{\s+(\d+)\s+\}\}/g, '{{$1}}')
-      .replace(/\{\{\s*(\d+)\s*\}\}/g, '{{$1}}');
+      .replace(/\{\{\s*(\d+)\s*\}\}/g, function (_, number) {
+        return open + number + close;
+      })
+      .replace(/\[\s*(\d+)\s*\]/g, function (_, number) {
+        return open + number + close;
+      })
+      .replace(/(^|[^{])\{\s*(\d+)\s*\}(?!})/g, function (_, prefix, number) {
+        return prefix + open + number + close;
+      });
+  }
+
+  function sampleValuesByNumber() {
+    const samples = {};
+    document.querySelectorAll('#variableSamples input').forEach(function (input) {
+      samples[input.dataset.variable] = input.value;
+    });
+    return samples;
   }
 
   function toggleHeader() {
@@ -158,7 +174,7 @@
     document.querySelectorAll('.wg-button-row').forEach((row) => {
       const type = row.querySelector('select').value;
       const text = row.querySelector('input[name$="[text]"]').value;
-      const value = row.querySelector('input[name$="[value]"]').value;
+      const value = normalizeTemplateText(row.querySelector('input[name$="[value]"]').value);
       if (!text) {
         return;
       }
@@ -194,13 +210,19 @@
     const language = document.getElementById('language').value;
     const headerType = document.getElementById('header_type').value;
     const headerText = normalizeTemplateText(document.getElementById('header_text').value);
+    const headerSample = document.getElementById('header_sample').value;
     const headerMediaHandle = document.getElementById('header_media_handle').value;
     const bodyText = normalizeTemplateText(document.getElementById('body_text').value);
     const footerText = document.getElementById('footer_text').value;
+    const bodySamples = sampleValuesByNumber();
     const components = [];
 
     if (headerType === 'TEXT' && headerText) {
-      components.push({ type: 'HEADER', format: 'TEXT', text: headerText });
+      const header = { type: 'HEADER', format: 'TEXT', text: headerText };
+      if (variableNumbers(headerText).length) {
+        header.example = { header_text: [headerSample || '<header_example_required>'] };
+      }
+      components.push(header);
     } else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType)) {
       components.push({
         type: 'HEADER',
@@ -212,7 +234,16 @@
     }
 
     if (bodyText) {
-      components.push({ type: 'BODY', text: bodyText });
+      const body = { type: 'BODY', text: bodyText };
+      const numbers = variableNumbers(bodyText);
+      if (numbers.length) {
+        body.example = {
+          body_text: [numbers.map(function (number) {
+            return bodySamples[number] || '<example_required>';
+          })],
+        };
+      }
+      components.push(body);
     }
 
     if (footerText) {
@@ -248,7 +279,7 @@
       col.className = 'col-md-6';
       col.innerHTML = `
         <label class="form-label">Body ${number} Example</label>
-        <input type="text" class="form-control" name="body_samples[${number}]" data-variable="${number}" value="${existing[number] || ''}" placeholder="Sample value for ${number}">
+        <input type="text" class="form-control" name="body_samples[${number}]" data-variable="${number}" value="${existing[number] || ''}" placeholder="Sample value for &#123;&#123;${number}&#125;&#125;" oninput="renderPayloadPreview()">
       `;
       sampleWrap.appendChild(col);
     });
@@ -333,6 +364,7 @@
   document.getElementById('template_name').addEventListener('input', renderPayloadPreview);
   document.getElementById('category').addEventListener('change', renderPayloadPreview);
   document.getElementById('language').addEventListener('change', renderPayloadPreview);
+  document.getElementById('header_sample').addEventListener('input', renderPayloadPreview);
   document.getElementById('header_media_file').addEventListener('change', renderTemplateBuilder);
   document.getElementById('body_text').addEventListener('input', renderTemplateBuilder);
   document.getElementById('footer_text').addEventListener('input', renderTemplateBuilder);
