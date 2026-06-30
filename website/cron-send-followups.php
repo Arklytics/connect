@@ -50,15 +50,21 @@ function cronSendWhatsappText(string $phoneNumberId, string $token, string $to, 
     $curlError = curl_error($curl);
     curl_close($curl);
 
-    $decoded = json_decode((string) $response, true);
+    $responseBody = is_string($response) ? $response : '';
+    $decoded = json_decode($responseBody, true);
     $messageId = $decoded['messages'][0]['id'] ?? null;
-    $error = $decoded['error']['message'] ?? ($curlError !== '' ? $curlError : null);
+    $error = $curlError !== ''
+        ? 'cURL error: ' . $curlError
+        : ($decoded['error']['message'] ?? ($httpCode >= 400 ? 'WhatsApp API returned HTTP ' . $httpCode : null));
 
     return [
         'ok' => $httpCode === 200 && $messageId !== null,
         'message_id' => $messageId,
         'error' => $error,
         'http_code' => $httpCode,
+        'request_json' => ApiSupport::encodeJson($payload),
+        'response_json' => $responseBody !== '' ? (json_last_error() === JSON_ERROR_NONE ? ApiSupport::encodeJson($decoded) : $responseBody) : null,
+        'failure_reason' => $error,
     ];
 }
 
@@ -165,7 +171,11 @@ while ($followup = $result->fetch_assoc()) {
                 'sent',
                 null,
                 $messageId,
-                $sentAt
+                $sentAt,
+                $sendResult['request_json'] ?? null,
+                $sendResult['response_json'] ?? null,
+                $sendResult['http_code'] ?? null,
+                $sendResult['failure_reason'] ?? null
             );
             ApiSupport::consumeMessageCredit($db, $bizId);
 
@@ -190,7 +200,11 @@ while ($followup = $result->fetch_assoc()) {
                 'failed',
                 $errorMessage,
                 null,
-                null
+                null,
+                $sendResult['request_json'] ?? null,
+                $sendResult['response_json'] ?? null,
+                $sendResult['http_code'] ?? null,
+                $sendResult['failure_reason'] ?? null
             );
 
             $markFailed = $db->prepare('UPDATE gd_contact_followups SET status = ?, notes = CONCAT(COALESCE(notes, ""), ?, updated_at = NOW()) WHERE id = ?');

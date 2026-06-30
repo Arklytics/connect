@@ -68,6 +68,37 @@ function masterBuildSearchClause(string $needle, array $columns): array
     return ['(' . implode(' OR ', $parts) . ')', '%' . $needle . '%'];
 }
 
+function masterPrettyJson(?string $json): string
+{
+    $json = trim((string) $json);
+    if ($json === '') {
+        return '';
+    }
+
+    $decoded = json_decode($json, true);
+    if (json_last_error() === JSON_ERROR_NONE) {
+        $pretty = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($pretty !== false) {
+            return $pretty;
+        }
+    }
+
+    return $json;
+}
+
+function masterJsonHref(?string $json): string
+{
+    return 'data:application/json;charset=utf-8,' . rawurlencode(trim((string) $json));
+}
+
+function masterJsonFilename(string $prefix, array $row): string
+{
+    $id = (string) ($row['id'] ?? '');
+    $timestamp = preg_replace('/[^0-9]/', '', (string) ($row['webhook_at'] ?? $row['sent_at'] ?? $row['created_at'] ?? '')) ?: date('YmdHis');
+
+    return $prefix . '-' . ($id !== '' ? $id . '-' : '') . $timestamp . '.json';
+}
+
 function masterBusinessOptions(mysqli $db, int $adminId): array
 {
     $stmt = $db->prepare('SELECT id, business_name FROM gd_orders WHERE admin_id = ? ORDER BY business_name ASC');
@@ -94,6 +125,8 @@ $search = trim((string) ($_GET['search'] ?? ''));
 $businesses = masterBusinessOptions($db, $adminId);
 $webhookLogs = [];
 $messageLogs = [];
+$webhookColumns = Crm::tableColumns($db, 'gd_webhook_logs');
+$messageColumns = Crm::tableColumns($db, 'gd_sent_messages');
 $webhookStats = [
     'total' => 0,
     'changes' => 0,
@@ -108,7 +141,7 @@ $messageStats = [
     'failed' => 0,
 ];
 
-if (Crm::tableColumns($db, 'gd_webhook_logs')) {
+if ($webhookColumns) {
     $sql = '
         SELECT
             l.*,
@@ -135,6 +168,9 @@ if (Crm::tableColumns($db, 'gd_webhook_logs')) {
         'l.direction',
         'o.business_name',
     ]);
+    if (in_array('payload_json', $webhookColumns, true)) {
+        $searchColumns[] = 'l.payload_json';
+    }
     if ($searchClause !== '') {
         $sql .= ' AND ' . $searchClause;
         $types .= str_repeat('s', count(explode(' OR ', trim($searchClause, '()'))));
@@ -159,7 +195,7 @@ if (Crm::tableColumns($db, 'gd_webhook_logs')) {
     }
 }
 
-if (Crm::tableColumns($db, 'gd_sent_messages')) {
+if ($messageColumns) {
     $sql = '
         SELECT
             s.*,
@@ -185,6 +221,11 @@ if (Crm::tableColumns($db, 'gd_sent_messages')) {
         's.message_id',
         'o.business_name',
     ]);
+    foreach (['failure_reason', 'request_json', 'response_json', 'http_status_code'] as $column) {
+        if (in_array($column, $messageColumns, true)) {
+            $searchColumns[] = 's.' . $column;
+        }
+    }
     if ($searchClause !== '') {
         $sql .= ' AND ' . $searchClause;
         $types .= str_repeat('s', count(explode(' OR ', trim($searchClause, '()'))));
@@ -318,7 +359,7 @@ if (Crm::tableColumns($db, 'gd_sent_messages')) {
                                 <th>Delivery</th>
                                 <th>Text</th>
                                 <th>Notes</th>
-                                <th>Payload</th>
+                                <th>Payload JSON</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -339,11 +380,11 @@ if (Crm::tableColumns($db, 'gd_sent_messages')) {
                                     <td><?php echo h((string) ($log['notes'] ?? '-')); ?></td>
                                     <td>
                                         <details>
-                                            <summary>View</summary>
-                                            <pre class="small bg-light p-2 rounded mt-2 mb-0" style="max-width: 420px; white-space: pre-wrap;"><?php
-                                                $payload = json_decode((string) ($log['payload_json'] ?? ''), true);
-                                                echo h(json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: (string) ($log['payload_json'] ?? ''));
-                                            ?></pre>
+                                            <summary>View / Download</summary>
+                                            <div class="d-flex gap-2 mt-2 mb-2">
+                                                <a class="btn btn-outline-secondary btn-sm" href="<?php echo h(masterJsonHref((string) ($log['payload_json'] ?? ''))); ?>" download="<?php echo h(masterJsonFilename('webhook', $log)); ?>">Download JSON</a>
+                                            </div>
+                                            <pre class="small bg-light p-2 rounded mb-0" style="max-width: 420px; white-space: pre-wrap;"><?php echo h(masterPrettyJson((string) ($log['payload_json'] ?? '')) ?: '-'); ?></pre>
                                         </details>
                                     </td>
                                 </tr>
@@ -368,13 +409,15 @@ if (Crm::tableColumns($db, 'gd_sent_messages')) {
                                 <th>Send Status</th>
                                 <th>Delivery</th>
                                 <th>Message ID</th>
+                                <th>HTTP</th>
                                 <th>Error</th>
+                                <th>Audit JSON</th>
                                 <th>Body</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (!$messageLogs): ?>
-                                <tr><td colspan="11" class="text-center text-muted">No outbound messages found for the selected filters.</td></tr>
+                                <tr><td colspan="13" class="text-center text-muted">No outbound messages found for the selected filters.</td></tr>
                             <?php endif; ?>
                             <?php foreach ($messageLogs as $index => $message): ?>
                                 <?php
@@ -399,7 +442,25 @@ if (Crm::tableColumns($db, 'gd_sent_messages')) {
                                     <td><span class="badge bg-<?php echo h($sendBadge); ?> text-uppercase"><?php echo h($sendStatus); ?></span></td>
                                     <td><span class="badge bg-<?php echo h($deliveryBadge); ?> text-uppercase"><?php echo h($delivery); ?></span></td>
                                     <td><?php echo h((string) ($message['message_id'] ?? '-')); ?></td>
-                                    <td><?php echo h((string) ($message['error_message'] ?? '-')); ?></td>
+                                    <td><?php echo h((string) ($message['http_status_code'] ?? '-')); ?></td>
+                                    <td><?php echo h(trim((string) ($message['failure_reason'] ?? $message['error_message'] ?? '')) !== '' ? (string) ($message['failure_reason'] ?? $message['error_message']) : '-'); ?></td>
+                                    <td>
+                                        <details>
+                                            <summary>View / Download</summary>
+                                            <div class="d-flex gap-2 mt-2 mb-2 flex-wrap">
+                                                <a class="btn btn-outline-secondary btn-sm" href="<?php echo h(masterJsonHref((string) ($message['request_json'] ?? ''))); ?>" download="<?php echo h(masterJsonFilename('message-request', $message)); ?>">Request JSON</a>
+                                                <a class="btn btn-outline-secondary btn-sm" href="<?php echo h(masterJsonHref((string) ($message['response_json'] ?? ''))); ?>" download="<?php echo h(masterJsonFilename('message-response', $message)); ?>">Response JSON</a>
+                                            </div>
+                                            <div class="mb-2">
+                                                <small class="text-muted d-block mb-1">Request</small>
+                                                <pre class="small bg-light p-2 rounded mb-0" style="max-width: 420px; white-space: pre-wrap;"><?php echo h(masterPrettyJson((string) ($message['request_json'] ?? '')) ?: '-'); ?></pre>
+                                            </div>
+                                            <div>
+                                                <small class="text-muted d-block mb-1">Response</small>
+                                                <pre class="small bg-light p-2 rounded mb-0" style="max-width: 420px; white-space: pre-wrap;"><?php echo h(masterPrettyJson((string) ($message['response_json'] ?? '')) ?: '-'); ?></pre>
+                                            </div>
+                                        </details>
+                                    </td>
                                     <td>
                                         <details>
                                             <summary>View</summary>

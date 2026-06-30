@@ -216,7 +216,7 @@ foreach ($recipients as $recipient) {
     $messageId = $result['message_id'] !== null ? (string) $result['message_id'] : null;
     $status = $result['ok'] ? 'success' : 'failed';
     $deliveryStatus = $result['ok'] ? 'sent' : 'failed';
-    $errorMessage = $result['ok'] ? null : (string) ($result['error'] ?? 'Unknown WhatsApp error');
+    $errorMessage = $result['ok'] ? null : (string) ($result['failure_reason'] ?? $result['error'] ?? 'Unknown WhatsApp error');
     $sentAt = $result['ok'] ? date('Y-m-d H:i:s') : null;
 
     $messageTitle = $isTemplateSend
@@ -246,7 +246,11 @@ foreach ($recipients as $recipient) {
         $deliveryStatus,
         $errorMessage,
         $messageId,
-        $sentAt
+        $sentAt,
+        $result['request_json'] ?? null,
+        $result['response_json'] ?? null,
+        $result['http_code'] ?? null,
+        $result['failure_reason'] ?? null
     );
 
     $details[] = [

@@ -334,6 +334,7 @@ function incomingUpdateMessageDelivery(mysqli $db, int $bizId, array $statusRow)
     $updateSql = 'UPDATE gd_sent_messages SET delivery_status = ?, updated_at = NOW()';
     $params = [$deliveryStatus];
     $types = 's';
+    $failureReason = null;
 
     $statusTimestamp = null;
     if (!empty($statusRow['timestamp'])) {
@@ -358,6 +359,20 @@ function incomingUpdateMessageDelivery(mysqli $db, int $bizId, array $statusRow)
 
     if ($deliveryStatus === 'failed') {
         $updateSql .= ', status = "failed"';
+        if (!empty($statusRow['errors']) && is_array($statusRow['errors'])) {
+            $failureReason = trim((string) ($statusRow['errors'][0]['message'] ?? $statusRow['errors'][0]['title'] ?? ''));
+            if ($failureReason === '') {
+                $failureReason = trim((string) json_encode($statusRow['errors'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            }
+        }
+        if ($failureReason === '') {
+            $failureReason = null;
+        }
+        if ($failureReason !== null && in_array('failure_reason', Crm::tableColumns($db, 'gd_sent_messages'), true)) {
+            $updateSql .= ', failure_reason = COALESCE(failure_reason, ?)';
+            $params[] = $failureReason;
+            $types .= 's';
+        }
     }
 
     $updateSql .= ' WHERE biz_id = ? AND message_id = ?';
@@ -411,9 +426,13 @@ function incomingSendAiAutoReply(mysqli $db, int $bizId, string $to, string $que
         $reply,
         $status,
         $result['ok'] ? 'sent' : null,
-        $result['error'] ?? null,
+        $result['failure_reason'] ?? $result['error'] ?? null,
         $result['message_id'] ?? null,
-        date('Y-m-d H:i:s')
+        date('Y-m-d H:i:s'),
+        $result['request_json'] ?? null,
+        $result['response_json'] ?? null,
+        $result['http_code'] ?? null,
+        $result['failure_reason'] ?? null
     );
 
     if ($result['ok']) {

@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 final class ApiSupport
 {
+    public static function encodeJson(mixed $value): ?string
+    {
+        $encoded = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return $encoded === false ? null : $encoded;
+    }
+
     public static function jsonResponse(array $payload, int $status = 200): void
     {
         http_response_code($status);
@@ -90,6 +96,7 @@ final class ApiSupport
 
     public static function whatsappSendRequest(string $phoneNumberId, string $accessToken, array $payload): array
     {
+        $requestJson = self::encodeJson($payload);
         $curl = curl_init();
         curl_setopt_array($curl, [
             CURLOPT_URL => 'https://graph.facebook.com/v18.0/' . rawurlencode($phoneNumberId) . '/messages',
@@ -107,14 +114,33 @@ final class ApiSupport
         $curlError = curl_error($curl);
         curl_close($curl);
 
-        $decoded = json_decode((string) $response, true);
+        $responseBody = is_string($response) ? $response : '';
+        $decoded = json_decode($responseBody, true);
         $messageId = $decoded['messages'][0]['id'] ?? null;
+        $responseJson = null;
+        if ($responseBody !== '') {
+            $responseJson = json_last_error() === JSON_ERROR_NONE && is_array($decoded)
+                ? self::encodeJson($decoded)
+                : $responseBody;
+        }
+
+        $failureReason = null;
+        if ($curlError !== '') {
+            $failureReason = 'cURL error: ' . $curlError;
+        } elseif ($httpCode >= 400) {
+            $failureReason = $decoded['error']['message'] ?? ('WhatsApp API returned HTTP ' . $httpCode);
+        } elseif ($httpCode < 200 || $httpCode >= 300 || $messageId === null) {
+            $failureReason = $decoded['error']['message'] ?? ($responseBody !== '' ? 'Unexpected WhatsApp response.' : 'Empty WhatsApp response.');
+        }
 
         return [
             'ok' => $httpCode >= 200 && $httpCode < 300 && $messageId !== null,
             'message_id' => $messageId,
-            'error' => $decoded['error']['message'] ?? ($curlError !== '' ? $curlError : null),
+            'error' => $failureReason,
+            'failure_reason' => $failureReason,
             'http_code' => $httpCode,
+            'request_json' => $requestJson,
+            'response_json' => $responseJson,
             'raw' => $decoded,
         ];
     }
@@ -765,7 +791,11 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
         ?string $deliveryStatus,
         ?string $errorMessage,
         ?string $messageId,
-        ?string $sentAt = null
+        ?string $sentAt = null,
+        ?string $requestJson = null,
+        ?string $responseJson = null,
+        ?int $httpStatusCode = null,
+        ?string $failureReason = null
     ): void {
         $stmt = $db->prepare('SHOW COLUMNS FROM gd_sent_messages');
         $stmt->execute();
@@ -787,6 +817,10 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
             'sent_at' => [$sentAt ?? date('Y-m-d H:i:s'), 's'],
             'created_at' => [date('Y-m-d H:i:s'), 's'],
             'updated_at' => [date('Y-m-d H:i:s'), 's'],
+            'request_json' => [$requestJson, 's'],
+            'response_json' => [$responseJson, 's'],
+            'http_status_code' => [$httpStatusCode, 'i'],
+            'failure_reason' => [$failureReason, 's'],
         ];
 
         if (in_array('delivery_status', $columns, true)) {
@@ -807,7 +841,7 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
         $values = [];
 
         foreach ($payload as $column => [$value, $type]) {
-            if ($value === null && !in_array($column, ['template_id', 'error_message', 'message_id', 'sent_at', 'delivery_status', 'delivered_at', 'read_at'], true)) {
+            if ($value === null && !in_array($column, ['template_id', 'error_message', 'message_id', 'sent_at', 'delivery_status', 'delivered_at', 'read_at', 'request_json', 'response_json', 'http_status_code', 'failure_reason'], true)) {
                 continue;
             }
 

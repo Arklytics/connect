@@ -200,7 +200,7 @@ class MessageController extends Controller
 
             $status = $response['ok'] ? 'success' : 'failed';
             $deliveryStatus = $response['ok'] ? 'sent' : 'failed';
-            $errorMessage = $response['ok'] ? null : (string) ($response['error'] ?? 'Unknown error');
+            $errorMessage = $response['ok'] ? null : (string) ($response['failure_reason'] ?? $response['error'] ?? 'Unknown error');
             $messageId = $response['message_id'] !== null ? (string) $response['message_id'] : null;
 
             $this->storeSentMessage([
@@ -214,6 +214,10 @@ class MessageController extends Controller
                 'error_message' => $errorMessage,
                 'message_id' => $messageId,
                 'sent_at' => now(),
+                'request_json' => $response['request_json'] ?? \ApiSupport::encodeJson($payload),
+                'response_json' => $response['response_json'] ?? null,
+                'http_status_code' => $response['http_code'] ?? null,
+                'failure_reason' => $response['failure_reason'] ?? null,
             ]);
 
             if ($response['ok']) {
@@ -292,6 +296,22 @@ class MessageController extends Controller
 
         if (Schema::hasColumn('gd_sent_messages', 'read_at')) {
             $payload['read_at'] = null;
+        }
+
+        if (Schema::hasColumn('gd_sent_messages', 'request_json')) {
+            $payload['request_json'] = $data['request_json'] ?? null;
+        }
+
+        if (Schema::hasColumn('gd_sent_messages', 'response_json')) {
+            $payload['response_json'] = $data['response_json'] ?? null;
+        }
+
+        if (Schema::hasColumn('gd_sent_messages', 'http_status_code')) {
+            $payload['http_status_code'] = $data['http_status_code'] ?? null;
+        }
+
+        if (Schema::hasColumn('gd_sent_messages', 'failure_reason')) {
+            $payload['failure_reason'] = $data['failure_reason'] ?? null;
         }
 
         DB::table('gd_sent_messages')->insert($payload);

@@ -125,13 +125,18 @@ if (isset($_POST['send'])) {
     
         $response = curl_exec($curl);
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $curl_error = curl_error($curl);
         curl_close($curl);
     
         // Decode response
-        $decodedResponse = json_decode($response, true);
+        $decodedResponse = json_decode((string) $response, true);
         
         // Extract message ID
         $messageId = $decodedResponse['messages'][0]['id'] ?? NULL;
+        $requestJson = ApiSupport::encodeJson($data);
+        $responseJson = is_string($response) && $response !== ''
+            ? (json_last_error() === JSON_ERROR_NONE ? ApiSupport::encodeJson($decodedResponse) : $response)
+            : null;
     
         if ($http_code == 200 && $messageId) {
             $status = 'success';
@@ -142,7 +147,9 @@ if (isset($_POST['send'])) {
         } else {
             $status = 'failed';
             $deliveryStatus = 'failed';
-            $errorMsg = $decodedResponse['error']['message'] ?? 'Unknown error';
+            $errorMsg = $curl_error !== ''
+                ? 'cURL error: ' . $curl_error
+                : ($decodedResponse['error']['message'] ?? ('WhatsApp API returned HTTP ' . $http_code));
             $errorMessages[] = "Failed to send to $phone - Error: $errorMsg";
         }
         
@@ -157,7 +164,11 @@ if (isset($_POST['send'])) {
             $deliveryStatus,
             $errorMsg,
             $messageId,
-            $status === 'success' ? date('Y-m-d H:i:s') : null
+            $status === 'success' ? date('Y-m-d H:i:s') : null,
+            $requestJson,
+            $responseJson,
+            (int) $http_code,
+            $errorMsg
         );
     }
     
@@ -331,4 +342,3 @@ if (isset($_POST['send'])) {
         }
     });
 </script>
-
