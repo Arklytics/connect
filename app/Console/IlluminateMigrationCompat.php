@@ -75,6 +75,8 @@ namespace Illuminate\Database\Schema {
         private array $columns = [];
         /** @var array<int, string> */
         private array $dropColumns = [];
+        /** @var array<int, array<int, string>> */
+        private array $indexes = [];
 
         public function __construct(
             private string $table,
@@ -105,6 +107,11 @@ namespace Illuminate\Database\Schema {
             return $this->addColumn($column, 'int');
         }
 
+        public function unsignedSmallInteger(string $column): ColumnDefinition
+        {
+            return $this->addColumn($column, 'smallint');
+        }
+
         public function integer(string $column): ColumnDefinition
         {
             return $this->addColumn($column, 'int');
@@ -118,6 +125,16 @@ namespace Illuminate\Database\Schema {
         public function text(string $column): ColumnDefinition
         {
             return $this->addColumn($column, 'text');
+        }
+
+        public function mediumText(string $column): ColumnDefinition
+        {
+            return $this->addColumn($column, 'mediumtext');
+        }
+
+        public function longText(string $column): ColumnDefinition
+        {
+            return $this->addColumn($column, 'longtext');
         }
 
         public function timestamp(string $column): ColumnDefinition
@@ -146,6 +163,11 @@ namespace Illuminate\Database\Schema {
             foreach ((array) $columns as $column) {
                 $this->dropColumns[] = (string) $column;
             }
+        }
+
+        public function index(string|array $columns): void
+        {
+            $this->indexes[] = array_map('strval', (array) $columns);
         }
 
         /** @return array<int, ColumnDefinition> */
@@ -214,6 +236,16 @@ namespace Illuminate\Database\Schema {
                 }
             }
 
+            foreach ($this->indexes as $columns) {
+                $indexName = $this->table . '_' . implode('_', $columns) . '_index';
+                $statements[] = sprintf(
+                    'ALTER TABLE `%s` ADD KEY `%s` (`%s`)',
+                    $this->table,
+                    $indexName,
+                    implode('`, `', $columns)
+                );
+            }
+
             return $statements;
         }
 
@@ -228,6 +260,15 @@ namespace Illuminate\Database\Schema {
                 if ($column->unique) {
                     $indexes[] = sprintf('UNIQUE KEY `%s_%s_unique` (`%s`)', $this->table, $column->name, $column->name);
                 }
+            }
+
+            foreach ($this->indexes as $columns) {
+                $indexName = $this->table . '_' . implode('_', $columns) . '_index';
+                $indexes[] = sprintf(
+                    'KEY `%s` (`%s`)',
+                    $indexName,
+                    implode('`, `', $columns)
+                );
             }
 
             return $indexes;
@@ -267,8 +308,11 @@ namespace Illuminate\Database\Schema {
             return match ($column->type) {
                 'bigint' => 'BIGINT UNSIGNED',
                 'int' => 'INT UNSIGNED',
+                'smallint' => 'SMALLINT UNSIGNED',
                 'varchar' => sprintf('VARCHAR(%d)', $column->length ?? 255),
                 'text' => 'TEXT',
+                'mediumtext' => 'MEDIUMTEXT',
+                'longtext' => 'LONGTEXT',
                 'timestamp' => 'TIMESTAMP',
                 'tinyint' => 'TINYINT(1)',
                 'json' => 'JSON',
