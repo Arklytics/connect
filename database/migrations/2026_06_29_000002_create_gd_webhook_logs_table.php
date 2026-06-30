@@ -10,20 +10,31 @@ return new class extends Migration
     {
         Schema::create('gd_webhook_logs', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('biz_id')->nullable()->index();
-            $table->unsignedBigInteger('contact_id')->nullable()->index();
-            $table->string('phone_number_id', 120)->nullable()->index();
-            $table->string('whatsapp_business_account_id', 120)->nullable()->index();
-            $table->string('event_type', 40)->default('message')->index();
-            $table->string('direction', 40)->default('inbound')->index();
-            $table->string('from_phone', 30)->nullable()->index();
-            $table->string('message_id', 191)->nullable()->index();
-            $table->string('delivery_status', 30)->nullable()->index();
+            $table->unsignedBigInteger('biz_id')->nullable();
+            $table->unsignedBigInteger('contact_id')->nullable();
+            $table->string('phone_number_id', 120)->nullable();
+            $table->string('whatsapp_business_account_id', 120)->nullable();
+            $table->string('event_type', 40)->default('message');
+            $table->string('direction', 40)->default('inbound');
+            $table->string('from_phone', 30)->nullable();
+            $table->string('message_id', 191)->nullable();
+            $table->string('delivery_status', 30)->nullable();
             $table->text('message_text')->nullable();
             $table->longText('payload_json')->nullable();
             $table->text('notes')->nullable();
-            $table->timestamp('webhook_at')->nullable()->index();
+            $table->timestamp('webhook_at')->nullable();
             $table->timestamps();
+
+            $table->index('biz_id');
+            $table->index('contact_id');
+            $table->index('phone_number_id');
+            $table->index('whatsapp_business_account_id');
+            $table->index('event_type');
+            $table->index('direction');
+            $table->index('from_phone');
+            $table->index('message_id');
+            $table->index('delivery_status');
+            $table->index('webhook_at');
         });
     }
 
