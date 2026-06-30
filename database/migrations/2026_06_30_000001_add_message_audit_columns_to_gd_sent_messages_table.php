@@ -10,11 +10,11 @@ return new class extends Migration
     {
         Schema::table('gd_sent_messages', function (Blueprint $table) {
             if (!Schema::hasColumn('gd_sent_messages', 'request_json')) {
-                $table->longText('request_json')->nullable()->after('message_body');
+                $table->text('request_json')->nullable()->after('message_body');
             }
 
             if (!Schema::hasColumn('gd_sent_messages', 'response_json')) {
-                $table->longText('response_json')->nullable()->after('error_message');
+                $table->text('response_json')->nullable()->after('error_message');
             }
 
             if (!Schema::hasColumn('gd_sent_messages', 'http_status_code')) {

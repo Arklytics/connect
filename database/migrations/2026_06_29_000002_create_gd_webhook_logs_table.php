@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('message_id', 191)->nullable();
             $table->string('delivery_status', 30)->nullable();
             $table->text('message_text')->nullable();
-            $table->longText('payload_json')->nullable();
+            $table->text('payload_json')->nullable();
             $table->text('notes')->nullable();
             $table->timestamp('webhook_at')->nullable();
             $table->timestamps();
