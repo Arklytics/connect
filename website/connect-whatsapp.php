@@ -219,6 +219,31 @@ function registerPhoneNumber($phoneNumberId, $accessToken, $pin = '123456')
     ];
 }
 
+function fetchPhoneNumberDetails(string $phoneNumberId, string $accessToken): array
+{
+    if ($phoneNumberId === '' || $accessToken === '') {
+        return [
+            'ok' => false,
+            'status' => '',
+            'error' => 'Phone Number ID and access token are required.',
+            'payload' => [],
+        ];
+    }
+
+    $response = metaGetJson(
+        'https://graph.facebook.com/v23.0/' . rawurlencode($phoneNumberId) . '?fields=id,display_phone_number,verified_name,status,quality_rating',
+        $accessToken
+    );
+    $payload = $response['payload'];
+
+    return [
+        'ok' => $response['ok'],
+        'status' => (string) ($payload['status'] ?? ''),
+        'error' => $response['error'],
+        'payload' => $payload,
+    ];
+}
+
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Security::verifyCsrf();
@@ -243,12 +268,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $globalAccessToken = trim((string) AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', '')));
     $tokenExchange = exchangeEmbeddedSignupCode($code, $appId, $appSecret);
-    $accessToken = trim((string) ($tokenExchange['access_token'] ?? ''));
+    $exchangedAccessToken = trim((string) ($tokenExchange['access_token'] ?? ''));
+    $accessToken = '';
+    $tokenSource = '';
 
-    if ($accessToken === '' && $globalAccessToken !== '') {
+    if ($globalAccessToken !== '') {
         $accessToken = $globalAccessToken;
-    } elseif ($accessToken === '' && $accessTokenInput !== '') {
+        $tokenSource = 'long-lived settings token';
+    } elseif ($exchangedAccessToken !== '') {
+        $accessToken = $exchangedAccessToken;
+        $tokenSource = 'embedded signup token';
+    } elseif ($accessTokenInput !== '') {
         $accessToken = $accessTokenInput;
+        $tokenSource = 'browser signup token';
     }
 
     if (($tokenExchange['error'] ?? '') !== '' && $globalAccessToken === '') {
@@ -274,6 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $registrationOk = false;
+    $phoneStatus = '';
     if (!empty($phoneNumberId) && $accessToken !== '') {
         $register = registerPhoneNumber($phoneNumberId, $accessToken, $registrationPin);
         $registrationOk = !empty($register['ok']);
@@ -285,8 +318,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         error_log("REGISTER RESPONSE: " . json_encode($register));
 
         if (!$registrationOk) {
-            $message = "Phone number found, but registration failed: " . ($register['error'] !== '' ? $register['error'] : json_encode($register['response']));
+            $message = "Phone number found, but registration failed using {$tokenSource}: " . ($register['error'] !== '' ? $register['error'] : json_encode($register['response']));
             $message_type = "warning";
+        } else {
+            $phoneDetails = fetchPhoneNumberDetails($phoneNumberId, $accessToken);
+            $phoneStatus = strtoupper(trim((string) ($phoneDetails['status'] ?? '')));
+            if ($phoneStatus === 'PENDING') {
+                $registrationOk = false;
+                $message = 'Registration API returned success, but Meta still shows this phone number as PENDING. Check the registration PIN and token permissions, then retry.';
+                $message_type = 'warning';
+            } elseif (!$phoneDetails['ok'] && ($phoneDetails['error'] ?? '') !== '') {
+                $message = 'Registration completed, but phone status could not be verified: ' . $phoneDetails['error'];
+                $message_type = 'warning';
+            }
         }
     }
 
@@ -312,7 +356,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = 'Your business is now connected to WhatsApp.';
             $message_type = 'success';
         } elseif ($saved && $hasIds) {
-            $message = trim(($message !== '' ? $message . ' ' : '') . 'IDs were saved, but Meta still reports the phone number as pending.');
+            $statusText = $phoneStatus !== '' ? ' Current Meta status: ' . $phoneStatus . '.' : '';
+            $message = trim(($message !== '' ? $message . ' ' : '') . 'IDs were saved, but Meta still reports the phone number as pending.' . $statusText);
         } elseif ($saved) {
             $message = trim('WhatsApp token saved, but WABA ID and Phone Number ID are still missing. ' . ($message !== '' ? 'Meta lookup said: ' . $message : 'Paste the WABA ID and Phone Number ID below, then click Sync / Register.'));
             $message_type = 'warning';
