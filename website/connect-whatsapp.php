@@ -68,6 +68,24 @@ function extractWhatsAppAccountFromPayload(array $payload, array &$results): voi
     }
 }
 
+function findSignupValue(array $payload, array $keys): string
+{
+    foreach ($payload as $key => $value) {
+        if (in_array((string) $key, $keys, true) && (is_string($value) || is_numeric($value))) {
+            return trim((string) $value);
+        }
+
+        if (is_array($value)) {
+            $nested = findSignupValue($value, $keys);
+            if ($nested !== '') {
+                return $nested;
+            }
+        }
+    }
+
+    return '';
+}
+
 function fetchMetaWhatsAppDetails(string $accessToken, string $knownWabaId = ''): array
 {
     $results = [
@@ -89,7 +107,7 @@ function fetchMetaWhatsAppDetails(string $accessToken, string $knownWabaId = '')
         $metaResponse = metaGetJson($url, $accessToken);
         if (!$metaResponse['ok']) {
             if ($results['error'] === '') {
-                $results['error'] = $metaResponse['error'] !== '' ? $metaResponse['error'] : 'Meta API did not return WhatsApp account data.';
+                $results['error'] = ($metaResponse['error'] !== '' ? $metaResponse['error'] : 'Meta API did not return WhatsApp account data.') . ' (HTTP ' . $metaResponse['http_status'] . ')';
             }
             continue;
         }
@@ -209,6 +227,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accessTokenInput = trim((string) ($_POST['access_token'] ?? ''));
     $wabaId = trim((string) ($_POST['waba_id'] ?? ''));
     $phoneNumberId = trim((string) ($_POST['phone_number_id'] ?? ''));
+    $registrationPin = preg_replace('/\D+/', '', (string) ($_POST['registration_pin'] ?? '123456')) ?: '123456';
+    $signupPayloadRaw = trim((string) ($_POST['signup_payload'] ?? ''));
+    if ($signupPayloadRaw !== '') {
+        $signupPayload = json_decode($signupPayloadRaw, true);
+        if (is_array($signupPayload)) {
+            if ($wabaId === '') {
+                $wabaId = findSignupValue($signupPayload, ['waba_id', 'wabaId', 'whatsapp_business_account_id', 'whatsappBusinessAccountId']);
+            }
+            if ($phoneNumberId === '') {
+                $phoneNumberId = findSignupValue($signupPayload, ['phone_number_id', 'phoneNumberId']);
+            }
+        }
+    }
+
     $globalAccessToken = trim((string) AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', '')));
     $tokenExchange = exchangeEmbeddedSignupCode($code, $appId, $appSecret);
     $accessToken = trim((string) ($tokenExchange['access_token'] ?? ''));
@@ -243,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $registrationOk = false;
     if (!empty($phoneNumberId) && $accessToken !== '') {
-        $register = registerPhoneNumber($phoneNumberId, $accessToken);
+        $register = registerPhoneNumber($phoneNumberId, $accessToken, $registrationPin);
         $registrationOk = !empty($register['ok']);
         $registrationError = strtolower((string) ($register['error'] ?? ''));
         if (!$registrationOk && str_contains($registrationError, 'already registered')) {
@@ -280,9 +312,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = 'Your business is now connected to WhatsApp.';
             $message_type = 'success';
         } elseif ($saved && $hasIds) {
-            $message = trim($message . ' IDs were saved, but Meta still reports the phone number as pending.');
+            $message = trim(($message !== '' ? $message . ' ' : '') . 'IDs were saved, but Meta still reports the phone number as pending.');
         } elseif ($saved) {
-            $message = 'WhatsApp token saved, but WABA ID and Phone Number ID are still missing.';
+            $message = trim('WhatsApp token saved, but WABA ID and Phone Number ID are still missing. ' . ($message !== '' ? 'Meta lookup said: ' . $message : 'Paste the WABA ID and Phone Number ID below, then click Sync / Register.'));
             $message_type = 'warning';
         } else {
             $message = 'Could not save WhatsApp connection details.';
@@ -356,17 +388,36 @@ $isConnected = (($business['status'] ?? '0') == '1');
                         <?php echo Security::csrfField(); ?>
                         <input type="hidden" name="code" id="signupCode">
                         <input type="hidden" name="access_token" id="signupAccessToken">
+                        <input type="hidden" name="signup_payload" id="signupPayload">
 
                         <h5 class="mb-3">Embedded Signup</h5>
                         <p class="text-muted">The business owner signs in with Meta, selects or creates a WhatsApp Business Account, connects a phone number, and returns the IDs to this app.</p>
                         <button type="button" class="btn btn-primary" onclick="launchWhatsAppSignup()" <?php echo ($appId === '' || $configId === '') ? 'disabled' : ''; ?>>
                             <i class="bi bi-whatsapp me-1"></i> Start WhatsApp Signup
                         </button>
-                        <input type="hidden" name="waba_id" id="wabaId" value="<?php echo h($business['whatsapp_id'] ?? ''); ?>">
-                        <input type="hidden" name="phone_number_id" id="phoneNumberId" value="<?php echo h($business['phone_number_id'] ?? ''); ?>">
+                        <div class="row g-3 mt-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="wabaId">WhatsApp Business ID</label>
+                                <input type="text" name="waba_id" id="wabaId" class="form-control" value="<?php echo h($business['whatsapp_id'] ?? ''); ?>" placeholder="WABA ID from Meta">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="phoneNumberId">Phone Number ID</label>
+                                <input type="text" name="phone_number_id" id="phoneNumberId" class="form-control" value="<?php echo h($business['phone_number_id'] ?? ''); ?>" placeholder="Phone Number ID from Meta">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="registrationPin">Registration PIN</label>
+                                <input type="text" inputmode="numeric" name="registration_pin" id="registrationPin" class="form-control" value="123456" maxlength="6" placeholder="6 digit PIN">
+                                <div class="form-text">Use the two-step verification PIN for this WhatsApp phone number.</div>
+                            </div>
+                            <div class="col-md-6 d-flex align-items-end">
+                                <button type="submit" class="btn btn-success w-100">
+                                    <i class="bi bi-arrow-repeat me-1"></i> Sync / Register
+                                </button>
+                            </div>
+                        </div>
                         <div id="signupStatus" class="small text-muted mt-3"></div>
                         <div class="mt-3">
-                            <p class="text-muted small mb-0">If Meta does not return the IDs automatically, your master admin can sync them from the control panel. The webhook callback is auto-set to your project endpoint.</p>
+                            <p class="text-muted small mb-0">If Meta does not return the IDs automatically, paste the WABA ID and Phone Number ID from Meta Business Manager, then sync/register with the saved long-lived token. The webhook callback is auto-set to your project endpoint.</p>
                         </div>
                     </form>
                 </div>
@@ -387,6 +438,28 @@ window.fbAsyncInit = function () {
 
 let waitingForSignupPayload = false;
 let signupSubmitTimer = null;
+
+function findSignupValue(payload, keys) {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+
+  for (const key of Object.keys(payload)) {
+    const value = payload[key];
+    if (keys.includes(key) && (typeof value === "string" || typeof value === "number")) {
+      return String(value).trim();
+    }
+
+    if (value && typeof value === "object") {
+      const nested = findSignupValue(value, keys);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return "";
+}
 
 function maybeSubmitSignupForm() {
   const code = document.getElementById("signupCode").value;
@@ -417,14 +490,23 @@ window.addEventListener("message", function (event) {
     }
   }
 
+  const serialized = JSON.stringify(data);
   const eventType = data.type || data.event || data.name || '';
-  if (eventType !== "WA_EMBEDDED_SIGNUP" && eventType !== "whatsapp_embedded_signup") {
+  const looksLikeSignup = eventType === "WA_EMBEDDED_SIGNUP"
+    || eventType === "whatsapp_embedded_signup"
+    || serialized.includes("phone_number_id")
+    || serialized.includes("waba_id")
+    || serialized.includes("whatsapp_business_account_id");
+
+  if (!looksLikeSignup) {
     return;
   }
 
   const payload = data.data || data.payload || data.response || data;
-  const wabaId = payload.waba_id || payload.wabaId || payload.whatsapp_business_account_id || '';
-  const phoneNumberId = payload.phone_number_id || payload.phoneNumberId || payload.phone_number || '';
+  document.getElementById("signupPayload").value = serialized;
+
+  const wabaId = findSignupValue(payload, ["waba_id", "wabaId", "whatsapp_business_account_id", "whatsappBusinessAccountId"]);
+  const phoneNumberId = findSignupValue(payload, ["phone_number_id", "phoneNumberId"]);
 
   if (wabaId) {
     document.getElementById("wabaId").value = wabaId;
