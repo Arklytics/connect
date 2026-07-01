@@ -12,16 +12,10 @@ $configId = AppSettings::getGlobal($db, 'META_CONFIG_ID', Config::get('META_CONF
 $appSecret = AppSettings::getGlobal($db, 'META_APP_SECRET', Config::get('META_APP_SECRET', ''));
 $defaultWebhookUrl = app_public_url('incoming.php');
 
-function fetchMetaWhatsAppDetails(string $accessToken): array
+function metaGetJson(string $url, string $accessToken): array
 {
-    $results = [
-        'whatsapp_id' => '',
-        'phone_number_id' => '',
-        'error' => '',
-    ];
-
-    $url = 'https://graph.facebook.com/v18.0/me?fields=whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number,verified_name,status}}&access_token=' . rawurlencode($accessToken);
-    $ch = curl_init($url);
+    $separator = str_contains($url, '?') ? '&' : '?';
+    $ch = curl_init($url . $separator . 'access_token=' . rawurlencode($accessToken));
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 30,
@@ -32,48 +26,100 @@ function fetchMetaWhatsAppDetails(string $accessToken): array
     curl_close($ch);
 
     $payload = json_decode((string) $response, true);
-    if ($curlError !== '' || $httpStatus < 200 || $httpStatus >= 300) {
-        $results['error'] = (string) ($payload['error']['message'] ?? $curlError ?? 'Unknown Meta API error');
-        return $results;
-    }
 
-    $accounts = $payload['whatsapp_business_accounts']['data'] ?? $payload['whatsapp_business_accounts'] ?? [];
-    if (!is_array($accounts)) {
-        $accounts = [];
-    }
+    return [
+        'ok' => $curlError === '' && $httpStatus >= 200 && $httpStatus < 300 && is_array($payload),
+        'http_status' => $httpStatus,
+        'error' => (string) ($payload['error']['message'] ?? $curlError),
+        'payload' => is_array($payload) ? $payload : [],
+    ];
+}
 
-    foreach ($accounts as $account) {
-        if (!is_array($account)) {
-            continue;
+function extractWhatsAppAccountFromPayload(array $payload, array &$results): void
+{
+    $wabaId = trim((string) ($payload['id'] ?? ''));
+    $phoneNumbers = $payload['phone_numbers']['data'] ?? $payload['phone_numbers'] ?? null;
+
+    if ($wabaId !== '' && is_array($phoneNumbers)) {
+        if ($results['whatsapp_id'] === '') {
+            $results['whatsapp_id'] = $wabaId;
         }
 
-        $wabaId = trim((string) ($account['id'] ?? ''));
-        $phoneNumbers = $account['phone_numbers']['data'] ?? $account['phone_numbers'] ?? [];
-        if (!is_array($phoneNumbers)) {
-            $phoneNumbers = [];
-        }
-
-        $phoneNumberId = '';
         foreach ($phoneNumbers as $phoneNumber) {
             if (!is_array($phoneNumber)) {
                 continue;
             }
 
             $phoneNumberId = trim((string) ($phoneNumber['id'] ?? ''));
-            if ($phoneNumberId !== '') {
-                break;
+            if ($results['phone_number_id'] === '' && $phoneNumberId !== '') {
+                $results['phone_number_id'] = $phoneNumberId;
+            }
+
+            if (!empty($phoneNumber['status'])) {
+                $results['phone_number_status'] = (string) $phoneNumber['status'];
             }
         }
+    }
 
-        if ($results['whatsapp_id'] === '' && $wabaId !== '') {
-            $results['whatsapp_id'] = $wabaId;
+    foreach ($payload as $value) {
+        if (is_array($value)) {
+            extractWhatsAppAccountFromPayload($value, $results);
+        }
+    }
+}
+
+function fetchMetaWhatsAppDetails(string $accessToken, string $knownWabaId = ''): array
+{
+    $results = [
+        'whatsapp_id' => '',
+        'phone_number_id' => '',
+        'phone_number_status' => '',
+        'error' => '',
+    ];
+
+    $urls = [];
+    if ($knownWabaId !== '') {
+        $urls[] = 'https://graph.facebook.com/v23.0/' . rawurlencode($knownWabaId) . '/phone_numbers?fields=id,display_phone_number,verified_name,status';
+    }
+
+    $urls[] = 'https://graph.facebook.com/v23.0/me?fields=whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number,verified_name,status}}';
+    $urls[] = 'https://graph.facebook.com/v23.0/me/businesses?fields=id,name,owned_whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number,verified_name,status}},client_whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number,verified_name,status}}';
+
+    foreach ($urls as $url) {
+        $metaResponse = metaGetJson($url, $accessToken);
+        if (!$metaResponse['ok']) {
+            if ($results['error'] === '') {
+                $results['error'] = $metaResponse['error'] !== '' ? $metaResponse['error'] : 'Meta API did not return WhatsApp account data.';
+            }
+            continue;
         }
 
-        if ($results['phone_number_id'] === '' && $phoneNumberId !== '') {
-            $results['phone_number_id'] = $phoneNumberId;
+        if ($knownWabaId !== '' && str_contains($url, '/' . rawurlencode($knownWabaId) . '/phone_numbers')) {
+            $phoneNumbers = $metaResponse['payload']['data'] ?? [];
+            if (is_array($phoneNumbers)) {
+                foreach ($phoneNumbers as $phoneNumber) {
+                    if (!is_array($phoneNumber)) {
+                        continue;
+                    }
+
+                    $phoneNumberId = trim((string) ($phoneNumber['id'] ?? ''));
+                    if ($results['whatsapp_id'] === '') {
+                        $results['whatsapp_id'] = $knownWabaId;
+                    }
+                    if ($results['phone_number_id'] === '' && $phoneNumberId !== '') {
+                        $results['phone_number_id'] = $phoneNumberId;
+                    }
+                    if (!empty($phoneNumber['status'])) {
+                        $results['phone_number_status'] = (string) $phoneNumber['status'];
+                    }
+                }
+            }
+        } else {
+            extractWhatsAppAccountFromPayload($metaResponse['payload'], $results);
         }
 
         if ($results['whatsapp_id'] !== '' && $results['phone_number_id'] !== '') {
+            $results['error'] = '';
             return $results;
         }
     }
@@ -83,6 +129,41 @@ function fetchMetaWhatsAppDetails(string $accessToken): array
     }
 
     return $results;
+}
+
+function exchangeEmbeddedSignupCode(string $code, string $appId, string $appSecret): array
+{
+    if ($code === '' || $appId === '' || $appSecret === '') {
+        return ['access_token' => '', 'error' => ''];
+    }
+
+    $tokenUrl = 'https://graph.facebook.com/v23.0/oauth/access_token'
+        . '?client_id=' . rawurlencode($appId)
+        . '&client_secret=' . rawurlencode($appSecret)
+        . '&code=' . rawurlencode($code);
+
+    $ch = curl_init($tokenUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $response = curl_exec($ch);
+    $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    $tokenData = json_decode((string) $response, true);
+    if ($curlError === '' && $httpStatus >= 200 && $httpStatus < 300 && is_array($tokenData)) {
+        return [
+            'access_token' => (string) ($tokenData['access_token'] ?? ''),
+            'error' => '',
+        ];
+    }
+
+    return [
+        'access_token' => '',
+        'error' => (string) ($tokenData['error']['message'] ?? $curlError ?: 'Unknown token exchange error'),
+    ];
 }
 
 function registerPhoneNumber($phoneNumberId, $accessToken, $pin = '123456')
@@ -107,12 +188,16 @@ function registerPhoneNumber($phoneNumberId, $accessToken, $pin = '123456')
     ]);
 
     $response = curl_exec($ch);
-    $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $http = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
     curl_close($ch);
 
+    $decoded = json_decode((string) $response, true);
     return [
         'http' => $http,
-        'response' => json_decode($response, true)
+        'ok' => $curlError === '' && $http >= 200 && $http < 300,
+        'response' => is_array($decoded) ? $decoded : $response,
+        'error' => (string) ($decoded['error']['message'] ?? $curlError),
     ];
 }
 
@@ -124,38 +209,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accessTokenInput = trim((string) ($_POST['access_token'] ?? ''));
     $wabaId = trim((string) ($_POST['waba_id'] ?? ''));
     $phoneNumberId = trim((string) ($_POST['phone_number_id'] ?? ''));
-    $accessToken = '';
-    $hasIds = ($wabaId !== '' && $phoneNumberId !== '');
+    $globalAccessToken = trim((string) AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', '')));
+    $tokenExchange = exchangeEmbeddedSignupCode($code, $appId, $appSecret);
+    $accessToken = trim((string) ($tokenExchange['access_token'] ?? ''));
 
-    if ($accessTokenInput !== '') {
+    if ($accessToken === '' && $globalAccessToken !== '') {
+        $accessToken = $globalAccessToken;
+    } elseif ($accessToken === '' && $accessTokenInput !== '') {
         $accessToken = $accessTokenInput;
-    } elseif ($code !== '' && $appId !== '' && $appSecret !== '') {
-        $tokenUrl = 'https://graph.facebook.com/v18.0/oauth/access_token'
-            . '?client_id=' . rawurlencode($appId)
-            . '&client_secret=' . rawurlencode($appSecret)
-            . '&code=' . rawurlencode($code);
+    }
 
-        $ch = curl_init($tokenUrl);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 30,
-        ]);
-        $response = curl_exec($ch);
-        $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
-
-        $tokenData = json_decode((string) $response, true);
-        if ($curlError === '' && $httpStatus >= 200 && $httpStatus < 300) {
-            $accessToken = (string) ($tokenData['access_token'] ?? '');
-        } else {
-            $message = 'Signup completed, but token exchange failed: ' . ($tokenData['error']['message'] ?? $curlError ?: 'Unknown error');
-            $message_type = 'warning';
-        }
+    if (($tokenExchange['error'] ?? '') !== '' && $globalAccessToken === '') {
+        $message = 'Signup completed, but token exchange failed: ' . $tokenExchange['error'];
+        $message_type = 'warning';
     }
 
     if ($accessToken !== '') {
-        $metaDetails = fetchMetaWhatsAppDetails($accessToken);
+        $metaDetails = fetchMetaWhatsAppDetails($accessToken, $wabaId);
         if ($wabaId === '') {
             $wabaId = $metaDetails['whatsapp_id'];
         }
@@ -171,16 +241,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if (!empty($phoneNumberId)) {
+    $registrationOk = false;
+    if (!empty($phoneNumberId) && $accessToken !== '') {
         $register = registerPhoneNumber($phoneNumberId, $accessToken);
+        $registrationOk = !empty($register['ok']);
+        $registrationError = strtolower((string) ($register['error'] ?? ''));
+        if (!$registrationOk && str_contains($registrationError, 'already registered')) {
+            $registrationOk = true;
+        }
 
         error_log("REGISTER RESPONSE: " . json_encode($register));
 
-        if ($register['http'] != 200) {
-            $message = "Registration failed: " . json_encode($register['response']);
+        if (!$registrationOk) {
+            $message = "Phone number found, but registration failed: " . ($register['error'] !== '' ? $register['error'] : json_encode($register['response']));
             $message_type = "warning";
         }
     }
+
+    $hasIds = ($wabaId !== '' && $phoneNumberId !== '');
+    $isRegistered = $hasIds && $registrationOk;
 
     if ($wabaId === '' && $phoneNumberId === '' && $accessToken === '') {
         $message = 'No WhatsApp account data was received. Complete Embedded Signup and try again.';
@@ -188,20 +267,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         if ($accessToken !== '') {
             $stmt = $db->prepare("UPDATE gd_orders SET auth_token = ?, whatsapp_id = COALESCE(NULLIF(?, ''), whatsapp_id), phone_number_id = COALESCE(NULLIF(?, ''), phone_number_id), webhook_url = COALESCE(NULLIF(webhook_url, ''), ?), status = ? WHERE id = ?");
-            $status = $hasIds ? '1' : '0';
+            $status = $isRegistered ? '1' : '0';
             $stmt->bind_param('sssssi', $accessToken, $wabaId, $phoneNumberId, $defaultWebhookUrl, $status, $biz_id);
         } else {
             $stmt = $db->prepare("UPDATE gd_orders SET whatsapp_id = COALESCE(NULLIF(?, ''), whatsapp_id), phone_number_id = COALESCE(NULLIF(?, ''), phone_number_id), webhook_url = COALESCE(NULLIF(webhook_url, ''), ?), status = ? WHERE id = ?");
-            $status = $hasIds ? '1' : '0';
+            $status = $isRegistered ? '1' : '0';
             $stmt->bind_param('ssssi', $wabaId, $phoneNumberId, $defaultWebhookUrl, $status, $biz_id);
         }
 
         $saved = $stmt->execute();
-        if ($saved && $message_type !== 'warning' && $hasIds) {
+        if ($saved && $message_type !== 'warning' && $isRegistered) {
             $message = 'Your business is now connected to WhatsApp.';
             $message_type = 'success';
         } elseif ($saved && $hasIds) {
-            $message .= ' IDs were saved. Add token manually if needed.';
+            $message = trim($message . ' IDs were saved, but Meta still reports the phone number as pending.');
         } elseif ($saved) {
             $message = 'WhatsApp token saved, but WABA ID and Phone Number ID are still missing.';
             $message_type = 'warning';
@@ -312,7 +391,9 @@ let signupSubmitTimer = null;
 function maybeSubmitSignupForm() {
   const code = document.getElementById("signupCode").value;
   const accessToken = document.getElementById("signupAccessToken").value;
-  if (code || accessToken) {
+  const wabaId = document.getElementById("wabaId").value;
+  const phoneNumberId = document.getElementById("phoneNumberId").value;
+  if (code || accessToken || wabaId || phoneNumberId) {
     document.getElementById("signupStatus").textContent = "Saving WhatsApp connection details...";
     document.getElementById("connectForm").submit();
     return true;
@@ -373,9 +454,11 @@ function launchWhatsAppSignup() {
     document.getElementById("signupCode").value = response.authResponse.code || "";
     document.getElementById("signupAccessToken").value = response.authResponse.accessToken || "";
     clearTimeout(signupSubmitTimer);
-    if (maybeSubmitSignupForm()) {
+    document.getElementById("signupStatus").textContent = "Meta login completed. Waiting for WhatsApp account IDs...";
+    signupSubmitTimer = setTimeout(function () {
       waitingForSignupPayload = false;
-    }
+      maybeSubmitSignupForm();
+    }, 2500);
   }, {
     config_id: "<?php echo h($configId); ?>",
     response_type: "code",
