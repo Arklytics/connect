@@ -26,7 +26,7 @@ $requestPath = parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH
 $requestPath = preg_replace('~/{2,}~', '/', $requestPath) ?? '/';
 
 if ($requestPath === '/' || $requestPath === '/index.php') {
-    app_dispatch('website/index.php');
+    app_dispatch('website/landing.php');
     return;
 }
 

@@ -102,7 +102,7 @@ final class ApiSupport
             CURLOPT_URL => 'https://graph.facebook.com/v18.0/' . rawurlencode($phoneNumberId) . '/messages',
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_POSTFIELDS => $requestJson !== null ? $requestJson : json_encode($payload),
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/json',
                 'Authorization: Bearer ' . $accessToken,
@@ -129,6 +129,12 @@ final class ApiSupport
             $failureReason = 'cURL error: ' . $curlError;
         } elseif ($httpCode >= 400) {
             $failureReason = $decoded['error']['message'] ?? ('WhatsApp API returned HTTP ' . $httpCode);
+            if (is_array($decoded) && isset($decoded['error']['code'])) {
+                $failureReason .= ' (code ' . $decoded['error']['code'] . ')';
+            }
+            if (is_array($decoded) && isset($decoded['error']['error_subcode'])) {
+                $failureReason .= ' (subcode ' . $decoded['error']['error_subcode'] . ')';
+            }
         } elseif ($httpCode < 200 || $httpCode >= 300 || $messageId === null) {
             $failureReason = $decoded['error']['message'] ?? ($responseBody !== '' ? 'Unexpected WhatsApp response.' : 'Empty WhatsApp response.');
         }

@@ -1,54 +1,92 @@
 <?php
-require_once __DIR__ . '/db_conn.php';
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../db_conn.php';
 
 Auth::requireMaster();
 
-// API URL
-$url = "https://connect.arklytics.in/master/register_phone"; // Your API URL
-
-// Certificate Content (Directly Pasted)
-$base64Certificate = base64_encode(<<<CERT
------BEGIN CERTIFICATE-----
-CnAKLAjE7+z2v+vVAhIGZW50OndhIhNBcmtseXRpY3MgU29sdXRpb25zUIG0ybwGGkAWY0O4QICyz7oVVZMFxhNtrgu8hAZN37lYelfnnDSlu3aAPjCecZE6WbKz3BlN3QkIn3lBeS8kcz+0iCqKFQEKEi5tdXWKhaytW+BEh7Ofq2Qgk13j4FnC2JzyBT1OrTxxkFzzYImZIAQD/GK0iMkd-----END CERTIFICATE-----
-CERT
-);
-
-// API Headers
-$headers = [
-    "Authorization: Bearer " . AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', '')),
-    "Content-Type: application/json"
-];
-
-// API Data
-$data = [
-    "cc" => "91", // Country Code
-    "phone_number" => "7799677557", // Phone number to register
-    "method" => "sms", // Verification method: 'sms' or 'voice'
-    "certificate" => $base64Certificate // Base64-encoded certificate
-];
-
-// Initialize cURL
-$ch = curl_init($url);
-
-// Set cURL Options
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); // To return the response
-curl_setopt($ch, CURLOPT_HTTPHEADER, $headers); // Set headers
-curl_setopt($ch, CURLOPT_POST, true); // HTTP POST method
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data)); // Add JSON body
-
-// Execute cURL Request
-$response = curl_exec($ch);
-
-// Check for Errors
-if (curl_errno($ch)) {
-    echo "cURL Error: " . curl_error($ch);
-} else {
-    // Parse and Display the Response
-    $http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    echo "HTTP Status Code: " . $http_status . "\n";
-    echo "Response: " . $response . "\n";
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    http_response_code(405);
+    echo json_encode([
+        'ok' => false,
+        'http_code' => 405,
+        'response' => null,
+        'error' => 'Method not allowed.',
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
-// Close cURL
-curl_close($ch);
-?>
+function metaRegisterPhoneNumber(string $phoneNumberId, string $accessToken, string $pin = '123456'): array
+{
+    if ($phoneNumberId === '') {
+        return [
+            'ok' => false,
+            'http_code' => 0,
+            'response' => null,
+            'error' => 'phone_number_id is required.',
+        ];
+    }
+
+    if ($accessToken === '') {
+        return [
+            'ok' => false,
+            'http_code' => 0,
+            'response' => null,
+            'error' => 'Access token is required.',
+        ];
+    }
+
+    $url = 'https://graph.facebook.com/v23.0/' . rawurlencode($phoneNumberId) . '/register';
+    $payload = [
+        'messaging_product' => 'whatsapp',
+        'pin' => $pin,
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . $accessToken,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        CURLOPT_TIMEOUT => 30,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    $decoded = json_decode((string) $response, true);
+    $error = '';
+    if ($curlError !== '') {
+        $error = $curlError;
+    } elseif ($httpCode < 200 || $httpCode >= 300) {
+        $error = (string) ($decoded['error']['message'] ?? $response ?? ('HTTP ' . $httpCode));
+    }
+
+    return [
+        'ok' => $curlError === '' && $httpCode >= 200 && $httpCode < 300,
+        'http_code' => $httpCode,
+        'response' => $decoded,
+        'error' => $error,
+    ];
+}
+
+$phoneNumberId = trim((string) ($_POST['phone_number_id'] ?? ''));
+$accessToken = trim((string) ($_POST['access_token'] ?? ''));
+$pin = trim((string) ($_POST['pin'] ?? '123456'));
+
+if ($accessToken === '') {
+    $accessToken = trim((string) AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', '')));
+}
+
+$result = metaRegisterPhoneNumber($phoneNumberId, $accessToken, $pin !== '' ? $pin : '123456');
+
+header('Content-Type: application/json; charset=utf-8');
+http_response_code($result['ok'] ? 200 : 400);
+echo json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
