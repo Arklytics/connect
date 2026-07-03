@@ -4,6 +4,36 @@ declare(strict_types=1);
 
 final class ApiSupport
 {
+    public static function tableColumns(mysqli $db, string $table): array
+    {
+        $stmt = $db->prepare('SHOW COLUMNS FROM `' . str_replace('`', '', $table) . '`');
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $columns = [];
+        while ($row = $result->fetch_assoc()) {
+            $columns[] = $row['Field'] ?? '';
+        }
+
+        return $columns;
+    }
+
+    public static function hasColumn(mysqli $db, string $table, string $column): bool
+    {
+        return in_array($column, self::tableColumns($db, $table), true);
+    }
+
+    public static function generateBusinessApiKey(): array
+    {
+        $key = 'wpi_live_' . bin2hex(random_bytes(24));
+
+        return [
+            'key' => $key,
+            'hash' => hash('sha256', $key),
+            'prefix' => substr($key, 0, 12),
+            'last4' => substr($key, -4),
+        ];
+    }
+
     public static function encodeJson(mixed $value): ?string
     {
         $encoded = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
@@ -53,6 +83,48 @@ final class ApiSupport
                 'error' => 'Unauthorized.',
             ], 401);
         }
+    }
+
+    public static function requireBusinessApiKey(mysqli $db, int $requestedBizId = 0): int
+    {
+        if (!self::hasColumn($db, 'gd_orders', 'api_key_hash')) {
+            self::jsonResponse([
+                'ok' => false,
+                'error' => 'Business API keys are not installed. Run migrations first.',
+            ], 500);
+        }
+
+        $provided = self::extractToken();
+        if ($provided === '') {
+            self::jsonResponse([
+                'ok' => false,
+                'error' => 'Unauthorized. Send Authorization: Bearer YOUR_BUSINESS_API_KEY or X-API-KEY.',
+            ], 401);
+        }
+
+        $providedHash = hash('sha256', $provided);
+        $enabledSql = self::hasColumn($db, 'gd_orders', 'api_enabled') ? ' AND COALESCE(api_enabled, 0) = 1' : '';
+        $stmt = $db->prepare('SELECT id FROM gd_orders WHERE api_key_hash = ?' . $enabledSql . ' LIMIT 1');
+        $stmt->bind_param('s', $providedHash);
+        $stmt->execute();
+        $business = $stmt->get_result()->fetch_assoc();
+
+        if (!$business) {
+            self::jsonResponse([
+                'ok' => false,
+                'error' => 'Unauthorized.',
+            ], 401);
+        }
+
+        $bizId = (int) $business['id'];
+        if ($requestedBizId > 0 && $requestedBizId !== $bizId) {
+            self::jsonResponse([
+                'ok' => false,
+                'error' => 'The supplied API key does not belong to this biz_id.',
+            ], 403);
+        }
+
+        return $bizId;
     }
 
     public static function extractToken(): string
@@ -806,13 +878,7 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
         ?int $httpStatusCode = null,
         ?string $failureReason = null
     ): void {
-        $stmt = $db->prepare('SHOW COLUMNS FROM gd_sent_messages');
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $columns = [];
-        while ($row = $result->fetch_assoc()) {
-            $columns[] = $row['Field'] ?? '';
-        }
+        $columns = self::tableColumns($db, 'gd_sent_messages');
 
         $payload = [
             'biz_id' => [$bizId, 'i'],

@@ -4,20 +4,15 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../db_conn.php';
 
-ApiSupport::requireBearerToken();
-
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     ApiSupport::jsonResponse(['ok' => false, 'error' => 'Method not allowed.'], 405);
 }
 
 $payload = ApiSupport::requestJson();
-$bizId = Security::intFrom($payload['biz_id'] ?? null);
+$requestedBizId = Security::intFrom($payload['biz_id'] ?? null);
+$bizId = ApiSupport::requireBusinessApiKey($db, $requestedBizId);
 $groupId = Security::intFrom($payload['group_id'] ?? null);
 $rows = $payload['contacts'] ?? $payload['contact'] ?? $payload['rows'] ?? [];
-
-if ($bizId <= 0) {
-    ApiSupport::jsonResponse(['ok' => false, 'error' => 'biz_id is required.'], 422);
-}
 
 if (!is_array($rows)) {
     $rows = [$rows];

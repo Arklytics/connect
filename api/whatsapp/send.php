@@ -8,7 +8,7 @@ function apiResolveRecipients(mysqli $db, int $bizId, array $payload): array
 {
     $recipients = [];
 
-    $phoneNumbers = $payload['phone_numbers'] ?? [];
+    $phoneNumbers = $payload['phone_numbers'] ?? $payload['to'] ?? $payload['phone_number'] ?? [];
     if (!is_array($phoneNumbers)) {
         $phoneNumbers = [$phoneNumbers];
     }
@@ -120,28 +120,25 @@ function apiResolveRecipients(mysqli $db, int $bizId, array $payload): array
     return array_values($unique);
 }
 
-ApiSupport::requireBearerToken();
-
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     ApiSupport::jsonResponse(['ok' => false, 'error' => 'Method not allowed.'], 405);
 }
 
 $payload = ApiSupport::requestJson();
-$bizId = Security::intFrom($payload['biz_id'] ?? null);
+$requestedBizId = Security::intFrom($payload['biz_id'] ?? null);
+$bizId = ApiSupport::requireBusinessApiKey($db, $requestedBizId);
 $kind = strtolower(trim((string) ($payload['kind'] ?? 'text')));
 $language = trim((string) ($payload['language'] ?? 'en')) ?: 'en';
 $messageBody = trim((string) ($payload['message'] ?? $payload['message_body'] ?? ''));
 $templateName = trim((string) ($payload['template_name'] ?? ''));
 $components = $payload['components'] ?? [];
+$parameters = $payload['parameters'] ?? $payload['params'] ?? [];
+$otp = trim((string) ($payload['otp'] ?? $payload['code'] ?? ''));
 $templateRow = [];
-
-if ($bizId <= 0) {
-    ApiSupport::jsonResponse(['ok' => false, 'error' => 'biz_id is required.'], 422);
-}
 
 $credentials = ApiSupport::businessCredentials($db, $bizId);
 $phoneNumberId = trim((string) ($credentials['phone_number_id'] ?? ''));
-$accessToken = trim((string) ($credentials['auth_token'] ?? '')) ?: Config::get('META_ACCESS_TOKEN', '');
+$accessToken = trim((string) ($credentials['auth_token'] ?? '')) ?: AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', ''));
 
 if ($phoneNumberId === '' || $accessToken === '') {
     ApiSupport::jsonResponse(['ok' => false, 'error' => 'WhatsApp credentials are not configured for this business.'], 422);
@@ -160,6 +157,10 @@ if (($packageStatus['enabled'] ?? false) && (int) ($packageStatus['remaining'] ?
 $isTemplateSend = in_array($kind, ['authentication', 'utility', 'marketing', 'template'], true);
 if ($isTemplateSend && $templateName === '') {
     ApiSupport::jsonResponse(['ok' => false, 'error' => 'template_name is required for authentication, utility, marketing, and template sends.'], 422);
+}
+
+if (!$isTemplateSend && $messageBody === '') {
+    ApiSupport::jsonResponse(['ok' => false, 'error' => 'message is required for text sends.'], 422);
 }
 
 $templateId = null;
@@ -188,6 +189,33 @@ if ($isTemplateSend && empty($components) && !empty($templateRow ?? [])) {
 
 if ($isTemplateSend && empty($components) && !empty($templateSendComponents)) {
     $components = $templateSendComponents;
+}
+
+if ($isTemplateSend && empty($components) && (is_array($parameters) || $otp !== '')) {
+    $bodyValues = [];
+    if ($otp !== '') {
+        $bodyValues[] = $otp;
+    }
+
+    if (is_array($parameters)) {
+        foreach ($parameters as $value) {
+            if (is_string($value) || is_numeric($value)) {
+                $bodyValues[] = (string) $value;
+            }
+        }
+    }
+
+    if (!empty($bodyValues)) {
+        $components = [
+            [
+                'type' => 'body',
+                'parameters' => array_map(
+                    static fn (string $value): array => ['type' => 'text', 'text' => $value],
+                    $bodyValues
+                ),
+            ],
+        ];
+    }
 }
 
 $sent = 0;

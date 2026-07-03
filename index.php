@@ -45,6 +45,21 @@ if ($requestPath === '/terms-conditions') {
     return;
 }
 
+if ($requestPath === '/api') {
+    app_dispatch('api/index.php');
+    return;
+}
+
+if ($requestPath === '/api/contacts/import') {
+    app_dispatch('api/contacts/import.php');
+    return;
+}
+
+if ($requestPath === '/api/whatsapp/send') {
+    app_dispatch('api/whatsapp/send.php');
+    return;
+}
+
 if (str_starts_with($requestPath, '/business')) {
     $subPath = trim(substr($requestPath, strlen('/business')), '/');
     app_dispatch($subPath === '' ? 'website/index.php' : 'website/' . $subPath . '.php');

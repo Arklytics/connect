@@ -11,6 +11,9 @@ $appId = AppSettings::getGlobal($db, 'META_APP_ID', Config::get('META_APP_ID', '
 $configId = AppSettings::getGlobal($db, 'META_CONFIG_ID', Config::get('META_CONFIG_ID', ''));
 $appSecret = AppSettings::getGlobal($db, 'META_APP_SECRET', Config::get('META_APP_SECRET', ''));
 $defaultWebhookUrl = app_public_url('incoming.php');
+$orderColumns = ApiSupport::tableColumns($db, 'gd_orders');
+$businessApiInstalled = in_array('api_key_hash', $orderColumns, true);
+$newApiKey = '';
 
 function metaGetJson(string $url, string $accessToken): array
 {
@@ -248,6 +251,46 @@ function fetchPhoneNumberDetails(string $phoneNumberId, string $accessToken): ar
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Security::verifyCsrf();
 
+    $action = trim((string) ($_POST['action'] ?? 'sync_whatsapp'));
+
+    if ($action === 'generate_api_key') {
+        if (!$businessApiInstalled) {
+            $message = 'Business API keys are not installed yet. Run php artisan migrate, then generate a key.';
+            $message_type = 'warning';
+        } else {
+            $apiKey = ApiSupport::generateBusinessApiKey();
+            $stmt = $db->prepare('UPDATE gd_orders SET api_key_hash = ?, api_key_prefix = ?, api_key_last4 = ?, api_enabled = 1, api_key_created_at = NOW() WHERE id = ?');
+            $stmt->bind_param('sssi', $apiKey['hash'], $apiKey['prefix'], $apiKey['last4'], $biz_id);
+            if ($stmt->execute()) {
+                $newApiKey = $apiKey['key'];
+                $message = 'Business API key generated. Copy it now; it will not be shown again.';
+                $message_type = 'success';
+            } else {
+                $message = 'Could not generate the business API key.';
+                $message_type = 'danger';
+            }
+        }
+    } elseif ($action === 'revoke_api_key') {
+        if (!$businessApiInstalled) {
+            $message = 'Business API keys are not installed yet.';
+            $message_type = 'warning';
+        } else {
+            $stmt = $db->prepare('UPDATE gd_orders SET api_key_hash = NULL, api_key_prefix = NULL, api_key_last4 = NULL, api_enabled = 0, api_key_created_at = NULL WHERE id = ?');
+            $stmt->bind_param('i', $biz_id);
+            if ($stmt->execute()) {
+                $message = 'Business API key revoked.';
+                $message_type = 'success';
+            } else {
+                $message = 'Could not revoke the business API key.';
+                $message_type = 'danger';
+            }
+        }
+    }
+
+    if ($action !== 'sync_whatsapp') {
+        // The page will render the updated API state below.
+    } else {
+
     $code = trim((string) ($_POST['code'] ?? ''));
     $accessTokenInput = trim((string) ($_POST['access_token'] ?? ''));
     $wabaId = trim((string) ($_POST['waba_id'] ?? ''));
@@ -366,13 +409,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message_type = 'danger';
         }
     }
+    }
 }
 
-$stmt = $db->prepare('SELECT business_name, auth_token, whatsapp_id, phone_number_id, webhook_url, status FROM gd_orders WHERE id = ? LIMIT 1');
+$apiSelect = $businessApiInstalled ? ', api_key_prefix, api_key_last4, api_enabled, api_key_created_at' : '';
+$stmt = $db->prepare('SELECT business_name, auth_token, whatsapp_id, phone_number_id, webhook_url, status' . $apiSelect . ' FROM gd_orders WHERE id = ? LIMIT 1');
 $stmt->bind_param('i', $biz_id);
 $stmt->execute();
 $business = $stmt->get_result()->fetch_assoc() ?: [];
 $isConnected = (($business['status'] ?? '0') == '1');
+$maskedBusinessApiKey = '';
+if ($businessApiInstalled && !empty($business['api_key_prefix']) && !empty($business['api_key_last4'])) {
+    $maskedBusinessApiKey = (string) $business['api_key_prefix'] . '...' . (string) $business['api_key_last4'];
+}
+$apiSendUrl = app_public_url('api/whatsapp/send');
+$apiDocsUrl = app_public_url('api');
 ?>
 
 <div class="position-fixed top-0 end-0 p-3" style="z-index: 5;">
@@ -431,6 +482,7 @@ $isConnected = (($business['status'] ?? '0') == '1');
                 <div class="col-lg-7">
                     <form method="post" id="connectForm">
                         <?php echo Security::csrfField(); ?>
+                        <input type="hidden" name="action" value="sync_whatsapp">
                         <input type="hidden" name="code" id="signupCode">
                         <input type="hidden" name="access_token" id="signupAccessToken">
                         <input type="hidden" name="signup_payload" id="signupPayload">
@@ -465,6 +517,79 @@ $isConnected = (($business['status'] ?? '0') == '1');
                             <p class="text-muted small mb-0">If Meta does not return the IDs automatically, paste the WABA ID and Phone Number ID from Meta Business Manager, then sync/register with the saved long-lived token. The webhook callback is auto-set to your project endpoint.</p>
                         </div>
                     </form>
+                </div>
+            </div>
+
+            <div class="row g-3 mt-1">
+                <div class="col-lg-5">
+                    <div class="wg-card p-4 h-100">
+                        <h5 class="mb-3"><i class="bi bi-key me-1"></i> Business API Access</h5>
+                        <?php if (!$businessApiInstalled): ?>
+                            <div class="alert alert-warning py-2 mb-3">Run <code>php artisan migrate</code> to enable business API keys.</div>
+                        <?php elseif ($newApiKey !== ''): ?>
+                            <div class="alert alert-success">
+                                <div class="fw-semibold mb-2">Copy this API key now</div>
+                                <code class="d-block text-break"><?php echo h($newApiKey); ?></code>
+                            </div>
+                        <?php endif; ?>
+
+                        <p class="mb-2"><strong>Endpoint:</strong> <code><?php echo h($apiSendUrl); ?></code></p>
+                        <p class="mb-2"><strong>Docs:</strong> <code><?php echo h($apiDocsUrl); ?></code></p>
+                        <p class="mb-2"><strong>Status:</strong>
+                            <?php echo ($businessApiInstalled && !empty($business['api_enabled']) && $maskedBusinessApiKey !== '') ? 'Enabled' : 'Not enabled'; ?>
+                        </p>
+                        <p class="mb-3"><strong>Current key:</strong> <?php echo h($maskedBusinessApiKey !== '' ? $maskedBusinessApiKey : 'No key generated'); ?></p>
+
+                        <div class="d-flex gap-2 flex-wrap">
+                            <form method="post">
+                                <?php echo Security::csrfField(); ?>
+                                <input type="hidden" name="action" value="generate_api_key">
+                                <button class="btn btn-success" type="submit" <?php echo !$businessApiInstalled ? 'disabled' : ''; ?>>
+                                    <i class="bi bi-plus-circle me-1"></i> Generate Key
+                                </button>
+                            </form>
+                            <form method="post" onsubmit="return confirm('Revoke this business API key? Existing integrations will stop sending messages.');">
+                                <?php echo Security::csrfField(); ?>
+                                <input type="hidden" name="action" value="revoke_api_key">
+                                <button class="btn btn-outline-danger" type="submit" <?php echo (!$businessApiInstalled || $maskedBusinessApiKey === '') ? 'disabled' : ''; ?>>
+                                    <i class="bi bi-x-circle me-1"></i> Revoke
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-7">
+                    <div class="wg-card p-4 h-100">
+                        <h5 class="mb-3"><i class="bi bi-braces me-1"></i> API Request Examples</h5>
+                        <div class="mb-3">
+                            <div class="small fw-semibold mb-1">OTP / Authentication template</div>
+                            <pre class="bg-light border rounded p-3 small mb-0"><code>curl -X POST "<?php echo h($apiSendUrl); ?>" \
+  -H "Authorization: Bearer YOUR_BUSINESS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"kind":"authentication","template_name":"login_otp","language":"en_US","to":"+919876543210","otp":"123456"}'</code></pre>
+                        </div>
+                        <div class="mb-3">
+                            <div class="small fw-semibold mb-1">Utility template</div>
+                            <pre class="bg-light border rounded p-3 small mb-0"><code>{
+  "kind": "utility",
+  "template_name": "order_update",
+  "language": "en_US",
+  "recipients": ["+919876543210"],
+  "parameters": ["A10045", "Shipped"]
+}</code></pre>
+                        </div>
+                        <div>
+                            <div class="small fw-semibold mb-1">Marketing template</div>
+                            <pre class="bg-light border rounded p-3 small mb-0"><code>{
+  "kind": "marketing",
+  "template_name": "festival_offer",
+  "language": "en_US",
+  "phone_numbers": ["+919876543210"],
+  "parameters": ["Ravi", "25%"]
+}</code></pre>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
