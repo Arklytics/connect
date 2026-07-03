@@ -215,6 +215,20 @@ if ($isTemplateSend && empty($components) && (is_array($parameters) || $otp !== 
                 ),
             ],
         ];
+
+        if ($kind === 'authentication' && $otp !== '') {
+            $components[] = [
+                'type' => 'button',
+                'sub_type' => 'url',
+                'index' => '0',
+                'parameters' => [
+                    [
+                        'type' => 'text',
+                        'text' => $otp,
+                    ],
+                ],
+            ];
+        }
     }
 }
 

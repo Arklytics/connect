@@ -75,6 +75,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $header_media_file = $_FILES['header_media_file'] ?? null;
     $body_text = normalizeTemplateText((string) ($_POST['body_text'] ?? ''));
     $footer_text = trim((string) ($_POST['footer_text'] ?? ''));
+    $auth_button_text = trim((string) ($_POST['auth_button_text'] ?? 'Copy code')) ?: 'Copy code';
+    $auth_expiration_minutes = Security::intFrom($_POST['auth_expiration_minutes'] ?? 10, 10);
+    $auth_add_security = !empty($_POST['auth_add_security']);
     $header_sample = trim((string) ($_POST['header_sample'] ?? ''));
     $body_samples = $_POST['body_samples'] ?? [];
     $buttonsInput = $_POST['buttons'] ?? [];
@@ -150,8 +153,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if ($template_name === '' || $body_text === '') {
-        $message = 'Template name and body are required.';
+    if ($template_name === '' || ($category !== 'AUTHENTICATION' && $body_text === '')) {
+        $message = $category === 'AUTHENTICATION' ? 'Template name is required.' : 'Template name and body are required.';
         $message_type = 'danger';
     } else {
         $validationErrors = [];
@@ -161,7 +164,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($category === 'AUTHENTICATION') {
-            $validationErrors[] = 'Authentication templates need Meta OTP formatting. Use Marketing or Utility for text, image, video, or document templates.';
+            $header_type = 'NONE';
+            $header_text = '';
+            $header_media_handle = '';
+            $header_media_url = '';
+            $body_text = 'Your verification code is {{1}}';
+            $footer_text = '';
+            $buttonsInput = [];
+            $auth_expiration_minutes = max(1, min(90, $auth_expiration_minutes));
         }
 
         $headerVariableNumbers = variableNumbers($header_text);
@@ -171,7 +181,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $validationErrors[] = $bodySequenceError;
         }
 
-        if ($header_type === 'TEXT' && $header_text !== '') {
+        if ($category === 'AUTHENTICATION') {
+            $body = [
+                'type' => 'BODY',
+                'add_security_recommendation' => $auth_add_security,
+            ];
+            $components[] = $body;
+
+            $components[] = [
+                'type' => 'FOOTER',
+                'code_expiration_minutes' => $auth_expiration_minutes,
+            ];
+
+            $buttons[] = [
+                'type' => 'OTP',
+                'otp_type' => 'COPY_CODE',
+                'text' => $auth_button_text,
+            ];
+
+            $components[] = [
+                'type' => 'BUTTONS',
+                'buttons' => $buttons,
+            ];
+        } elseif ($header_type === 'TEXT' && $header_text !== '') {
             $header = [
                 'type' => 'HEADER',
                 'format' => 'TEXT',
@@ -201,34 +233,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        $body = [
-            'type' => 'BODY',
-            'text' => $body_text,
-        ];
+        if ($category !== 'AUTHENTICATION') {
+            $body = [
+                'type' => 'BODY',
+                'text' => $body_text,
+            ];
 
-        if (!empty($bodyVariableNumbers)) {
-            $sampleRow = [];
-            foreach ($bodyVariableNumbers as $number) {
-                $sampleRow[] = templateExampleValue(is_array($body_samples) ? $body_samples : [], $number);
+            if (!empty($bodyVariableNumbers)) {
+                $sampleRow = [];
+                foreach ($bodyVariableNumbers as $number) {
+                    $sampleRow[] = templateExampleValue(is_array($body_samples) ? $body_samples : [], $number);
+                }
+
+                if (in_array('', $sampleRow, true)) {
+                    $validationErrors[] = 'Every body variable needs an example value.';
+                } else {
+                  $body['example'] = ['body_text' => [$sampleRow]];
+                }
             }
 
-            if (in_array('', $sampleRow, true)) {
-                $validationErrors[] = 'Every body variable needs an example value.';
-            } else {
-              $body['example'] = ['body_text' => [$sampleRow]];
-            }
+            $components[] = $body;
         }
 
-        $components[] = $body;
-
-        if ($footer_text !== '') {
+        if ($category !== 'AUTHENTICATION' && $footer_text !== '') {
             $components[] = [
                 'type' => 'FOOTER',
                 'text' => $footer_text,
             ];
         }
 
-        foreach ($buttonsInput as $button) {
+        foreach (($category === 'AUTHENTICATION' ? [] : $buttonsInput) as $button) {
             if (!is_array($button)) {
                 continue;
             }
@@ -278,7 +312,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        if (!empty($buttons)) {
+        if ($category !== 'AUTHENTICATION' && !empty($buttons)) {
             $components[] = [
                 'type' => 'BUTTONS',
                 'buttons' => $buttons,
@@ -344,6 +378,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'header_media_url' => $header_media_url,
                     'body_samples' => $body_samples,
                     'body_placeholder_numbers' => $bodyVariableNumbers,
+                    'auth_button_text' => $auth_button_text,
+                    'auth_expiration_minutes' => $auth_expiration_minutes,
+                    'auth_add_security' => $auth_add_security,
                     'buttons' => $buttons,
                     'payload' => $payload,
                 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
@@ -421,7 +458,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
 
-                <div class="row">
+                <div class="row auth-template-field d-none">
+                    <div class="col-md-4">
+                        <label class="form-label" for="auth_button_text">OTP Button Text</label>
+                        <input type="text" name="auth_button_text" id="auth_button_text" class="form-control" value="Copy code" maxlength="25" oninput="renderTemplateBuilder()">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="auth_expiration_minutes">Code Expiry Minutes</label>
+                        <input type="number" name="auth_expiration_minutes" id="auth_expiration_minutes" class="form-control" value="10" min="1" max="90" oninput="renderTemplateBuilder()">
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="auth_add_security" id="auth_add_security" checked onchange="renderTemplateBuilder()">
+                            <label class="form-check-label" for="auth_add_security">Add security recommendation</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row standard-template-field">
                     <div class="col-md-4">
                         <label class="form-label" for="header_type">Header Type</label>
                         <select name="header_type" id="header_type" class="form-control" onchange="toggleHeader()">
@@ -454,23 +508,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
 
-                <div class="row">
+                <div class="row standard-template-field">
                     <div class="col-md-12">
                         <label class="form-label" for="body_text">Body Text</label>
-                        <textarea name="body_text" id="body_text" class="form-control" rows="7" required placeholder="Hi {{1}}, your order {{2}} is ready." oninput="renderTemplateBuilder()"></textarea>
+                        <textarea name="body_text" id="body_text" class="form-control" rows="7" placeholder="Hi {{1}}, your order {{2}} is ready." oninput="renderTemplateBuilder()"></textarea>
                     </div>
                 </div>
 
                 <div id="variableSamples" class="row"></div>
 
-                <div class="row">
+                <div class="row standard-template-field">
                     <div class="col-md-12">
                         <label class="form-label" for="footer_text">Footer Text</label>
                         <input type="text" name="footer_text" id="footer_text" class="form-control" placeholder="Thank you for choosing us" oninput="renderTemplateBuilder()">
                     </div>
                 </div>
 
-                <div class="row">
+                <div class="row standard-template-field">
                     <div class="col-md-12">
                         <div class="d-flex align-items-center justify-content-between mb-2">
                             <h5 class="mb-0">Buttons</h5>
@@ -534,6 +588,11 @@ function sampleValuesByNumber() {
 }
 
 function toggleHeader() {
+  if (document.getElementById('category').value === 'AUTHENTICATION') {
+    renderTemplateBuilder();
+    return;
+  }
+
   const type = document.getElementById('header_type').value;
   const showText = type === 'TEXT';
   const showMedia = ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(type);
@@ -547,6 +606,7 @@ function toggleHeader() {
 }
 
 function renderTemplateBuilder() {
+  const category = document.getElementById('category').value;
   const headerType = document.getElementById('header_type').value;
   const headerText = normalizeTemplateText(document.getElementById('header_text').value);
   const headerMediaUrl = document.getElementById('header_media_url').value;
@@ -556,6 +616,33 @@ function renderTemplateBuilder() {
   const mediaPreview = document.getElementById('previewMediaUrl');
   const sampleWrap = document.getElementById('variableSamples');
   const existing = {};
+  const isAuth = category === 'AUTHENTICATION';
+
+  document.querySelectorAll('.auth-template-field').forEach(function (field) {
+    field.classList.toggle('d-none', !isAuth);
+  });
+  document.querySelectorAll('.standard-template-field').forEach(function (field) {
+    field.classList.toggle('d-none', isAuth);
+  });
+
+  document.getElementById('body_text').required = !isAuth;
+
+  if (isAuth) {
+    sampleWrap.innerHTML = '';
+    mediaPreview.innerHTML = '';
+    document.getElementById('previewTitle').classList.add('d-none');
+    document.getElementById('previewBody').textContent = 'Your verification code is 123456';
+    document.getElementById('previewSubtitle').textContent = `This code expires in ${document.getElementById('auth_expiration_minutes').value || 10} minutes.`;
+    const preview = document.getElementById('previewButtons');
+    preview.innerHTML = '';
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'btn btn-primary btn-sm me-2 mb-2';
+    el.textContent = document.getElementById('auth_button_text').value || 'Copy code';
+    preview.appendChild(el);
+    renderPayloadPreview();
+    return;
+  }
 
   sampleWrap.querySelectorAll('input').forEach(function (input) {
     existing[input.dataset.variable] = input.value;
@@ -686,6 +773,7 @@ function renderPayloadPreview() {
   const name = document.getElementById('template_name').value.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
   const category = document.getElementById('category').value;
   const language = document.getElementById('language').value;
+  const isAuth = category === 'AUTHENTICATION';
   const headerType = document.getElementById('header_type').value;
   const headerText = normalizeTemplateText(document.getElementById('header_text').value);
   const headerSample = document.getElementById('header_sample').value;
@@ -694,6 +782,28 @@ function renderPayloadPreview() {
   const footerText = document.getElementById('footer_text').value;
   const bodySamples = sampleValuesByNumber();
   const components = [];
+
+  if (isAuth) {
+    components.push({
+      type: 'BODY',
+      add_security_recommendation: document.getElementById('auth_add_security').checked
+    });
+    components.push({
+      type: 'FOOTER',
+      code_expiration_minutes: Number(document.getElementById('auth_expiration_minutes').value || 10)
+    });
+    components.push({
+      type: 'BUTTONS',
+      buttons: [{
+        type: 'OTP',
+        otp_type: 'COPY_CODE',
+        text: document.getElementById('auth_button_text').value || 'Copy code'
+      }]
+    });
+
+    document.getElementById('payloadPreview').textContent = JSON.stringify({ name, category, language, components }, null, 2);
+    return;
+  }
 
   if (headerType === 'TEXT' && headerText) {
     const header = { type: 'HEADER', format: 'TEXT', text: headerText };
@@ -734,8 +844,11 @@ function renderPayloadPreview() {
 }
 
 document.getElementById('template_name').addEventListener('input', renderPayloadPreview);
-document.getElementById('category').addEventListener('change', renderPayloadPreview);
+document.getElementById('category').addEventListener('change', renderTemplateBuilder);
 document.getElementById('language').addEventListener('change', renderPayloadPreview);
+document.getElementById('auth_button_text').addEventListener('input', renderTemplateBuilder);
+document.getElementById('auth_expiration_minutes').addEventListener('input', renderTemplateBuilder);
+document.getElementById('auth_add_security').addEventListener('change', renderTemplateBuilder);
 document.getElementById('header_sample').addEventListener('input', renderPayloadPreview);
 document.getElementById('header_media_file').addEventListener('change', renderTemplateBuilder);
 document.getElementById('header_text').addEventListener('blur', function () {
