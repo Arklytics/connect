@@ -250,6 +250,11 @@ final class ApiSupport
         return '';
     }
 
+    private static function templateExampleValue(array $values, int $index): string
+{
+    return self::sampleValue($values, $index);
+}
+
 public static function buildTemplateSendComponents(array $templateRow): array
 {
     $meta = [];
