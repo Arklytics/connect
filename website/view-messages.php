@@ -43,6 +43,34 @@ function gdBindParams(mysqli_stmt $stmt, string $types, array $params): void
     call_user_func_array([$stmt, 'bind_param'], $bindParams);
 }
 
+function gdMessageFailureDetail(array $row): string
+{
+    $detail = trim((string) ($row['failure_reason'] ?? ''));
+    if ($detail === '') {
+        $detail = trim((string) ($row['error_message'] ?? ''));
+    }
+
+    if ($detail === '' && !empty($row['response_json'])) {
+        $decoded = json_decode((string) $row['response_json'], true);
+        if (is_array($decoded)) {
+            $detail = trim((string) ($decoded['error']['message'] ?? ''));
+            if ($detail !== '' && !empty($decoded['error']['code'])) {
+                $detail .= ' (code ' . $decoded['error']['code'] . ')';
+            }
+        }
+    }
+
+    if ($detail === '') {
+        return '';
+    }
+
+    if (!empty($row['http_status_code'])) {
+        $detail = 'HTTP ' . (int) $row['http_status_code'] . ': ' . $detail;
+    }
+
+    return $detail;
+}
+
 $period = strtolower((string) ($_GET['period'] ?? 'this_month'));
 $from_input = Security::dateFrom($_GET['from_date'] ?? null, date('Y-m-01'));
 $to_input = Security::dateFrom($_GET['to_date'] ?? null, date('Y-m-d'));
@@ -274,6 +302,7 @@ try {
                                     <th>Title</th>
                                     <th>Send Status</th>
                                     <th>Delivery Status</th>
+                                    <th>Details</th>
                                     <th>Sent At</th>
                                 </tr>
                             </thead>
@@ -291,6 +320,7 @@ try {
                                             'failed' => 'danger',
                                             default => 'warning',
                                         };
+                                        $failureDetail = gdMessageFailureDetail($row);
                                         ?>
                                         <tr>
                                             <td><?php echo $i; ?></td>
@@ -299,11 +329,12 @@ try {
                                             <td><?php echo h($row['message_title']); ?></td>
                                             <td><span class="badge bg-<?php echo h($sendBadge); ?> text-uppercase"><?php echo h($sendStatus ?: 'pending'); ?></span></td>
                                             <td><span class="badge bg-<?php echo h($deliveryBadge); ?> text-uppercase"><?php echo h($delivery); ?></span></td>
+                                            <td class="small text-muted" style="max-width: 360px; white-space: normal;"><?php echo h($failureDetail !== '' ? $failureDetail : '-'); ?></td>
                                             <td><?php echo h(!empty($row['sent_at']) ? $row['sent_at'] : ($row['created_at'] ?? '')); ?></td>
                                         </tr>
                                     <?php endwhile; ?>
                                 <?php else: ?>
-                                    <tr><td colspan="7" class="text-center">No messages found for the selected filters.</td></tr>
+                                    <tr><td colspan="8" class="text-center">No messages found for the selected filters.</td></tr>
                                 <?php endif; ?>
                             </tbody>
                         </table>

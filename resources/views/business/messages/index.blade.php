@@ -121,6 +121,7 @@
               <th>Title</th>
               <th>Send Status</th>
               <th>Delivery Status</th>
+              <th>Details</th>
               <th>Sent At</th>
             </tr>
           </thead>
@@ -137,6 +138,22 @@
                   'failed' => 'danger',
                   default => 'warning',
                 };
+                $failureDetail = trim((string) ($message->failure_reason ?? ''));
+                if ($failureDetail === '') {
+                  $failureDetail = trim((string) ($message->error_message ?? ''));
+                }
+                if ($failureDetail === '' && !empty($message->response_json)) {
+                  $decodedResponse = json_decode((string) $message->response_json, true);
+                  if (is_array($decodedResponse)) {
+                    $failureDetail = trim((string) ($decodedResponse['error']['message'] ?? ''));
+                    if ($failureDetail !== '' && !empty($decodedResponse['error']['code'])) {
+                      $failureDetail .= ' (code ' . $decodedResponse['error']['code'] . ')';
+                    }
+                  }
+                }
+                if ($failureDetail !== '' && !empty($message->http_status_code)) {
+                  $failureDetail = 'HTTP ' . (int) $message->http_status_code . ': ' . $failureDetail;
+                }
               @endphp
               <tr>
                 <td>{{ $loop->iteration }}</td>
@@ -145,10 +162,11 @@
                 <td>{{ $message->message_title }}</td>
                 <td><span class="badge bg-{{ $sendBadge }} text-uppercase">{{ $sendStatus ?: 'pending' }}</span></td>
                 <td><span class="badge bg-{{ $deliveryBadge }} text-uppercase">{{ $delivery }}</span></td>
+                <td class="small text-muted" style="max-width: 360px; white-space: normal;">{{ $failureDetail !== '' ? $failureDetail : '-' }}</td>
                 <td>{{ $message->sent_at ?? $message->created_at }}</td>
               </tr>
             @empty
-              <tr><td colspan="7" class="text-center">No messages found for the selected filters.</td></tr>
+              <tr><td colspan="8" class="text-center">No messages found for the selected filters.</td></tr>
             @endforelse
           </tbody>
         </table>

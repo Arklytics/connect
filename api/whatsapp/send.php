@@ -128,7 +128,8 @@ $payload = ApiSupport::requestJson();
 $requestedBizId = Security::intFrom($payload['biz_id'] ?? null);
 $bizId = ApiSupport::requireBusinessApiKey($db, $requestedBizId);
 $kind = strtolower(trim((string) ($payload['kind'] ?? 'text')));
-$language = trim((string) ($payload['language'] ?? 'en')) ?: 'en';
+$languageFromPayload = array_key_exists('language', $payload);
+$language = trim((string) ($payload['language'] ?? ''));
 $messageBody = trim((string) ($payload['message'] ?? $payload['message_body'] ?? ''));
 $templateName = trim((string) ($payload['template_name'] ?? ''));
 $components = $payload['components'] ?? [];
@@ -163,12 +164,30 @@ if (!$isTemplateSend && $messageBody === '') {
     ApiSupport::jsonResponse(['ok' => false, 'error' => 'message is required for text sends.'], 422);
 }
 
+$templateBodyValues = [];
+if ($otp !== '') {
+    $templateBodyValues[] = $otp;
+}
+
+if (is_array($parameters)) {
+    foreach ($parameters as $value) {
+        if (is_string($value) || is_numeric($value)) {
+            $templateBodyValues[] = (string) $value;
+        }
+    }
+}
+
+$templateBodyValues = array_values(array_filter(
+    array_map(static fn (string $value): string => trim($value), $templateBodyValues),
+    static fn (string $value): bool => $value !== ''
+));
+
 $templateId = null;
 $templateTitle = '';
 $templateBody = '';
 
 if ($templateName !== '') {
-    $stmt = $db->prepare('SELECT id, message_title, message_body, placeholders FROM gd_whatsapp_templates WHERE biz_id = ? AND template_name = ? LIMIT 1');
+    $stmt = $db->prepare('SELECT id, message_title, message_body, placeholders, category FROM gd_whatsapp_templates WHERE biz_id = ? AND template_name = ? LIMIT 1');
     $stmt->bind_param('is', $bizId, $templateName);
     $stmt->execute();
     $templateRow = $stmt->get_result()->fetch_assoc() ?: [];
@@ -177,7 +196,59 @@ if ($templateName !== '') {
     $templateBody = (string) ($templateRow['message_body'] ?? '');
 }
 
+$isAuthenticationSend = $kind === 'authentication'
+    || strtoupper(trim((string) ($templateRow['category'] ?? ''))) === 'AUTHENTICATION';
+
+if ($isTemplateSend && (!$languageFromPayload || $language === '')) {
+    $templateMeta = [];
+    if (!empty($templateRow['placeholders'])) {
+        $decodedMeta = json_decode((string) $templateRow['placeholders'], true);
+        if (is_array($decodedMeta)) {
+            $templateMeta = $decodedMeta;
+        }
+    }
+
+    $language = trim((string) ($templateMeta['payload']['language'] ?? $templateMeta['language'] ?? 'en_US'));
+}
+
+if ($language === '') {
+    $language = $isTemplateSend ? 'en_US' : 'en';
+}
+
 $templateSendComponents = [];
+if ($isAuthenticationSend && empty($components)) {
+    $authCode = $templateBodyValues[0] ?? '';
+    if ($authCode === '') {
+        ApiSupport::jsonResponse([
+            'ok' => false,
+            'error' => 'otp or code is required for authentication template sends.',
+        ], 422);
+    }
+
+    $components = [
+        [
+            'type' => 'body',
+            'parameters' => [
+                [
+                    'type' => 'text',
+                    'text' => $authCode,
+                ],
+            ],
+        ],
+        [
+            'type' => 'button',
+            'sub_type' => 'url',
+            'index' => '0',
+            'parameters' => [
+                [
+                    'type' => 'text',
+                    'text' => $authCode,
+                ],
+            ],
+        ],
+    ];
+}
+
 if ($isTemplateSend && empty($components) && !empty($templateRow ?? [])) {
     $builtComponents = ApiSupport::buildTemplateSendComponents($templateRow);
     if (!empty($builtComponents['error'])) {
@@ -191,44 +262,58 @@ if ($isTemplateSend && empty($components) && !empty($templateSendComponents)) {
     $components = $templateSendComponents;
 }
 
-if ($isTemplateSend && empty($components) && (is_array($parameters) || $otp !== '')) {
-    $bodyValues = [];
-    if ($otp !== '') {
-        $bodyValues[] = $otp;
-    }
+if ($isTemplateSend && empty($components) && !empty($templateBodyValues)) {
+    $components = [
+        [
+            'type' => 'body',
+            'parameters' => array_map(
+                static fn (string $value): array => ['type' => 'text', 'text' => $value],
+                $templateBodyValues
+            ),
+        ],
+    ];
+}
 
-    if (is_array($parameters)) {
-        foreach ($parameters as $value) {
-            if (is_string($value) || is_numeric($value)) {
-                $bodyValues[] = (string) $value;
+if ($isAuthenticationSend && is_array($components)) {
+    $hasButtonComponent = false;
+    $authCode = $templateBodyValues[0] ?? '';
+
+    foreach ($components as $component) {
+        if (!is_array($component)) {
+            continue;
+        }
+
+        if (strtolower((string) ($component['type'] ?? '')) === 'button') {
+            $hasButtonComponent = true;
+        }
+
+        if ($authCode === '' && strtolower((string) ($component['type'] ?? '')) === 'body') {
+            $firstParameter = $component['parameters'][0]['text'] ?? '';
+            if (is_string($firstParameter) || is_numeric($firstParameter)) {
+                $authCode = trim((string) $firstParameter);
             }
         }
     }
 
-    if (!empty($bodyValues)) {
-        $components = [
-            [
-                'type' => 'body',
-                'parameters' => array_map(
-                    static fn (string $value): array => ['type' => 'text', 'text' => $value],
-                    $bodyValues
-                ),
+    if (!$hasButtonComponent) {
+        if ($authCode === '') {
+            ApiSupport::jsonResponse([
+                'ok' => false,
+                'error' => 'Authentication template sends need a button parameter. Send otp/code, or include a button component at index 0.',
+            ], 422);
+        }
+
+        $components[] = [
+            'type' => 'button',
+            'sub_type' => 'url',
+            'index' => '0',
+            'parameters' => [
+                [
+                    'type' => 'text',
+                    'text' => $authCode,
+                ],
             ],
         ];
-
-        if ($kind === 'authentication' && $otp !== '') {
-            $components[] = [
-                'type' => 'button',
-                'sub_type' => 'url',
-                'index' => '0',
-                'parameters' => [
-                    [
-                        'type' => 'text',
-                        'text' => $otp,
-                    ],
-                ],
-            ];
-        }
     }
 }
 
