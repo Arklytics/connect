@@ -4,6 +4,20 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../db_conn.php';
 
+function apiBindParams(mysqli_stmt $stmt, string $types, array &$values): void
+{
+    if ($types === '') {
+        return;
+    }
+
+    $bind = [$types];
+    foreach ($values as $index => $_) {
+        $bind[] = &$values[$index];
+    }
+
+    call_user_func_array([$stmt, 'bind_param'], $bind);
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     ApiSupport::jsonResponse(['ok' => false, 'error' => 'Method not allowed.'], 405);
 }
@@ -32,6 +46,7 @@ $created = 0;
 $updated = 0;
 $skipped = 0;
 $results = [];
+$contactColumns = ApiSupport::tableColumns($db, 'gd_user_contacts');
 
 foreach ($rows as $row) {
     if (!is_array($row)) {
@@ -76,72 +91,82 @@ foreach ($rows as $row) {
     $status = $leadStatus;
     $now = date('Y-m-d H:i:s');
 
+    $contactPayload = [
+        'group_id' => [$groupId > 0 ? $groupId : null, 'i'],
+        'full_name' => [$fullName, 's'],
+        'phone_number' => [$phone, 's'],
+        'email' => [$email, 's'],
+        'status' => [$status, 's'],
+        'lead_stage' => [$leadStage, 's'],
+        'lead_status' => [$leadStatus, 's'],
+        'source' => [$source, 's'],
+        'whatsapp_opt_in' => [$whatsappOptIn ? 1 : 0, 'i'],
+        'next_follow_up_at' => [$nextFollowUpAt, 's'],
+        'lost_reason' => [$lostReason, 's'],
+        'crm_notes' => [$notes, 's'],
+        'last_contacted_at' => [$now, 's'],
+    ];
+
     if ($existing) {
         $contactId = (int) $existing['id'];
-        $updateStmt = $db->prepare('
-            UPDATE gd_user_contacts
-            SET group_id = COALESCE(NULLIF(?, 0), group_id),
-                full_name = ?,
-                phone_number = ?,
-                email = ?,
-                status = ?,
-                lead_stage = ?,
-                lead_status = ?,
-                source = ?,
-                whatsapp_opt_in = ?,
-                next_follow_up_at = ?,
-                lost_reason = ?,
-                crm_notes = ?,
-                last_contacted_at = ?,
-                updated_at = NOW()
-            WHERE id = ? AND biz_id = ?
-        ');
-        $optIn = $whatsappOptIn ? 1 : 0;
-        $updateStmt->bind_param(
-            'isssssssisssssii',
-            $groupId,
-            $fullName,
-            $phone,
-            $email,
-            $status,
-            $leadStage,
-            $leadStatus,
-            $source,
-            $optIn,
-            $nextFollowUpAt,
-            $lostReason,
-            $notes,
-            $now,
-            $contactId,
-            $bizId
-        );
+
+        $assignments = [];
+        $types = '';
+        $values = [];
+        foreach ($contactPayload as $column => [$value, $type]) {
+            if (!in_array($column, $contactColumns, true)) {
+                continue;
+            }
+
+            if ($column === 'group_id') {
+                $assignments[] = '`group_id` = COALESCE(?, `group_id`)';
+            } else {
+                $assignments[] = '`' . $column . '` = ?';
+            }
+            $types .= $type;
+            $values[] = $value;
+        }
+
+        if (in_array('updated_at', $contactColumns, true)) {
+            $assignments[] = '`updated_at` = NOW()';
+        }
+
+        $types .= 'ii';
+        $values[] = $contactId;
+        $values[] = $bizId;
+
+        $updateStmt = $db->prepare('UPDATE gd_user_contacts SET ' . implode(', ', $assignments) . ' WHERE id = ? AND biz_id = ?');
+        apiBindParams($updateStmt, $types, $values);
         $updateStmt->execute();
         $updated++;
     } else {
-        $insertStmt = $db->prepare('
-            INSERT INTO gd_user_contacts
-                (biz_id, group_id, full_name, phone_number, email, status, lead_stage, lead_status, source, whatsapp_opt_in, next_follow_up_at, lost_reason, crm_notes, last_contacted_at, created_at, updated_at)
-            VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-        ');
-        $optIn = $whatsappOptIn ? 1 : 0;
-        $insertStmt->bind_param(
-            'iissssssisssss',
-            $bizId,
-            $groupId,
-            $fullName,
-            $phone,
-            $email,
-            $status,
-            $leadStage,
-            $leadStatus,
-            $source,
-            $optIn,
-            $nextFollowUpAt,
-            $lostReason,
-            $notes,
-            $now
+        $insertColumns = ['biz_id'];
+        $placeholders = ['?'];
+        $types = 'i';
+        $values = [$bizId];
+
+        foreach ($contactPayload as $column => [$value, $type]) {
+            if (!in_array($column, $contactColumns, true)) {
+                continue;
+            }
+
+            $insertColumns[] = $column;
+            $placeholders[] = '?';
+            $types .= $type;
+            $values[] = $value;
+        }
+
+        foreach (['created_at', 'updated_at'] as $timestampColumn) {
+            if (in_array($timestampColumn, $contactColumns, true)) {
+                $insertColumns[] = $timestampColumn;
+                $placeholders[] = 'NOW()';
+            }
+        }
+
+        $insertStmt = $db->prepare(
+            'INSERT INTO gd_user_contacts (`' . implode('`, `', $insertColumns) . '`) VALUES (' . implode(', ', $placeholders) . ')'
         );
+        apiBindParams($insertStmt, $types, $values);
         $insertStmt->execute();
         $contactId = (int) $insertStmt->insert_id;
         $created++;

@@ -921,11 +921,11 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
         $values = [];
 
         foreach ($payload as $column => [$value, $type]) {
-            if ($value === null && !in_array($column, ['template_id', 'error_message', 'message_id', 'sent_at', 'delivery_status', 'delivered_at', 'read_at', 'request_json', 'response_json', 'http_status_code', 'failure_reason'], true)) {
+            if (!in_array($column, $columns, true)) {
                 continue;
             }
 
-            if ($value === null && !in_array($column, $columns, true)) {
+            if ($value === null && !in_array($column, ['template_id', 'error_message', 'message_id', 'sent_at', 'delivery_status', 'delivered_at', 'read_at', 'request_json', 'response_json', 'http_status_code', 'failure_reason'], true)) {
                 continue;
             }
 
@@ -947,7 +947,7 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
 
     public static function consumeMessageCredit(mysqli $db, int $bizId, int $count = 1): void
     {
-        if ($count <= 0) {
+        if ($count <= 0 || !self::hasColumn($db, 'gd_orders', 'messages_used')) {
             return;
         }
 

@@ -12,8 +12,7 @@ final class Database
         }
 
         http_response_code(500);
-        exit(
-            'Database connection failed for '
+        $message = 'Database connection failed for '
             . Config::get('DB_USER', 'root')
             . '@'
             . Config::get('DB_HOST', 'localhost')
@@ -21,8 +20,17 @@ final class Database
             . Config::get('DB_PORT', '3306')
             . ' using database '
             . Config::get('DB_NAME', 'growthlink')
-            . '. Check DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, and DB_NAME in .env.'
-        );
+            . '. Check DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, and DB_NAME in .env.';
+
+        if (self::isApiRequest()) {
+            header('Content-Type: application/json; charset=utf-8');
+            exit(json_encode([
+                'ok' => false,
+                'error' => $message,
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        }
+
+        exit($message);
     }
 
     public static function connectOrNull(): ?mysqli
@@ -56,5 +64,17 @@ final class Database
         $db->set_charset('utf8mb4');
 
         return $db;
+    }
+
+    private static function isApiRequest(): bool
+    {
+        $requestPath = str_replace('\\', '/', (string) ($_SERVER['REQUEST_URI'] ?? $_SERVER['SCRIPT_NAME'] ?? ''));
+        $basePath = '/' . trim((string) Config::get('APP_BASE', ''), '/');
+        $apiPrefix = ($basePath !== '/' ? $basePath : '') . '/api';
+        $scriptName = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+
+        return str_starts_with($requestPath, '/api')
+            || str_starts_with($requestPath, $apiPrefix)
+            || str_contains($scriptName, '/api/');
     }
 }

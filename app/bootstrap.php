@@ -13,7 +13,17 @@ require_once __DIR__ . '/ApiSupport.php';
 require_once __DIR__ . '/AiAutoReply.php';
 
 Config::load(dirname(__DIR__) . '/.env');
-Security::startSession();
+
+$requestPath = str_replace('\\', '/', (string) ($_SERVER['REQUEST_URI'] ?? $_SERVER['SCRIPT_NAME'] ?? ''));
+$basePath = '/' . trim((string) Config::get('APP_BASE', ''), '/');
+$apiPrefix = ($basePath !== '/' ? $basePath : '') . '/api';
+$isApiRequest = str_starts_with($requestPath, '/api')
+    || str_starts_with($requestPath, $apiPrefix)
+    || str_contains(str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? '')), '/api/');
+
+if (!$isApiRequest) {
+    Security::startSession();
+}
 
 header('X-Frame-Options: SAMEORIGIN');
 header('X-Content-Type-Options: nosniff');
