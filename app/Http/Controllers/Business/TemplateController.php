@@ -18,9 +18,15 @@ class TemplateController extends Controller
         return view('business.templates.index', compact('templates'));
     }
 
-    public function create()
+    public function create(Request $request)
     {
-        return view('business.templates.create');
+        $mediaLibrary = [];
+        $mediaDb = \Database::connectOrNull();
+        if ($mediaDb) {
+            $mediaLibrary = \ApiSupport::businessTemplateMedia($mediaDb, (int) $request->session()->get('biz_id'), 12);
+        }
+
+        return view('business.templates.create', compact('mediaLibrary'));
     }
 
     public function store(Request $request)
@@ -122,6 +128,19 @@ class TemplateController extends Controller
             }
 
             $headerMediaHandle = (string) ($uploadResult['handle'] ?? '');
+            $mediaDb = \Database::connectOrNull();
+            if ($mediaDb) {
+                \ApiSupport::storeTemplateMedia(
+                    $mediaDb,
+                    $bizId,
+                    (string) $mediaFile->getClientOriginalName(),
+                    $mediaType,
+                    (int) $mediaFile->getSize(),
+                    $mediaUrl,
+                    $headerMediaHandle,
+                    (string) ($s3Upload['key'] ?? '')
+                );
+            }
         }
 
         $validationErrors = [];

@@ -218,7 +218,11 @@ if (isset($_POST['send'])) {
                                     'message_title' => $get3['message_title'],
                                     'message_body' => $get3['message_body'],
                                     'media_url' => $get3['media_url'],
-                                    'subtitle' => $get3['subtitle']
+                                    'subtitle' => $get3['subtitle'],
+                                    'header_type' => (function ($placeholders) {
+                                        $decoded = json_decode((string) $placeholders, true);
+                                        return is_array($decoded) ? strtoupper((string) ($decoded['header_type'] ?? '')) : '';
+                                    })($get3['placeholders'] ?? ''),
                                 ]));
                                 ?>
                                 <option value="<?php echo h($get3['id']); ?>" data-template='<?php echo $templateData; ?>'>
@@ -297,15 +301,34 @@ if (isset($_POST['send'])) {
                     mediaPreviewContainer.innerHTML = ''; // Clear previous content
 
                     if (data.media_url) {
-                        const img = document.createElement('img');
-                        img.src = data.media_url;
-                        img.alt = 'Media Preview';
-                        img.style.maxWidth = '100%';
-                        img.style.borderRadius = '5px';
-                        img.onerror = () => {
-                            mediaPreviewContainer.textContent = 'Invalid media URL.';
-                        };
-                        mediaPreviewContainer.appendChild(img);
+                        const headerType = String(data.header_type || '').toUpperCase();
+                        if (headerType === 'VIDEO' || /\.(mp4|3gp)(\?|$)/i.test(data.media_url)) {
+                            const video = document.createElement('video');
+                            video.src = data.media_url;
+                            video.controls = true;
+                            video.style.width = '100%';
+                            video.style.maxHeight = '220px';
+                            video.style.borderRadius = '5px';
+                            mediaPreviewContainer.appendChild(video);
+                        } else if (headerType === 'DOCUMENT' || /\.pdf(\?|$)/i.test(data.media_url)) {
+                            const link = document.createElement('a');
+                            link.href = data.media_url;
+                            link.target = '_blank';
+                            link.rel = 'noopener';
+                            link.className = 'btn btn-light btn-sm';
+                            link.textContent = 'Open document';
+                            mediaPreviewContainer.appendChild(link);
+                        } else {
+                            const img = document.createElement('img');
+                            img.src = data.media_url;
+                            img.alt = 'Media Preview';
+                            img.style.maxWidth = '100%';
+                            img.style.borderRadius = '5px';
+                            img.onerror = () => {
+                                mediaPreviewContainer.textContent = 'Invalid media URL.';
+                            };
+                            mediaPreviewContainer.appendChild(img);
+                        }
                     } else {
                         mediaPreviewContainer.textContent = '[No Media Available]';
                     }

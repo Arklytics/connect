@@ -8,7 +8,7 @@ if (isset($_GET['template_id'])) {
     $templateId = Security::intFrom($_GET['template_id']);
     $bizId = Auth::requireLogin();
     
-    $stmt = $db->prepare('SELECT message_title, message_body, subtitle, media_url, buttons FROM gd_whatsapp_templates WHERE id = ? AND biz_id = ? LIMIT 1');
+    $stmt = $db->prepare('SELECT message_title, message_body, subtitle, media_url, placeholders, buttons FROM gd_whatsapp_templates WHERE id = ? AND biz_id = ? LIMIT 1');
     $stmt->bind_param('ii', $templateId, $bizId);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -26,6 +26,8 @@ if (isset($_GET['template_id'])) {
                 $buttons = ['error' => 'Invalid buttons JSON'];
             }
         }
+        $placeholderMeta = json_decode((string) ($template['placeholders'] ?? ''), true);
+        $headerType = is_array($placeholderMeta) ? strtoupper((string) ($placeholderMeta['header_type'] ?? '')) : '';
 
         // Prepare the response
         echo json_encode([
@@ -33,6 +35,7 @@ if (isset($_GET['template_id'])) {
             'message_body' => $template['message_body'],
             'subtitle' => $template['subtitle'],
             'media_url' => $template['media_url'],
+            'header_type' => $headerType,
             'buttons' => $buttons, // Include parsed buttons
         ]);
     } else {

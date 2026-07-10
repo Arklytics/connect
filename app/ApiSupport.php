@@ -22,6 +22,133 @@ final class ApiSupport
         return in_array($column, self::tableColumns($db, $table), true);
     }
 
+    public static function ensureSentMessageDeliveryColumns(mysqli $db): void
+    {
+        $columns = self::tableColumns($db, 'gd_sent_messages');
+
+        if (!in_array('delivery_status', $columns, true)) {
+            $db->query('ALTER TABLE gd_sent_messages ADD COLUMN delivery_status VARCHAR(30) NOT NULL DEFAULT "pending" AFTER status');
+            $columns[] = 'delivery_status';
+        }
+
+        if (!in_array('delivered_at', $columns, true)) {
+            $after = in_array('sent_at', $columns, true) ? 'sent_at' : 'message_id';
+            $db->query('ALTER TABLE gd_sent_messages ADD COLUMN delivered_at TIMESTAMP NULL AFTER `' . $after . '`');
+            $columns[] = 'delivered_at';
+        }
+
+        if (!in_array('read_at', $columns, true)) {
+            $db->query('ALTER TABLE gd_sent_messages ADD COLUMN read_at TIMESTAMP NULL AFTER delivered_at');
+        }
+    }
+
+    public static function ensureWebhookLogTable(mysqli $db): void
+    {
+        $db->query(
+            "CREATE TABLE IF NOT EXISTS gd_webhook_logs (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                biz_id BIGINT UNSIGNED NULL,
+                contact_id BIGINT UNSIGNED NULL,
+                phone_number_id VARCHAR(120) NULL,
+                whatsapp_business_account_id VARCHAR(120) NULL,
+                event_type VARCHAR(40) NOT NULL DEFAULT 'message',
+                direction VARCHAR(40) NOT NULL DEFAULT 'inbound',
+                from_phone VARCHAR(30) NULL,
+                message_id VARCHAR(191) NULL,
+                delivery_status VARCHAR(30) NULL,
+                message_text TEXT NULL,
+                payload_json TEXT NULL,
+                notes TEXT NULL,
+                webhook_at TIMESTAMP NULL,
+                created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX gd_webhook_logs_biz_id_index (biz_id),
+                INDEX gd_webhook_logs_contact_id_index (contact_id),
+                INDEX gd_webhook_logs_phone_number_id_index (phone_number_id),
+                INDEX gd_webhook_logs_waba_index (whatsapp_business_account_id),
+                INDEX gd_webhook_logs_event_type_index (event_type),
+                INDEX gd_webhook_logs_direction_index (direction),
+                INDEX gd_webhook_logs_from_phone_index (from_phone),
+                INDEX gd_webhook_logs_message_id_index (message_id),
+                INDEX gd_webhook_logs_delivery_status_index (delivery_status),
+                INDEX gd_webhook_logs_webhook_at_index (webhook_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    }
+
+    public static function ensureTemplateMediaTable(mysqli $db): void
+    {
+        $db->query(
+            "CREATE TABLE IF NOT EXISTS gd_template_media (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                biz_id BIGINT UNSIGNED NOT NULL,
+                original_name VARCHAR(255) NOT NULL,
+                mime_type VARCHAR(120) NOT NULL,
+                file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                s3_key VARCHAR(500) NULL,
+                s3_url TEXT NOT NULL,
+                media_handle TEXT NULL,
+                created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX gd_template_media_biz_id_index (biz_id),
+                INDEX gd_template_media_created_at_index (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    }
+
+    public static function storeTemplateMedia(
+        mysqli $db,
+        int $bizId,
+        string $originalName,
+        string $mimeType,
+        int $fileSize,
+        string $s3Url,
+        string $mediaHandle = '',
+        string $s3Key = ''
+    ): void {
+        self::ensureTemplateMediaTable($db);
+
+        $stmt = $db->prepare(
+            'INSERT INTO gd_template_media (biz_id, original_name, mime_type, file_size, s3_key, s3_url, media_handle, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())'
+        );
+        $stmt->bind_param('ississs', $bizId, $originalName, $mimeType, $fileSize, $s3Key, $s3Url, $mediaHandle);
+        $stmt->execute();
+    }
+
+    public static function businessTemplateMedia(mysqli $db, int $bizId, int $limit = 100): array
+    {
+        self::ensureTemplateMediaTable($db);
+
+        $limit = max(1, min(500, $limit));
+        $stmt = $db->prepare('SELECT * FROM gd_template_media WHERE biz_id = ? ORDER BY id DESC LIMIT ?');
+        $stmt->bind_param('ii', $bizId, $limit);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $rows = [];
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
+        }
+
+        return $rows;
+    }
+
+    public static function mediaKind(string $mimeType, string $url = ''): string
+    {
+        $mimeType = strtolower($mimeType);
+        if (str_starts_with($mimeType, 'image/')) {
+            return 'image';
+        }
+        if (str_starts_with($mimeType, 'video/')) {
+            return 'video';
+        }
+        if ($mimeType === 'application/pdf' || preg_match('/\.pdf($|\?)/i', $url)) {
+            return 'document';
+        }
+
+        return 'file';
+    }
+
     public static function generateBusinessApiKey(): array
     {
         $key = 'wpi_live_' . bin2hex(random_bytes(24));
@@ -1115,7 +1242,7 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
         }
 
         if (in_array('delivered_at', $columns, true)) {
-            $payload['delivered_at'] = [$deliveryStatus === 'sent' ? date('Y-m-d H:i:s') : null, 's'];
+            $payload['delivered_at'] = [$deliveryStatus === 'delivered' ? date('Y-m-d H:i:s') : null, 's'];
         }
 
         if (in_array('read_at', $columns, true)) {

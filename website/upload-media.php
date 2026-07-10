@@ -14,6 +14,7 @@ $fileName = '';
 $fileType = '';
 $fileSize = 0;
 $uploadAttempt = null;
+$mediaLibrary = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Security::verifyCsrf();
@@ -73,6 +74,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
+            if ($previewUrl !== '' && $mediaHandle !== '') {
+                ApiSupport::storeTemplateMedia(
+                    $db,
+                    (int) $biz_id,
+                    $fileName,
+                    $fileType,
+                    $fileSize,
+                    $previewUrl,
+                    $mediaHandle,
+                    (string) ($s3Upload['key'] ?? '')
+                );
+            }
+
             $uploadAttempt = [
                 'file_name' => $fileName,
                 'file_type' => $fileType,
@@ -97,6 +111,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
+}
+
+try {
+    $mediaLibrary = ApiSupport::businessTemplateMedia($db, (int) $biz_id);
+} catch (Throwable $exception) {
+    $mediaLibrary = [];
 }
 ?>
 
@@ -202,6 +222,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
             <?php endif; ?>
+
+            <div class="wg-card p-4 mt-4">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h5 class="mb-0">Saved Media Library</h5>
+                    <span class="badge bg-secondary"><?php echo count($mediaLibrary); ?> files</span>
+                </div>
+
+                <?php if (empty($mediaLibrary)): ?>
+                    <p class="text-muted mb-0">No saved media yet. Upload a file above to reuse it in templates anytime.</p>
+                <?php else: ?>
+                    <div class="row g-3">
+                        <?php foreach ($mediaLibrary as $media): ?>
+                            <?php
+                            $mediaUrl = (string) ($media['s3_url'] ?? '');
+                            $mediaHandleValue = (string) ($media['media_handle'] ?? '');
+                            $kind = ApiSupport::mediaKind((string) ($media['mime_type'] ?? ''), $mediaUrl);
+                            $urlInputId = 'mediaUrl' . (int) $media['id'];
+                            $handleInputId = 'mediaHandle' . (int) $media['id'];
+                            ?>
+                            <div class="col-xl-4 col-md-6">
+                                <div class="border rounded p-3 h-100 bg-light">
+                                    <div class="mb-2 text-center" style="min-height: 150px;">
+                                        <?php if ($kind === 'image'): ?>
+                                            <img src="<?php echo h($mediaUrl); ?>" alt="<?php echo h($media['original_name']); ?>" style="max-width:100%; max-height:150px; border-radius:6px;">
+                                        <?php elseif ($kind === 'video'): ?>
+                                            <video src="<?php echo h($mediaUrl); ?>" controls style="width:100%; max-height:150px; border-radius:6px;"></video>
+                                        <?php else: ?>
+                                            <a class="btn btn-light btn-sm mt-5" href="<?php echo h($mediaUrl); ?>" target="_blank" rel="noopener">
+                                                <i class="bi bi-file-earmark-text me-1"></i> Open document
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="fw-semibold text-truncate" title="<?php echo h($media['original_name']); ?>">
+                                        <?php echo h($media['original_name']); ?>
+                                    </div>
+                                    <div class="small text-muted mb-2">
+                                        <?php echo h((string) ($media['mime_type'] ?? '')); ?> |
+                                        <?php echo h((string) round(((int) ($media['file_size'] ?? 0)) / 1024, 2)); ?> KB
+                                    </div>
+                                    <label class="form-label small mb-1">Media Handle</label>
+                                    <div class="input-group input-group-sm mb-2">
+                                        <input type="text" class="form-control" id="<?php echo h($handleInputId); ?>" value="<?php echo h($mediaHandleValue); ?>" readonly>
+                                        <button type="button" class="btn btn-light" onclick="copyValue('<?php echo h($handleInputId); ?>')"><i class="bi bi-clipboard"></i></button>
+                                    </div>
+                                    <label class="form-label small mb-1">S3 URL</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control" id="<?php echo h($urlInputId); ?>" value="<?php echo h($mediaUrl); ?>" readonly>
+                                        <button type="button" class="btn btn-light" onclick="copyValue('<?php echo h($urlInputId); ?>')"><i class="bi bi-clipboard"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
         </main>
     </div>
 </div>

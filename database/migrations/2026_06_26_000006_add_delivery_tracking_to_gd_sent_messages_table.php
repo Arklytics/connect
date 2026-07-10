@@ -9,16 +9,26 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('gd_sent_messages', function (Blueprint $table) {
-            $table->string('delivery_status', 30)->default('pending')->after('status');
-            $table->timestamp('delivered_at')->nullable()->after('sent_at');
-            $table->timestamp('read_at')->nullable()->after('delivered_at');
+            if (!Schema::hasColumn('gd_sent_messages', 'delivery_status')) {
+                $table->string('delivery_status', 30)->default('pending')->after('status');
+            }
+            if (!Schema::hasColumn('gd_sent_messages', 'delivered_at')) {
+                $table->timestamp('delivered_at')->nullable()->after('sent_at');
+            }
+            if (!Schema::hasColumn('gd_sent_messages', 'read_at')) {
+                $table->timestamp('read_at')->nullable()->after('delivered_at');
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('gd_sent_messages', function (Blueprint $table) {
-            $table->dropColumn(['delivery_status', 'delivered_at', 'read_at']);
+            foreach (['delivery_status', 'delivered_at', 'read_at'] as $column) {
+                if (Schema::hasColumn('gd_sent_messages', $column)) {
+                    $table->dropColumn($column);
+                }
+            }
         });
     }
 };

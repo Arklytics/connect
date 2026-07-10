@@ -2,21 +2,47 @@
 
 require_once __DIR__ . '/app/bootstrap.php';
 
-function incomingBusinessId(mysqli $db, string $phoneNumberId, string $whatsappId): ?int
+function incomingBusinessId(mysqli $db, string $phoneNumberId, string $whatsappId, string $entryId = ''): ?int
 {
     $phoneNumberId = trim($phoneNumberId);
     $whatsappId = trim($whatsappId);
+    $entryId = trim($entryId);
 
-    if ($phoneNumberId === '' && $whatsappId === '') {
+    if ($phoneNumberId === '' && $whatsappId === '' && $entryId === '') {
         return null;
     }
 
-    $stmt = $db->prepare('SELECT id FROM gd_orders WHERE phone_number_id = ? OR whatsapp_id = ? LIMIT 1');
-    $stmt->bind_param('ss', $phoneNumberId, $whatsappId);
+    $stmt = $db->prepare('SELECT id FROM gd_orders WHERE phone_number_id = ? OR whatsapp_id = ? OR whatsapp_id = ? LIMIT 1');
+    $stmt->bind_param('sss', $phoneNumberId, $whatsappId, $entryId);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
 
     return $row ? (int) $row['id'] : null;
+}
+
+function incomingMessageText(array $message): string
+{
+    $type = strtolower(trim((string) ($message['type'] ?? '')));
+    $text = trim((string) (
+        $message['text']['body']
+        ?? $message['button']['text']
+        ?? $message['interactive']['button_reply']['title']
+        ?? $message['interactive']['list_reply']['title']
+        ?? ''
+    ));
+
+    if ($text !== '') {
+        return $text;
+    }
+
+    foreach (['image', 'video', 'document', 'audio', 'sticker'] as $mediaType) {
+        if (isset($message[$mediaType]) && is_array($message[$mediaType])) {
+            $caption = trim((string) ($message[$mediaType]['caption'] ?? ''));
+            return $caption !== '' ? $caption : '[' . $mediaType . ' message]';
+        }
+    }
+
+    return $type !== '' ? '[' . $type . ' message]' : '';
 }
 
 function incomingFindContact(mysqli $db, int $bizId, string $phone): ?array
@@ -324,6 +350,8 @@ function incomingUpdateContact(mysqli $db, array $contact, ?int $responseMinutes
 
 function incomingUpdateMessageDelivery(mysqli $db, int $bizId, array $statusRow): void
 {
+    ApiSupport::ensureSentMessageDeliveryColumns($db);
+
     $messageId = trim((string) ($statusRow['id'] ?? $statusRow['message_id'] ?? ''));
     $deliveryStatus = strtolower(trim((string) ($statusRow['status'] ?? '')));
 
@@ -446,6 +474,7 @@ function incomingSendAiAutoReply(mysqli $db, int $bizId, string $to, string $que
 
 function incomingWebhookColumns(mysqli $db): array
 {
+    ApiSupport::ensureWebhookLogTable($db);
     return Crm::tableColumns($db, 'gd_webhook_logs') ?: [];
 }
 
@@ -538,6 +567,13 @@ if (!$db) {
     exit('Database unavailable');
 }
 
+try {
+    ApiSupport::ensureWebhookLogTable($db);
+    ApiSupport::ensureSentMessageDeliveryColumns($db);
+} catch (Throwable $exception) {
+    error_log('Webhook schema ensure failed: ' . $exception->getMessage());
+}
+
 $payload = json_decode((string) file_get_contents('php://input'), true);
 if (!is_array($payload)) {
     http_response_code(200);
@@ -547,12 +583,13 @@ if (!is_array($payload)) {
 $processed = 0;
 
 foreach (($payload['entry'] ?? []) as $entry) {
+    $entryId = (string) ($entry['id'] ?? '');
     foreach (($entry['changes'] ?? []) as $change) {
         $value = $change['value'] ?? [];
         $metadata = $value['metadata'] ?? [];
         $phoneNumberId = (string) ($metadata['phone_number_id'] ?? $value['phone_number_id'] ?? '');
-        $whatsappId = (string) ($metadata['whatsapp_business_account_id'] ?? $value['whatsapp_business_account_id'] ?? '');
-        $bizId = incomingBusinessId($db, $phoneNumberId, $whatsappId);
+        $whatsappId = (string) ($metadata['whatsapp_business_account_id'] ?? $value['whatsapp_business_account_id'] ?? $entryId);
+        $bizId = incomingBusinessId($db, $phoneNumberId, $whatsappId, $entryId);
         $incomingAt = new DateTimeImmutable();
 
         incomingStoreWebhookLog($db, [
@@ -572,7 +609,7 @@ foreach (($payload['entry'] ?? []) as $entry) {
 
         foreach (($value['messages'] ?? []) as $message) {
             $from = (string) ($message['from'] ?? $message['wa_id'] ?? '');
-            $replyText = trim((string) ($message['text']['body'] ?? $message['button']['text'] ?? ''));
+            $replyText = incomingMessageText(is_array($message) ? $message : []);
             $timestamp = (int) ($message['timestamp'] ?? time());
             $replyAt = (new DateTimeImmutable())->setTimestamp($timestamp);
 

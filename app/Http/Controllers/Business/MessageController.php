@@ -291,7 +291,7 @@ class MessageController extends Controller
         }
 
         if (Schema::hasColumn('gd_sent_messages', 'delivered_at')) {
-            $payload['delivered_at'] = $data['delivery_status'] === 'sent' ? now() : null;
+            $payload['delivered_at'] = $data['delivery_status'] === 'delivered' ? now() : null;
         }
 
         if (Schema::hasColumn('gd_sent_messages', 'read_at')) {

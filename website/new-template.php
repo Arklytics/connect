@@ -12,6 +12,7 @@ $apiPayloadPreview = '';
 $mediaUploadError = '';
 $mediaUploadWarning = '';
 $uploadedMediaPreviewUrl = '';
+$mediaLibrary = [];
 
 function normalizeTemplateName(string $name): string
 {
@@ -132,6 +133,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $header_media_handle = (string) ($uploadResult['handle'] ?? '');
                     if ($uploadedMediaPreviewUrl !== '') {
                         $header_media_url = $uploadedMediaPreviewUrl;
+                        ApiSupport::storeTemplateMedia(
+                            $db,
+                            (int) $biz_id,
+                            $fileName,
+                            $fileType,
+                            $fileSize,
+                            $header_media_url,
+                            $header_media_handle,
+                            (string) ($s3Upload['key'] ?? '')
+                        );
                     } else {
                         $mediaUploadWarning = 'Media handle generated, but S3 preview file could not be saved.';
                     }
@@ -393,6 +404,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+
+try {
+    $mediaLibrary = ApiSupport::businessTemplateMedia($db, (int) $biz_id, 12);
+} catch (Throwable $exception) {
+    $mediaLibrary = [];
+}
 ?>
 
 <div class="position-fixed top-0 end-0 p-3" style="z-index: 5;">
@@ -492,6 +509,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="col-md-12 header-media-field d-none mt-2">
                         <label class="form-label" for="header_media_file">Upload Media File</label>
                         <input type="file" name="header_media_file" id="header_media_file" class="form-control" accept=".jpg,.jpeg,.png,.mp4,.3gp,.pdf,image/jpeg,image/png,video/mp4,video/3gpp,application/pdf" onchange="renderTemplateBuilder()">
+                    </div>
+                    <div class="col-md-12 header-media-field d-none mt-2">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <label class="form-label mb-0">Saved Media</label>
+                            <a class="small" href="<?php echo h(app_url('business/upload-media')); ?>">Manage media</a>
+                        </div>
+                        <?php if (empty($mediaLibrary)): ?>
+                            <div class="text-muted small">No saved media yet.</div>
+                        <?php else: ?>
+                            <div class="row g-2">
+                                <?php foreach ($mediaLibrary as $media): ?>
+                                    <?php
+                                    $mediaUrl = (string) ($media['s3_url'] ?? '');
+                                    $mediaHandleValue = (string) ($media['media_handle'] ?? '');
+                                    $kind = ApiSupport::mediaKind((string) ($media['mime_type'] ?? ''), $mediaUrl);
+                                    ?>
+                                    <div class="col-md-4">
+                                        <div class="border rounded p-2 h-100 bg-light">
+                                            <div class="text-center mb-2" style="height:90px;">
+                                                <?php if ($kind === 'image'): ?>
+                                                    <img src="<?php echo h($mediaUrl); ?>" alt="<?php echo h($media['original_name']); ?>" style="max-width:100%; max-height:90px; border-radius:6px;">
+                                                <?php elseif ($kind === 'video'): ?>
+                                                    <video src="<?php echo h($mediaUrl); ?>" style="width:100%; max-height:90px; border-radius:6px;"></video>
+                                                <?php else: ?>
+                                                    <div class="small text-muted pt-4"><i class="bi bi-file-earmark-text me-1"></i> Document</div>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="small fw-semibold text-truncate" title="<?php echo h($media['original_name']); ?>">
+                                                <?php echo h($media['original_name']); ?>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                class="btn btn-light btn-sm w-100 mt-2"
+                                                data-media-url="<?php echo h($mediaUrl); ?>"
+                                                data-media-handle="<?php echo h($mediaHandleValue); ?>"
+                                                onclick="useSavedMedia(this)">
+                                                Use
+                                            </button>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -694,6 +754,16 @@ function renderTemplateBuilder() {
   document.getElementById('previewSubtitle').textContent = footerText || '[Footer]';
   renderButtonsPreview();
   renderPayloadPreview();
+}
+
+function useSavedMedia(button) {
+  document.getElementById('header_media_handle').value = button.dataset.mediaHandle || '';
+  document.getElementById('header_media_url').value = button.dataset.mediaUrl || '';
+  const fileInput = document.getElementById('header_media_file');
+  if (fileInput) {
+    fileInput.value = '';
+  }
+  renderTemplateBuilder();
 }
 
 function addButton() {

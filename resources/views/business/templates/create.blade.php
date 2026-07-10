@@ -69,6 +69,39 @@
                 <label class="form-label" for="header_media_file">Upload Media File</label>
                 <input type="file" name="header_media_file" id="header_media_file" class="form-control" accept=".jpg,.jpeg,.png,.mp4,.3gp,.pdf,image/jpeg,image/png,video/mp4,video/3gpp,application/pdf" onchange="renderTemplateBuilder()">
               </div>
+              <div class="col-md-12 header-media-field d-none">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <label class="form-label mb-0">Saved Media</label>
+                </div>
+                @if (empty($mediaLibrary ?? []))
+                  <div class="text-muted small">No saved media yet.</div>
+                @else
+                  <div class="row g-2">
+                    @foreach (($mediaLibrary ?? []) as $media)
+                      @php
+                        $mediaUrl = (string) ($media['s3_url'] ?? '');
+                        $mediaHandle = (string) ($media['media_handle'] ?? '');
+                        $kind = \ApiSupport::mediaKind((string) ($media['mime_type'] ?? ''), $mediaUrl);
+                      @endphp
+                      <div class="col-md-4">
+                        <div class="border rounded p-2 h-100 bg-light">
+                          <div class="text-center mb-2" style="height:90px;">
+                            @if ($kind === 'image')
+                              <img src="{{ $mediaUrl }}" alt="{{ $media['original_name'] }}" style="max-width:100%; max-height:90px; border-radius:6px;">
+                            @elseif ($kind === 'video')
+                              <video src="{{ $mediaUrl }}" style="width:100%; max-height:90px; border-radius:6px;"></video>
+                            @else
+                              <div class="small text-muted pt-4"><i class="bi bi-file-earmark-text me-1"></i> Document</div>
+                            @endif
+                          </div>
+                          <div class="small fw-semibold text-truncate" title="{{ $media['original_name'] }}">{{ $media['original_name'] }}</div>
+                          <button type="button" class="btn btn-light btn-sm w-100 mt-2" data-media-url="{{ $mediaUrl }}" data-media-handle="{{ $mediaHandle }}" onclick="useSavedMedia(this)">Use</button>
+                        </div>
+                      </div>
+                    @endforeach
+                  </div>
+                @endif
+              </div>
             </div>
 
             <div class="row g-3 mt-1">
@@ -332,6 +365,16 @@
     document.getElementById('previewSubtitle').textContent = footerText || '[Footer]';
     renderButtonsPreview();
     renderPayloadPreview();
+  }
+
+  function useSavedMedia(button) {
+    document.getElementById('header_media_handle').value = button.dataset.mediaHandle || '';
+    document.getElementById('header_media_url').value = button.dataset.mediaUrl || '';
+    const fileInput = document.getElementById('header_media_file');
+    if (fileInput) {
+      fileInput.value = '';
+    }
+    renderTemplateBuilder();
   }
 
   function addButton() {
