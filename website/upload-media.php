@@ -48,61 +48,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = 'Unsupported file type. Use JPG, PNG, MP4, 3GP, or PDF.';
             $message_type = 'danger';
         } else {
-            $uploadDir = __DIR__ . '/uploads/media/';
-            if (!is_dir($uploadDir)) {
-                @mkdir($uploadDir, 0775, true);
-            }
-
-            $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-            $safeName = bin2hex(random_bytes(12)) . ($extension !== '' ? '.' . $extension : '');
-            $localPath = $uploadDir . $safeName;
-            $localSaved = false;
-            $localError = '';
+            $s3Error = '';
             $metaError = '';
-            $handleSourcePath = $tmpPath;
 
-            if (is_dir($uploadDir) && is_writable($uploadDir) && move_uploaded_file($tmpPath, $localPath)) {
-                $localSaved = true;
-                $previewUrl = app_public_url('website/uploads/media/' . $safeName);
+            $s3Upload = ApiSupport::s3UploadFile($tmpPath, $fileName, $fileType);
+            if (!($s3Upload['ok'] ?? false)) {
+                $s3Error = (string) ($s3Upload['error'] ?? 'Unknown S3 upload error.');
             } else {
-                $localError = 'Could not save uploaded file locally. Upload directory may be missing or not writable: ' . $uploadDir;
-            }
+                $previewUrl = (string) ($s3Upload['url'] ?? '');
 
-            $uploadResult = ApiSupport::metaUploadMediaHandle(
-                $appId,
-                $accessToken,
-                $localSaved ? $localPath : $handleSourcePath,
-                $fileName,
-                $fileType,
-                $fileSize
-            );
+                $uploadResult = ApiSupport::metaUploadMediaHandle(
+                    $appId,
+                    $accessToken,
+                    $tmpPath,
+                    $fileName,
+                    $fileType,
+                    $fileSize
+                );
 
-            if (!($uploadResult['ok'] ?? false)) {
-                $metaError = (string) ($uploadResult['error'] ?? 'Unknown error.');
-            } else {
-                $mediaHandle = (string) ($uploadResult['handle'] ?? '');
+                if (!($uploadResult['ok'] ?? false)) {
+                    $metaError = (string) ($uploadResult['error'] ?? 'Unknown error.');
+                } else {
+                    $mediaHandle = (string) ($uploadResult['handle'] ?? '');
+                }
             }
 
             $uploadAttempt = [
                 'file_name' => $fileName,
                 'file_type' => $fileType,
                 'file_size' => $fileSize,
-                'local_saved' => $localSaved,
-                'local_error' => $localError,
-                'meta_ok' => ($uploadResult['ok'] ?? false) === true,
+                's3_saved' => ($s3Upload['ok'] ?? false) === true,
+                's3_error' => $s3Error,
+                'meta_ok' => isset($uploadResult) && ($uploadResult['ok'] ?? false) === true,
                 'meta_error' => $metaError,
                 'media_handle' => $mediaHandle,
                 'preview_url' => $previewUrl,
             ];
 
-            if ($localSaved && $mediaHandle !== '') {
-                $message = 'Media uploaded. Copy the media handle into your template header.';
+            if ($previewUrl !== '' && $mediaHandle !== '') {
+                $message = 'Media uploaded to S3 and Meta. Copy the media handle into your template header.';
                 $message_type = 'success';
             } elseif ($mediaHandle !== '') {
-                $message = 'Media handle generated. Local file save failed, but WhatsApp upload still succeeded.';
+                $message = 'Media handle generated. S3 upload failed, so no preview URL was saved.';
                 $message_type = 'warning';
             } else {
-                $message = trim($localError . ' ' . $metaError);
+                $message = trim($s3Error . ' ' . $metaError);
                 $message_type = 'danger';
             }
         }
@@ -141,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <button type="submit" class="btn btn-primary w-100"><i class="bi bi-cloud-upload me-1"></i> Generate Handle</button>
                     </div>
                 </div>
-                <p class="text-muted mb-0">Use this for template headers. The preview URL is only for your app preview; WhatsApp needs the media handle.</p>
+                <p class="text-muted mb-0">Use this for template headers. Files are stored in S3; WhatsApp template review still needs the media handle.</p>
             </form>
 
             <?php if ($mediaHandle !== '' || $previewUrl !== ''): ?>
@@ -179,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <thead class="table-dark">
                                 <tr>
                                     <th>File</th>
-                                    <th>Local Save</th>
+                                    <th>S3 Upload</th>
                                     <th>Meta Handle</th>
                                     <th>Error</th>
                                 </tr>
@@ -188,9 +178,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <tr>
                                     <td><?php echo h((string) $uploadAttempt['file_name']); ?></td>
                                     <td>
-                                        <span class="badge bg-<?php echo $uploadAttempt['local_saved'] ? 'success' : 'danger'; ?>">
-                                            <?php echo $uploadAttempt['local_saved'] ? 'Saved' : 'Failed'; ?>
+                                        <span class="badge bg-<?php echo $uploadAttempt['s3_saved'] ? 'success' : 'danger'; ?>">
+                                            <?php echo $uploadAttempt['s3_saved'] ? 'Saved' : 'Failed'; ?>
                                         </span>
+                                        <?php if (!empty($uploadAttempt['preview_url'])): ?>
+                                            <div class="small text-break mt-1"><?php echo h((string) $uploadAttempt['preview_url']); ?></div>
+                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <span class="badge bg-<?php echo $uploadAttempt['meta_ok'] ? 'success' : 'danger'; ?>">
@@ -201,7 +194,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <?php endif; ?>
                                     </td>
                                     <td class="small text-danger">
-                                        <?php echo h(trim((string) $uploadAttempt['local_error'] . ' ' . (string) $uploadAttempt['meta_error'])); ?>
+                                        <?php echo h(trim((string) $uploadAttempt['s3_error'] . ' ' . (string) $uploadAttempt['meta_error'])); ?>
                                     </td>
                                 </tr>
                             </tbody>

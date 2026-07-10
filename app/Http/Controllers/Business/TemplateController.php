@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Business;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class TemplateController extends Controller
 {
@@ -95,29 +94,22 @@ class TemplateController extends Controller
                 return back()->withInput()->with('error', 'Unsupported file type. Use JPG, PNG, MP4, 3GP, or PDF.');
             }
 
-            $mediaDir = public_path('business-template-media');
-            if (!is_dir($mediaDir)) {
-                @mkdir($mediaDir, 0775, true);
-            }
-
-            $fileName = Str::uuid() . '.' . $mediaFile->getClientOriginalExtension();
             $tempPath = (string) $mediaFile->getPathname();
-            $localPath = $mediaDir . DIRECTORY_SEPARATOR . $fileName;
-            $localSaved = false;
-            $localError = '';
+            $s3Upload = \ApiSupport::s3UploadFile(
+                $tempPath,
+                (string) $mediaFile->getClientOriginalName(),
+                $mediaType
+            );
 
-            if (is_dir($mediaDir) && is_writable($mediaDir) && $mediaFile->move($mediaDir, $fileName)) {
-                $localSaved = true;
-                $localPath = $mediaDir . DIRECTORY_SEPARATOR . $fileName;
-                $mediaUrl = asset('business-template-media/' . $fileName);
-            } else {
-                $localError = 'Media handle can still be generated, but the local preview file could not be saved. Check folder permissions for ' . $mediaDir . '.';
+            if (!($s3Upload['ok'] ?? false)) {
+                return back()->withInput()->with('error', 'S3 upload failed: ' . (string) ($s3Upload['error'] ?? 'Unknown S3 upload error.'));
             }
 
+            $mediaUrl = (string) ($s3Upload['url'] ?? '');
             $uploadResult = \ApiSupport::metaUploadMediaHandle(
                 $appId,
                 $accessToken,
-                $localSaved ? $localPath : $tempPath,
+                $tempPath,
                 (string) $mediaFile->getClientOriginalName(),
                 $mediaType,
                 (int) $mediaFile->getSize()
@@ -125,17 +117,11 @@ class TemplateController extends Controller
 
             if (!($uploadResult['ok'] ?? false)) {
                 $error = (string) ($uploadResult['error'] ?? 'Unknown error.');
-                if ($localError !== '') {
-                    $error = trim($localError . ' ' . $error);
-                }
 
                 return back()->withInput()->with('error', 'Media handle generation failed: ' . $error);
             }
 
             $headerMediaHandle = (string) ($uploadResult['handle'] ?? '');
-            if (!$localSaved) {
-                $mediaUrl = '';
-            }
         }
 
         $validationErrors = [];

@@ -110,44 +110,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!in_array($fileType, $allowedTypes, true)) {
             $mediaUploadError = 'Unsupported file type. Use JPG, PNG, MP4, 3GP, or PDF.';
         } else {
-            $uploadDir = __DIR__ . '/uploads/media/';
-            if (!is_dir($uploadDir)) {
-                @mkdir($uploadDir, 0775, true);
-            }
-
-            $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-            $safeName = bin2hex(random_bytes(12)) . ($extension !== '' ? '.' . $extension : '');
-            $localPath = $uploadDir . $safeName;
-            $localSaved = false;
-            $localError = '';
-            $handleSourcePath = $tmpPath;
-
-            if (is_dir($uploadDir) && is_writable($uploadDir) && move_uploaded_file($tmpPath, $localPath)) {
-                $localSaved = true;
-                $uploadedMediaPreviewUrl = app_public_url('website/uploads/media/' . $safeName);
-                $handleSourcePath = $localPath;
+            $s3Upload = ApiSupport::s3UploadFile($tmpPath, $fileName, $fileType);
+            if (!($s3Upload['ok'] ?? false)) {
+                $mediaUploadError = (string) ($s3Upload['error'] ?? 'Unknown S3 upload error.');
             } else {
-                $localError = 'Could not save uploaded file locally. Upload directory may be missing or not writable: ' . $uploadDir;
-            }
+                $uploadedMediaPreviewUrl = (string) ($s3Upload['url'] ?? '');
 
-            $uploadResult = ApiSupport::metaUploadMediaHandle(
-                (string) $appId,
-                (string) $access_token,
-                $handleSourcePath,
-                $fileName,
-                $fileType,
-                $fileSize
-            );
+                $uploadResult = ApiSupport::metaUploadMediaHandle(
+                    (string) $appId,
+                    (string) $access_token,
+                    $tmpPath,
+                    $fileName,
+                    $fileType,
+                    $fileSize
+                );
 
-            if (!($uploadResult['ok'] ?? false)) {
-                $metaError = (string) ($uploadResult['error'] ?? 'Unknown error.');
-                $mediaUploadError = $localError !== '' ? trim($localError . ' ' . $metaError) : $metaError;
-            } else {
-                $header_media_handle = (string) ($uploadResult['handle'] ?? '');
-                if ($localSaved) {
-                    $header_media_url = $uploadedMediaPreviewUrl;
+                if (!($uploadResult['ok'] ?? false)) {
+                    $metaError = (string) ($uploadResult['error'] ?? 'Unknown error.');
+                    $mediaUploadError = $mediaUploadError !== '' ? trim($mediaUploadError . ' ' . $metaError) : $metaError;
                 } else {
-                    $mediaUploadWarning = 'Media handle generated, but local preview file could not be saved.';
+                    $header_media_handle = (string) ($uploadResult['handle'] ?? '');
+                    if ($uploadedMediaPreviewUrl !== '') {
+                        $header_media_url = $uploadedMediaPreviewUrl;
+                    } else {
+                        $mediaUploadWarning = 'Media handle generated, but S3 preview file could not be saved.';
+                    }
                 }
             }
         }
@@ -428,7 +415,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="col-lg-7 col-md-9 wg-main">
             <h4><i class="bi bi-cloud-plus"></i> Create Cloud API Template</h4>
             <div class="alert alert-info">
-                For image, video, or document headers, upload the file first and paste the generated media handle here.
+                For image, video, or document headers, choose a file here or upload it first. Files are stored in S3 and the app generates the WhatsApp media handle.
     <a href="<?php echo h(app_url('business/upload-media')); ?>" class="alert-link">Upload media</a>
             </div>
             <form action="" method="post" id="templateForm" enctype="multipart/form-data">

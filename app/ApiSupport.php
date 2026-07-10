@@ -40,6 +40,213 @@ final class ApiSupport
         return $encoded === false ? null : $encoded;
     }
 
+    public static function s3UploadFile(string $filePath, string $fileName, string $contentType, string $prefix = 'template-media'): array
+    {
+        if (!is_file($filePath)) {
+            return [
+                'ok' => false,
+                'url' => '',
+                'key' => '',
+                'error' => 'File not found.',
+            ];
+        }
+
+        $config = self::s3Config();
+        foreach (['access_key', 'secret_key', 'region', 'bucket'] as $required) {
+            if (($config[$required] ?? '') === '') {
+                return [
+                    'ok' => false,
+                    'url' => '',
+                    'key' => '',
+                    'error' => 'AWS S3 is not configured. Add AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, and AWS_BUCKET.',
+                ];
+            }
+        }
+
+        $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        $safePrefix = trim((string) $prefix, "/ \t\n\r\0\x0B");
+        $key = ($safePrefix !== '' ? $safePrefix . '/' : '')
+            . date('Y/m/')
+            . bin2hex(random_bytes(16))
+            . ($extension !== '' ? '.' . preg_replace('/[^a-z0-9]+/', '', $extension) : '');
+
+        $body = file_get_contents($filePath);
+        if ($body === false) {
+            return [
+                'ok' => false,
+                'url' => '',
+                'key' => '',
+                'error' => 'Could not read uploaded file.',
+            ];
+        }
+
+        $region = (string) $config['region'];
+        $bucket = (string) $config['bucket'];
+        $endpoint = rtrim((string) $config['endpoint'], '/');
+        $pathStyle = (bool) $config['path_style'];
+        $host = $endpoint !== ''
+            ? (string) parse_url($endpoint, PHP_URL_HOST)
+            : $bucket . '.s3.' . $region . '.amazonaws.com';
+
+        if ($endpoint !== '' && $pathStyle) {
+            $canonicalUri = '/' . self::s3EncodePath($bucket . '/' . $key);
+            $url = $endpoint . $canonicalUri;
+        } elseif ($endpoint !== '') {
+            $scheme = (string) (parse_url($endpoint, PHP_URL_SCHEME) ?: 'https');
+            $baseHost = (string) parse_url($endpoint, PHP_URL_HOST);
+            $port = parse_url($endpoint, PHP_URL_PORT);
+            $host = $bucket . '.' . $baseHost . ($port ? ':' . $port : '');
+            $canonicalUri = '/' . self::s3EncodePath($key);
+            $url = $scheme . '://' . $host . $canonicalUri;
+        } else {
+            $canonicalUri = '/' . self::s3EncodePath($key);
+            $url = 'https://' . $host . $canonicalUri;
+        }
+
+        $payloadHash = hash('sha256', $body);
+        $amzDate = gmdate('Ymd\THis\Z');
+        $shortDate = gmdate('Ymd');
+        $headers = [
+            'content-type' => $contentType !== '' ? $contentType : 'application/octet-stream',
+            'host' => $host,
+            'x-amz-content-sha256' => $payloadHash,
+            'x-amz-date' => $amzDate,
+        ];
+
+        $acl = trim((string) $config['acl']);
+        if ($acl !== '') {
+            $headers['x-amz-acl'] = $acl;
+        }
+
+        ksort($headers);
+        $canonicalHeaders = '';
+        $signedHeaderNames = [];
+        foreach ($headers as $name => $value) {
+            $canonicalHeaders .= strtolower($name) . ':' . trim((string) $value) . "\n";
+            $signedHeaderNames[] = strtolower($name);
+        }
+
+        $signedHeaders = implode(';', $signedHeaderNames);
+        $credentialScope = $shortDate . '/' . $region . '/s3/aws4_request';
+        $canonicalRequest = "PUT\n"
+            . $canonicalUri . "\n\n"
+            . $canonicalHeaders . "\n"
+            . $signedHeaders . "\n"
+            . $payloadHash;
+        $stringToSign = "AWS4-HMAC-SHA256\n"
+            . $amzDate . "\n"
+            . $credentialScope . "\n"
+            . hash('sha256', $canonicalRequest);
+        $signature = hash_hmac('sha256', $stringToSign, self::awsSigningKey((string) $config['secret_key'], $shortDate, $region, 's3'));
+        $headers['authorization'] = 'AWS4-HMAC-SHA256 Credential='
+            . $config['access_key'] . '/'
+            . $credentialScope
+            . ', SignedHeaders=' . $signedHeaders
+            . ', Signature=' . $signature;
+
+        $curlHeaders = [];
+        foreach ($headers as $name => $value) {
+            $curlHeaders[] = $name . ': ' . $value;
+        }
+
+        $curl = curl_init($url);
+        curl_setopt_array($curl, [
+            CURLOPT_CUSTOMREQUEST => 'PUT',
+            CURLOPT_POSTFIELDS => $body,
+            CURLOPT_HTTPHEADER => $curlHeaders,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 60,
+        ]);
+
+        $response = curl_exec($curl);
+        $httpCode = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($curl);
+        curl_close($curl);
+
+        if ($curlError !== '' || $httpCode < 200 || $httpCode >= 300) {
+            return [
+                'ok' => false,
+                'url' => '',
+                'key' => $key,
+                'error' => $curlError !== '' ? 'S3 upload failed: ' . $curlError : 'S3 upload failed with HTTP ' . $httpCode . '. ' . trim((string) $response),
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'url' => self::s3PublicUrl($key, $config),
+            'key' => $key,
+            'error' => null,
+        ];
+    }
+
+    private static function s3Config(): array
+    {
+        $settings = [];
+        $db = Database::connectOrNull();
+        if ($db) {
+            foreach (['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'AWS_DEFAULT_REGION', 'AWS_BUCKET', 'AWS_URL', 'AWS_ENDPOINT', 'AWS_S3_PATH_STYLE', 'AWS_S3_ACL'] as $key) {
+                $settings[$key] = trim((string) AppSettings::getGlobal($db, $key, ''));
+            }
+        }
+
+        $get = static function (string $key, string $default = '') use ($settings): string {
+            $settingValue = trim($settings[$key] ?? '');
+            if ($settingValue !== '') {
+                return $settingValue;
+            }
+
+            return trim((string) Config::get($key, $default));
+        };
+
+        return [
+            'access_key' => $get('AWS_ACCESS_KEY_ID'),
+            'secret_key' => $get('AWS_SECRET_ACCESS_KEY'),
+            'region' => $get('AWS_REGION', $get('AWS_DEFAULT_REGION', 'ap-south-1')),
+            'bucket' => $get('AWS_BUCKET'),
+            'url' => $get('AWS_URL'),
+            'endpoint' => $get('AWS_ENDPOINT'),
+            'path_style' => in_array(strtolower($get('AWS_S3_PATH_STYLE')), ['1', 'true', 'yes'], true),
+            'acl' => $get('AWS_S3_ACL'),
+        ];
+    }
+
+    private static function s3PublicUrl(string $key, array $config): string
+    {
+        if (trim((string) ($config['url'] ?? '')) !== '') {
+            return rtrim((string) $config['url'], '/') . '/' . self::s3EncodePath($key);
+        }
+
+        $region = (string) ($config['region'] ?? 'ap-south-1');
+        $bucket = (string) ($config['bucket'] ?? '');
+        $endpoint = rtrim((string) ($config['endpoint'] ?? ''), '/');
+        if ($endpoint !== '' && !empty($config['path_style'])) {
+            return $endpoint . '/' . rawurlencode($bucket) . '/' . self::s3EncodePath($key);
+        }
+
+        if ($endpoint !== '') {
+            $scheme = (string) (parse_url($endpoint, PHP_URL_SCHEME) ?: 'https');
+            $host = (string) parse_url($endpoint, PHP_URL_HOST);
+            $port = parse_url($endpoint, PHP_URL_PORT);
+            return $scheme . '://' . $bucket . '.' . $host . ($port ? ':' . $port : '') . '/' . self::s3EncodePath($key);
+        }
+
+        return 'https://' . $bucket . '.s3.' . $region . '.amazonaws.com/' . self::s3EncodePath($key);
+    }
+
+    private static function s3EncodePath(string $path): string
+    {
+        return implode('/', array_map('rawurlencode', explode('/', ltrim($path, '/'))));
+    }
+
+    private static function awsSigningKey(string $secretKey, string $date, string $region, string $service): string
+    {
+        $dateKey = hash_hmac('sha256', $date, 'AWS4' . $secretKey, true);
+        $regionKey = hash_hmac('sha256', $region, $dateKey, true);
+        $serviceKey = hash_hmac('sha256', $service, $regionKey, true);
+        return hash_hmac('sha256', 'aws4_request', $serviceKey, true);
+    }
+
     public static function jsonResponse(array $payload, int $status = 200): void
     {
         http_response_code($status);
