@@ -222,6 +222,44 @@ function registerPhoneNumber($phoneNumberId, $accessToken, $pin = '123456')
     ];
 }
 
+function subscribeWabaWebhook(string $wabaId, string $accessToken): array
+{
+    if ($wabaId === '' || $accessToken === '') {
+        return [
+            'ok' => false,
+            'http' => 0,
+            'response' => [],
+            'error' => 'WhatsApp Business ID and access token are required.',
+        ];
+    }
+
+    $url = 'https://graph.facebook.com/v23.0/' . rawurlencode($wabaId) . '/subscribed_apps';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . $accessToken,
+        ],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+
+    $response = curl_exec($ch);
+    $http = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    $decoded = json_decode((string) $response, true);
+    $ok = $curlError === '' && $http >= 200 && $http < 300 && (bool) ($decoded['success'] ?? false);
+
+    return [
+        'http' => $http,
+        'ok' => $ok,
+        'response' => is_array($decoded) ? $decoded : $response,
+        'error' => (string) ($decoded['error']['message'] ?? $curlError),
+    ];
+}
+
 function fetchPhoneNumberDetails(string $phoneNumberId, string $accessToken): array
 {
     if ($phoneNumberId === '' || $accessToken === '') {
@@ -378,7 +416,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $hasIds = ($wabaId !== '' && $phoneNumberId !== '');
-    $isRegistered = $hasIds && $registrationOk;
+    $webhookSubscribed = false;
+    if ($hasIds && $accessToken !== '') {
+        $subscription = subscribeWabaWebhook($wabaId, $accessToken);
+        $webhookSubscribed = !empty($subscription['ok']);
+        error_log("WEBHOOK SUBSCRIPTION RESPONSE: " . json_encode($subscription));
+
+        if (!$webhookSubscribed) {
+            $message = trim(($message !== '' ? $message . ' ' : '') . 'Webhook subscription failed: ' . ($subscription['error'] !== '' ? $subscription['error'] : json_encode($subscription['response'])));
+            $message_type = 'warning';
+        }
+    }
+    $isRegistered = $hasIds && $registrationOk && $webhookSubscribed;
 
     if ($wabaId === '' && $phoneNumberId === '' && $accessToken === '') {
         $message = 'No WhatsApp account data was received. Complete Embedded Signup and try again.';
@@ -396,11 +445,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $saved = $stmt->execute();
         if ($saved && $message_type !== 'warning' && $isRegistered) {
-            $message = 'Your business is now connected to WhatsApp.';
+            $message = 'Your business is now connected to WhatsApp and webhook subscription is active.';
             $message_type = 'success';
         } elseif ($saved && $hasIds) {
             $statusText = $phoneStatus !== '' ? ' Current Meta status: ' . $phoneStatus . '.' : '';
-            $message = trim(($message !== '' ? $message . ' ' : '') . 'IDs were saved, but Meta still reports the phone number as pending.' . $statusText);
+            $message = trim(($message !== '' ? $message . ' ' : '') . 'IDs were saved, but WhatsApp connection is not fully active yet.' . $statusText);
         } elseif ($saved) {
             $message = trim('WhatsApp token saved, but WABA ID and Phone Number ID are still missing. ' . ($message !== '' ? 'Meta lookup said: ' . $message : 'Paste the WABA ID and Phone Number ID below, then click Sync / Register.'));
             $message_type = 'warning';
