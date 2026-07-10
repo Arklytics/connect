@@ -14,7 +14,7 @@ return new class extends Migration
 
         Schema::create('gd_template_media', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('biz_id')->index();
+            $table->unsignedBigInteger('biz_id');
             $table->string('original_name', 255);
             $table->string('mime_type', 120);
             $table->unsignedBigInteger('file_size')->default(0);
@@ -22,6 +22,7 @@ return new class extends Migration
             $table->text('s3_url');
             $table->text('media_handle')->nullable();
             $table->timestamps();
+            $table->index('biz_id');
         });
     }
 

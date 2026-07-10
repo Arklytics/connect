@@ -31,6 +31,7 @@ namespace Illuminate\Database\Schema {
         public bool $autoIncrement = false;
         public bool $primary = false;
         public bool $unique = false;
+        public bool $index = false;
 
         public function nullable(bool $value = true): self
         {
@@ -65,6 +66,12 @@ namespace Illuminate\Database\Schema {
         public function unique(bool $value = true): self
         {
             $this->unique = $value;
+            return $this;
+        }
+
+        public function index(bool $value = true): self
+        {
+            $this->index = $value;
             return $this;
         }
     }
@@ -234,6 +241,16 @@ namespace Illuminate\Database\Schema {
                         $column->name
                     );
                 }
+
+                if ($column->index) {
+                    $statements[] = sprintf(
+                        'ALTER TABLE `%s` ADD KEY `%s_%s_index` (`%s`)',
+                        $this->table,
+                        $this->table,
+                        $column->name,
+                        $column->name
+                    );
+                }
             }
 
             foreach ($this->indexes as $columns) {
@@ -259,6 +276,10 @@ namespace Illuminate\Database\Schema {
             foreach ($this->columns as $column) {
                 if ($column->unique) {
                     $indexes[] = sprintf('UNIQUE KEY `%s_%s_unique` (`%s`)', $this->table, $column->name, $column->name);
+                }
+
+                if ($column->index) {
+                    $indexes[] = sprintf('KEY `%s_%s_index` (`%s`)', $this->table, $column->name, $column->name);
                 }
             }
 
