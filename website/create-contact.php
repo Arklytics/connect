@@ -46,7 +46,7 @@ function gdTruthy(mixed $value): int
 
 function gdNormalizePhone(string $phone): string
 {
-    return preg_replace('/[^\d+]/', '', $phone);
+    return ApiSupport::normalizePhone($phone);
 }
 
 function gdBindParams(mysqli_stmt $stmt, string $types, array &$values): bool

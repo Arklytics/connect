@@ -79,12 +79,7 @@ if (isset($_POST['send'])) {
             break;
         }
 
-        $phone = $member['phone_number'];
-    
-        // Ensure phone number starts with country code (+91)
-        if (!preg_match('/^\+\d+$/', $phone)) {
-            $phone = "+91" . $phone; // Default country code
-        }
+        $phone = ApiSupport::normalizePhone((string) $member['phone_number']);
     
         if (empty($phone)) {
             $errorMessages[] = "Skipping empty phone number.";

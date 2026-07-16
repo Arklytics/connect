@@ -493,11 +493,11 @@ final class ApiSupport
             return '';
         }
 
-        if (preg_match('/^\+\d+$/', $phone)) {
-            return $phone;
+        $digits = ltrim($phone, '+');
+        while (str_starts_with($digits, '9191') && strlen($digits) > 12) {
+            $digits = substr($digits, 2);
         }
 
-        $digits = ltrim($phone, '+');
         if (strlen($digits) === 10) {
             return '+91' . $digits;
         }

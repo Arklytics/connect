@@ -28,7 +28,7 @@ function wgNormalizeImportHeader(string $value): string
 
 function wgNormalizeImportPhone(string $value): string
 {
-    return preg_replace('/[^\d+]/', '', trim($value));
+    return ApiSupport::normalizePhone($value);
 }
 
 function wgImportTruthy($value): bool

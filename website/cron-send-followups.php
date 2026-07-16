@@ -6,18 +6,7 @@ require_once __DIR__ . '/../db_conn.php';
 
 function cronNormalizeWhatsappPhone(string $phone): string
 {
-    $phone = trim($phone);
-    $phone = preg_replace('/[^\d+]/', '', $phone);
-
-    if ($phone === '') {
-        return '';
-    }
-
-    if (!preg_match('/^\+\d+$/', $phone)) {
-        $phone = '+91' . ltrim($phone, '+');
-    }
-
-    return $phone;
+    return ApiSupport::normalizePhone($phone);
 }
 
 function cronSendWhatsappText(string $phoneNumberId, string $token, string $to, string $messageBody): array

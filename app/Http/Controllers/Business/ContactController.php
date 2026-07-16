@@ -99,7 +99,7 @@ class ContactController extends Controller
             'whatsapp_opt_in' => ['nullable', 'boolean'],
         ]);
         $bizId = $request->session()->get('biz_id');
-        $phone = preg_replace('/[^\d+]/', '', $data['mobile_number']);
+        $phone = \ApiSupport::normalizePhone($data['mobile_number']);
         $leadStage = $data['lead_stage'] ?? 'lead';
         $leadStatus = $data['lead_status'] ?? 'new';
         $nextFollowUpAt = !empty($data['next_follow_up_at']) ? Carbon::parse($data['next_follow_up_at']) : null;
@@ -316,7 +316,7 @@ class ContactController extends Controller
 
     private function hasUsefulContactData(array $payload): bool
     {
-        $phone = preg_replace('/[^\d+]/', '', (string) ($payload['phone_number'] ?? $payload['mobile_number'] ?? $payload['phone'] ?? ''));
+        $phone = \ApiSupport::normalizePhone((string) ($payload['phone_number'] ?? $payload['mobile_number'] ?? $payload['phone'] ?? ''));
 
         return !empty($phone);
     }
@@ -324,7 +324,7 @@ class ContactController extends Controller
     private function upsertContact(int $bizId, int $groupId, array $payload): void
     {
         $fullName = $payload['full_name'] ?? $payload['name'] ?? 'Unnamed Contact';
-        $phone = preg_replace('/[^\d+]/', '', (string) ($payload['phone_number'] ?? $payload['mobile_number'] ?? $payload['phone'] ?? ''));
+        $phone = \ApiSupport::normalizePhone((string) ($payload['phone_number'] ?? $payload['mobile_number'] ?? $payload['phone'] ?? ''));
         if ($phone === '') {
             return;
         }
