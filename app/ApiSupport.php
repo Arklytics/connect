@@ -493,11 +493,16 @@ final class ApiSupport
             return '';
         }
 
-        if (!preg_match('/^\+\d+$/', $phone)) {
-            $phone = '+91' . ltrim($phone, '+');
+        if (preg_match('/^\+\d+$/', $phone)) {
+            return $phone;
         }
 
-        return $phone;
+        $digits = ltrim($phone, '+');
+        if (strlen($digits) === 10) {
+            return '+91' . $digits;
+        }
+
+        return '+' . $digits;
     }
 
     public static function whatsappSendRequest(string $phoneNumberId, string $accessToken, array $payload): array
