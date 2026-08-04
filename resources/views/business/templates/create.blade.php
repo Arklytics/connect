@@ -72,6 +72,7 @@
               <div class="col-md-12 header-media-field d-none">
                 <div class="d-flex align-items-center justify-content-between mb-2">
                   <label class="form-label mb-0">Saved Media</label>
+                  <a class="small" href="{{ url('/business/upload-media') }}">Manage media</a>
                 </div>
                 @if (empty($mediaLibrary ?? []))
                   <div class="text-muted small">No saved media yet.</div>
@@ -81,20 +82,21 @@
                       @php
                         $mediaUrl = (string) ($media['s3_url'] ?? '');
                         $mediaHandle = (string) ($media['media_handle'] ?? '');
+                        $mediaName = (string) ($media['original_name'] ?? 'Media file');
                         $kind = \ApiSupport::mediaKind((string) ($media['mime_type'] ?? ''), $mediaUrl);
                       @endphp
                       <div class="col-md-4">
                         <div class="border rounded p-2 h-100 bg-light">
                           <div class="text-center mb-2" style="height:90px;">
                             @if ($kind === 'image')
-                              <img src="{{ $mediaUrl }}" alt="{{ $media['original_name'] }}" style="max-width:100%; max-height:90px; border-radius:6px;">
+                              <img src="{{ $mediaUrl }}" alt="{{ $mediaName }}" style="max-width:100%; max-height:90px; border-radius:6px;">
                             @elseif ($kind === 'video')
                               <video src="{{ $mediaUrl }}" style="width:100%; max-height:90px; border-radius:6px;"></video>
                             @else
                               <div class="small text-muted pt-4"><i class="bi bi-file-earmark-text me-1"></i> Document</div>
                             @endif
                           </div>
-                          <div class="small fw-semibold text-truncate" title="{{ $media['original_name'] }}">{{ $media['original_name'] }}</div>
+                          <div class="small fw-semibold text-truncate" title="{{ $mediaName }}">{{ $mediaName }}</div>
                           <button type="button" class="btn btn-light btn-sm w-100 mt-2" data-media-url="{{ $mediaUrl }}" data-media-handle="{{ $mediaHandle }}" onclick="useSavedMedia(this)">Use</button>
                         </div>
                       </div>
@@ -191,6 +193,22 @@
       samples[input.dataset.variable] = input.value;
     });
     return samples;
+  }
+
+  function escapeAttribute(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function validPreviewUrl(value) {
+    try {
+      return ['http:', 'https:', 'data:', 'blob:'].includes(new URL(value).protocol);
+    } catch (error) {
+      return false;
+    }
   }
 
   function toggleHeader() {
@@ -331,8 +349,9 @@
         };
         reader.readAsDataURL(headerMediaFile.files[0]);
       } else {
-        mediaPreview.innerHTML = headerMediaUrl
-          ? `<img src="${headerMediaUrl}" alt="Image preview" style="max-width:100%; max-height:220px; border-radius:8px;">`
+        const safeMediaUrl = validPreviewUrl(headerMediaUrl) ? escapeAttribute(headerMediaUrl) : '';
+        mediaPreview.innerHTML = safeMediaUrl
+          ? `<img src="${safeMediaUrl}" alt="Image preview" style="max-width:100%; max-height:220px; border-radius:8px;">`
           : '<div class="text-muted small">Image header preview</div>';
       }
     } else if (headerType === 'VIDEO') {
@@ -344,17 +363,19 @@
         };
         reader.readAsDataURL(headerMediaFile.files[0]);
       } else {
-        mediaPreview.innerHTML = headerMediaUrl
-          ? `<video src="${headerMediaUrl}" controls style="width:100%; max-height:220px; border-radius:8px;"></video>`
+        const safeMediaUrl = validPreviewUrl(headerMediaUrl) ? escapeAttribute(headerMediaUrl) : '';
+        mediaPreview.innerHTML = safeMediaUrl
+          ? `<video src="${safeMediaUrl}" controls style="width:100%; max-height:220px; border-radius:8px;"></video>`
           : '<div class="text-muted small">Video header preview</div>';
       }
     } else if (headerType === 'DOCUMENT') {
       document.getElementById('previewTitle').classList.add('d-none');
       if (headerMediaFile.files && headerMediaFile.files[0]) {
-        mediaPreview.innerHTML = `<div class="text-muted small">${headerMediaFile.files[0].name}</div>`;
+        mediaPreview.innerHTML = `<div class="text-muted small">${escapeAttribute(headerMediaFile.files[0].name)}</div>`;
       } else {
-        mediaPreview.innerHTML = headerMediaUrl
-          ? `<a class="btn btn-light btn-sm" href="${headerMediaUrl}" target="_blank"><i class="bi bi-file-earmark-text me-1"></i> Open document</a>`
+        const safeMediaUrl = validPreviewUrl(headerMediaUrl) ? escapeAttribute(headerMediaUrl) : '';
+        mediaPreview.innerHTML = safeMediaUrl
+          ? `<a class="btn btn-light btn-sm" href="${safeMediaUrl}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text me-1"></i> Open document</a>`
           : '<div class="text-muted small">Document header preview</div>';
       }
     } else {

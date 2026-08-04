@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Business;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class TemplateController extends Controller
 {
@@ -20,11 +21,7 @@ class TemplateController extends Controller
 
     public function create(Request $request)
     {
-        $mediaLibrary = [];
-        $mediaDb = \Database::connectOrNull();
-        if ($mediaDb) {
-            $mediaLibrary = \ApiSupport::businessTemplateMedia($mediaDb, (int) $request->session()->get('biz_id'), 12);
-        }
+        $mediaLibrary = $this->businessTemplateMedia((int) $request->session()->get('biz_id'), 12);
 
         return view('business.templates.create', compact('mediaLibrary'));
     }
@@ -38,7 +35,7 @@ class TemplateController extends Controller
             'header_type' => ['nullable', 'in:NONE,TEXT,IMAGE,VIDEO,DOCUMENT'],
             'header_text' => ['nullable', 'string', 'max:255'],
             'header_sample' => ['nullable', 'string', 'max:255'],
-            'header_media_handle' => ['nullable', 'string', 'max:255'],
+            'header_media_handle' => ['nullable', 'string', 'max:10000'],
             'header_media_url' => ['nullable', 'url'],
             'header_media_file' => ['nullable', 'file', 'max:51200'],
             'body_text' => ['required', 'string'],
@@ -128,19 +125,15 @@ class TemplateController extends Controller
             }
 
             $headerMediaHandle = (string) ($uploadResult['handle'] ?? '');
-            $mediaDb = \Database::connectOrNull();
-            if ($mediaDb) {
-                \ApiSupport::storeTemplateMedia(
-                    $mediaDb,
-                    $bizId,
-                    (string) $mediaFile->getClientOriginalName(),
-                    $mediaType,
-                    (int) $mediaFile->getSize(),
-                    $mediaUrl,
-                    $headerMediaHandle,
-                    (string) ($s3Upload['key'] ?? '')
-                );
-            }
+            $this->storeTemplateMedia(
+                $bizId,
+                (string) $mediaFile->getClientOriginalName(),
+                $mediaType,
+                (int) $mediaFile->getSize(),
+                $mediaUrl,
+                $headerMediaHandle,
+                (string) ($s3Upload['key'] ?? '')
+            );
         }
 
         $validationErrors = [];
@@ -378,6 +371,47 @@ class TemplateController extends Controller
         $name = preg_replace('/_+/', '_', $name) ?? '';
 
         return trim($name, '_');
+    }
+
+    private function businessTemplateMedia(int $bizId, int $limit = 100): array
+    {
+        if (!Schema::hasTable('gd_template_media')) {
+            return [];
+        }
+
+        return DB::table('gd_template_media')
+            ->where('biz_id', $bizId)
+            ->orderByDesc('id')
+            ->limit(max(1, min(500, $limit)))
+            ->get()
+            ->map(static fn ($row) => (array) $row)
+            ->all();
+    }
+
+    private function storeTemplateMedia(
+        int $bizId,
+        string $originalName,
+        string $mimeType,
+        int $fileSize,
+        string $s3Url,
+        string $mediaHandle,
+        string $s3Key
+    ): void {
+        if (!Schema::hasTable('gd_template_media')) {
+            return;
+        }
+
+        DB::table('gd_template_media')->insert([
+            'biz_id' => $bizId,
+            'original_name' => $originalName,
+            'mime_type' => $mimeType,
+            'file_size' => $fileSize,
+            's3_key' => $s3Key,
+            's3_url' => $s3Url,
+            'media_handle' => $mediaHandle,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     private function templatePlaceholderNumbers(string $text): array
