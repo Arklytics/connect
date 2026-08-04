@@ -40,7 +40,7 @@ class TemplateController extends Controller
             'header_sample' => ['nullable', 'string', 'max:255'],
             'header_media_handle' => ['nullable', 'string', 'max:255'],
             'header_media_url' => ['nullable', 'url'],
-            'header_media_file' => ['nullable', 'file', 'max:20480'],
+            'header_media_file' => ['nullable', 'file', 'max:51200'],
             'body_text' => ['required', 'string'],
             'footer_text' => ['nullable', 'string', 'max:255'],
             'buttons' => ['nullable', 'array'],
