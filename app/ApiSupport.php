@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 final class ApiSupport
 {
+    public const GRAPH_VERSION = 'v23.0';
+
     public static function tableColumns(mysqli $db, string $table): array
     {
         $stmt = $db->prepare('SHOW COLUMNS FROM `' . str_replace('`', '', $table) . '`');
@@ -1067,7 +1069,7 @@ public static function metaUploadMediaHandle(
         ];
     }
 
-    $graphVersion = 'v23.0';
+    $graphVersion = self::GRAPH_VERSION;
 
     /*
      * STEP 1
@@ -1130,7 +1132,7 @@ public static function metaUploadMediaHandle(
 
             "file_offset: 0",
 
-            "Content-Type: application/octet-stream",
+            "Content-Type: " . ($fileType !== '' ? $fileType : 'application/octet-stream'),
 
             "Content-Length: ".strlen($binary),
 

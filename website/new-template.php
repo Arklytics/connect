@@ -333,7 +333,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = 'WhatsApp Business ID or access token is missing. Add API credentials first.';
             $message_type = 'danger';
         } else {
-            $ch = curl_init("https://graph.facebook.com/v18.0/{$whatsapp_business_id}/message_templates");
+            $graphVersion = ApiSupport::GRAPH_VERSION;
+            $ch = curl_init("https://graph.facebook.com/{$graphVersion}/{$whatsapp_business_id}/message_templates");
             curl_setopt_array($ch, [
                 CURLOPT_HTTPHEADER => [
                     "Authorization: Bearer {$access_token}",

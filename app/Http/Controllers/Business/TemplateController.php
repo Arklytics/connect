@@ -286,7 +286,8 @@ class TemplateController extends Controller
             'components' => $components,
         ];
 
-        $ch = curl_init("https://graph.facebook.com/v18.0/{$whatsappBusinessId}/message_templates");
+        $graphVersion = \ApiSupport::GRAPH_VERSION;
+        $ch = curl_init("https://graph.facebook.com/{$graphVersion}/{$whatsappBusinessId}/message_templates");
         curl_setopt_array($ch, [
             CURLOPT_HTTPHEADER => [
                 "Authorization: Bearer {$accessToken}",
