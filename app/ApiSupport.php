@@ -512,7 +512,7 @@ final class ApiSupport
         $requestJson = self::encodeJson($payload);
         $curl = curl_init();
         curl_setopt_array($curl, [
-            CURLOPT_URL => 'https://graph.facebook.com/v18.0/' . rawurlencode($phoneNumberId) . '/messages',
+            CURLOPT_URL => 'https://graph.facebook.com/' . self::GRAPH_VERSION . '/' . rawurlencode($phoneNumberId) . '/messages',
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => $requestJson !== null ? $requestJson : json_encode($payload),

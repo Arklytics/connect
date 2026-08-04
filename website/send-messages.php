@@ -87,7 +87,7 @@ if (isset($_POST['send'])) {
         }
     
         // WhatsApp API URL
-        $url = "https://graph.facebook.com/v18.0/$phoneNumberId/messages";
+        $url = "https://graph.facebook.com/" . ApiSupport::GRAPH_VERSION . "/$phoneNumberId/messages";
     
         // WhatsApp message payload
         $data = [
