@@ -58,6 +58,7 @@ try {
     </li>
     <ul class="list-group collapse" id="messageMenu">
  <a href="<?php echo h(app_url('business/send-messages')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-send"></i> Send Messages</li></a>
+ <a href="<?php echo h(app_url('business/client-chats')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-chat-dots-fill"></i> Client Chats</li></a>
       <li class="list-group-item"><i class="bi bi-inbox"></i> Check Message</li>
     </ul>
 
