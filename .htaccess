@@ -7,6 +7,7 @@ RewriteRule ^login/?$ business/login [R=302,L]
 RewriteRule ^privacy-policy/?$ index.php [L,QSA]
 RewriteRule ^crm-privacy/?$ index.php [L,QSA]
 RewriteRule ^terms-conditions/?$ index.php [L,QSA]
+RewriteRule ^api-docs/?$ index.php [L,QSA]
 
 RewriteRule ^api/?$ api/index.php [L,QSA]
 RewriteRule ^api/contacts/import/?$ api/contacts/import.php [L,QSA]

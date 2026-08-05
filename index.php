@@ -45,6 +45,11 @@ if ($requestPath === '/terms-conditions') {
     return;
 }
 
+if ($requestPath === '/api-docs') {
+    app_dispatch('website/api-docs.php');
+    return;
+}
+
 if ($requestPath === '/api') {
     app_dispatch('api/index.php');
     return;
