@@ -15,6 +15,70 @@ function gdChatPhoneVariants(string $phone): array
     ])));
 }
 
+function gdChatPhoneKey(string $phone): string
+{
+    $digits = preg_replace('/\D+/', '', $phone) ?? '';
+    if (strlen($digits) > 10) {
+        return substr($digits, -10);
+    }
+
+    return $digits;
+}
+
+function gdChatMessageTextFromPayload(string $payloadJson): string
+{
+    $payload = json_decode($payloadJson, true);
+    if (!is_array($payload)) {
+        return '';
+    }
+
+    $text = trim((string) (
+        $payload['text']['body']
+        ?? $payload['button']['text']
+        ?? $payload['interactive']['button_reply']['title']
+        ?? $payload['interactive']['list_reply']['title']
+        ?? ''
+    ));
+
+    if ($text !== '') {
+        return $text;
+    }
+
+    foreach (['image', 'video', 'document', 'audio', 'sticker'] as $mediaType) {
+        if (isset($payload[$mediaType]) && is_array($payload[$mediaType])) {
+            $caption = trim((string) ($payload[$mediaType]['caption'] ?? ''));
+            return $caption !== '' ? $caption : '[' . $mediaType . ' message]';
+        }
+    }
+
+    $type = trim((string) ($payload['type'] ?? ''));
+    return $type !== '' ? '[' . $type . ' message]' : '';
+}
+
+function gdChatDateLabel(string $time): string
+{
+    $timestamp = strtotime($time);
+    if (!$timestamp) {
+        return '';
+    }
+
+    $date = date('Y-m-d', $timestamp);
+    if ($date === date('Y-m-d')) {
+        return 'Today';
+    }
+    if ($date === date('Y-m-d', strtotime('-1 day'))) {
+        return 'Yesterday';
+    }
+
+    return date('M j, Y', $timestamp);
+}
+
+function gdChatTimeLabel(string $time): string
+{
+    $timestamp = strtotime($time);
+    return $timestamp ? date('g:i A', $timestamp) : '';
+}
+
 function gdChatBind(mysqli_stmt $stmt, string $types, array $params): void
 {
     if ($params === []) {
@@ -44,12 +108,19 @@ function gdChatTimeline(mysqli $db, int $bizId, array $contact): array
 {
     $phoneVariants = gdChatPhoneVariants((string) ($contact['phone_number'] ?? ''));
     $phoneWithoutPlus = array_values(array_unique(array_map(static fn ($phone) => ltrim($phone, '+'), $phoneVariants)));
+    $phoneKey = gdChatPhoneKey((string) ($contact['phone_number'] ?? ''));
     $timeline = [];
 
     if (gdChatHasTable($db, 'gd_webhook_logs')) {
-        $where = ['contact_id = ?'];
-        $types = 'i';
-        $params = [(int) $contact['id']];
+        $where = [];
+        $types = '';
+        $params = [];
+
+        if ((int) ($contact['id'] ?? 0) > 0) {
+            $where[] = 'contact_id = ?';
+            $types .= 'i';
+            $params[] = (int) $contact['id'];
+        }
 
         if ($phoneVariants !== []) {
             $where[] = 'from_phone IN (' . implode(',', array_fill(0, count($phoneVariants), '?')) . ')';
@@ -63,10 +134,16 @@ function gdChatTimeline(mysqli $db, int $bizId, array $contact): array
             array_push($params, ...$phoneWithoutPlus);
         }
 
+        if ($phoneKey !== '') {
+            $where[] = 'RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(from_phone, ""), "+", ""), " ", ""), "-", ""), "(", ""), ")", ""), 10) = ?';
+            $types .= 's';
+            $params[] = $phoneKey;
+        }
+
         $sql = '
-            SELECT direction, message_text, delivery_status, notes, webhook_at, created_at
+            SELECT direction, message_text, payload_json, delivery_status, notes, webhook_at, created_at
             FROM gd_webhook_logs
-            WHERE biz_id = ? AND event_type = "message" AND (' . implode(' OR ', $where) . ')
+            WHERE biz_id = ? AND event_type = "message" AND (' . implode(' OR ', $where ?: ['1=0']) . ')
         ';
         array_unshift($params, $bizId);
         $types = 'i' . $types;
@@ -77,6 +154,9 @@ function gdChatTimeline(mysqli $db, int $bizId, array $contact): array
         $result = $stmt->get_result();
         while ($row = $result->fetch_assoc()) {
             $body = trim((string) ($row['message_text'] ?? ''));
+            if ($body === '') {
+                $body = gdChatMessageTextFromPayload((string) ($row['payload_json'] ?? ''));
+            }
             if ($body === '') {
                 continue;
             }
@@ -105,6 +185,11 @@ function gdChatTimeline(mysqli $db, int $bizId, array $contact): array
         $sentWhere[] = 'REPLACE(phone_number, "+", "") IN (' . implode(',', array_fill(0, count($phoneWithoutPlus), '?')) . ')';
         $sentTypes .= str_repeat('s', count($phoneWithoutPlus));
         array_push($sentParams, ...$phoneWithoutPlus);
+    }
+    if ($phoneKey !== '') {
+        $sentWhere[] = 'RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone_number, ""), "+", ""), " ", ""), "-", ""), "(", ""), ")", ""), 10) = ?';
+        $sentTypes .= 's';
+        $sentParams[] = $phoneKey;
     }
 
     if ($sentWhere !== []) {
@@ -142,33 +227,55 @@ function gdChatTimeline(mysqli $db, int $bizId, array $contact): array
     return $timeline;
 }
 
+function gdChatLastActivity(mysqli $db, int $bizId, array $contact): string
+{
+    $timeline = gdChatTimeline($db, $bizId, $contact);
+    if ($timeline !== []) {
+        $last = end($timeline);
+        return (string) ($last['time'] ?? '');
+    }
+
+    foreach (['last_inbound_at', 'updated_at', 'created_at'] as $column) {
+        if (!empty($contact[$column])) {
+            return (string) $contact[$column];
+        }
+    }
+
+    return '';
+}
+
 $selectedContactId = Security::intFrom($_GET['contact_id'] ?? null);
+$selectedPhone = trim((string) ($_GET['phone'] ?? ''));
 $pageError = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         Security::verifyCsrf();
         $selectedContactId = Security::intFrom($_POST['contact_id'] ?? null);
+        $selectedPhone = trim((string) ($_POST['phone'] ?? ''));
         $replyText = trim((string) ($_POST['message'] ?? ''));
 
-        if ($replyText !== '' && $selectedContactId > 0) {
-            $stmt = $db->prepare('SELECT * FROM gd_user_contacts WHERE biz_id = ? AND id = ? LIMIT 1');
-            $stmt->bind_param('ii', $biz_id, $selectedContactId);
-            $stmt->execute();
-            $contact = $stmt->get_result()->fetch_assoc();
+        if ($replyText !== '' && ($selectedContactId > 0 || $selectedPhone !== '')) {
+            $contact = null;
+            if ($selectedContactId > 0) {
+                $stmt = $db->prepare('SELECT * FROM gd_user_contacts WHERE biz_id = ? AND id = ? LIMIT 1');
+                $stmt->bind_param('ii', $biz_id, $selectedContactId);
+                $stmt->execute();
+                $contact = $stmt->get_result()->fetch_assoc();
+            }
 
             $stmt = $db->prepare('SELECT phone_number_id, auth_token FROM gd_orders WHERE id = ? LIMIT 1');
             $stmt->bind_param('i', $biz_id);
             $stmt->execute();
             $business = $stmt->get_result()->fetch_assoc();
 
-            $phone = $contact ? ApiSupport::normalizePhone((string) ($contact['phone_number'] ?? '')) : '';
+            $phone = $contact ? ApiSupport::normalizePhone((string) ($contact['phone_number'] ?? '')) : ApiSupport::normalizePhone($selectedPhone);
             $token = trim((string) ($business['auth_token'] ?? ''));
             if ($token === '') {
                 $token = AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', ''));
             }
 
-            if ($contact && $phone !== '' && !empty($business['phone_number_id']) && $token !== '') {
+            if ($phone !== '' && !empty($business['phone_number_id']) && $token !== '') {
                 $payload = ApiSupport::whatsappTextPayload($phone, $replyText);
                 $response = ApiSupport::whatsappSendRequest((string) $business['phone_number_id'], $token, $payload);
                 $status = $response['ok'] ? 'sent' : 'failed';
@@ -207,7 +314,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['flash_error'] = 'Unable to send reply right now. Please check WhatsApp credentials and database tables.';
     }
 
-    header('Location: ' . app_url('business/client-chats?contact_id=' . $selectedContactId));
+    $redirectQuery = $selectedContactId > 0 ? ('contact_id=' . $selectedContactId) : ('phone=' . urlencode($selectedPhone));
+    header('Location: ' . app_url('business/client-chats?' . $redirectQuery));
     exit;
 }
 
@@ -226,9 +334,70 @@ try {
         $contacts[] = $row;
     }
 
+    $knownPhoneKeys = [];
+    foreach ($contacts as $contactRow) {
+        $key = gdChatPhoneKey((string) ($contactRow['phone_number'] ?? ''));
+        if ($key !== '') {
+            $knownPhoneKeys[$key] = true;
+        }
+    }
+
+    if (gdChatHasTable($db, 'gd_webhook_logs')) {
+        $stmt = $db->prepare('
+            SELECT from_phone, message_text, payload_json, webhook_at, created_at
+            FROM gd_webhook_logs
+            WHERE biz_id = ? AND event_type = "message" AND LOWER(direction) = "inbound" AND COALESCE(from_phone, "") <> ""
+            ORDER BY COALESCE(webhook_at, created_at) DESC, id DESC
+            LIMIT 150
+        ');
+        $stmt->bind_param('i', $biz_id);
+        $stmt->execute();
+        $unknownResult = $stmt->get_result();
+        $addedUnknown = [];
+        while ($row = $unknownResult->fetch_assoc()) {
+            $fromPhone = (string) ($row['from_phone'] ?? '');
+            $phoneKey = gdChatPhoneKey($fromPhone);
+            if ($phoneKey === '' || isset($knownPhoneKeys[$phoneKey]) || isset($addedUnknown[$phoneKey])) {
+                continue;
+            }
+
+            $preview = trim((string) ($row['message_text'] ?? ''));
+            if ($preview === '') {
+                $preview = gdChatMessageTextFromPayload((string) ($row['payload_json'] ?? ''));
+            }
+
+            $contacts[] = [
+                'id' => 0,
+                'full_name' => 'Unknown Client',
+                'phone_number' => $fromPhone,
+                'last_reply_text' => $preview,
+                'chat_last_at' => (string) ($row['webhook_at'] ?? $row['created_at'] ?? ''),
+                'is_unknown' => 1,
+            ];
+            $addedUnknown[$phoneKey] = true;
+        }
+    }
+
+    foreach ($contacts as $index => $contactRow) {
+        if (empty($contacts[$index]['chat_last_at'])) {
+            $contacts[$index]['chat_last_at'] = gdChatLastActivity($db, (int) $biz_id, $contactRow);
+        }
+    }
+    usort($contacts, static function (array $left, array $right): int {
+        return (strtotime((string) ($right['chat_last_at'] ?? '')) ?: 0) <=> (strtotime((string) ($left['chat_last_at'] ?? '')) ?: 0);
+    });
+
     if ($selectedContactId > 0) {
         foreach ($contacts as $contactRow) {
             if ((int) $contactRow['id'] === $selectedContactId) {
+                $selectedContact = $contactRow;
+                break;
+            }
+        }
+    } elseif ($selectedPhone !== '') {
+        $selectedPhoneKey = gdChatPhoneKey($selectedPhone);
+        foreach ($contacts as $contactRow) {
+            if ($selectedPhoneKey !== '' && gdChatPhoneKey((string) ($contactRow['phone_number'] ?? '')) === $selectedPhoneKey) {
                 $selectedContact = $contactRow;
                 break;
             }
@@ -297,6 +466,7 @@ include __DIR__ . '/header.php';
                   $isActive = $selectedContact && (int) $selectedContact['id'] === (int) $contact['id'];
                   $replyPath = trim((string) ($contact['reply_path'] ?? ''));
                   $lastReply = trim((string) ($contact['last_reply_text'] ?? ''));
+                  $lastAt = gdChatTimeLabel((string) ($contact['chat_last_at'] ?? ''));
                 ?>
                 <a href="<?php echo h(app_url('business/client-chats?contact_id=' . (int) $contact['id'])); ?>" class="list-group-item list-group-item-action wg-chat-item <?php echo $isActive ? 'active' : ''; ?>">
                   <div class="d-flex align-items-start justify-content-between gap-2">
@@ -304,7 +474,9 @@ include __DIR__ . '/header.php';
                       <div class="fw-semibold text-truncate"><?php echo h($contact['full_name'] ?? 'Client'); ?></div>
                       <div class="small text-muted"><?php echo h($contact['phone_number'] ?? ''); ?></div>
                     </div>
-                    <?php if ($replyPath !== ''): ?>
+                    <?php if ($lastAt !== ''): ?>
+                      <span class="small text-muted"><?php echo h($lastAt); ?></span>
+                    <?php elseif ($replyPath !== ''): ?>
                       <span class="badge bg-success text-uppercase"><?php echo h(str_replace('_', ' ', $replyPath)); ?></span>
                     <?php endif; ?>
                   </div>
@@ -338,12 +510,21 @@ include __DIR__ . '/header.php';
 
               <div class="card-body p-0">
                 <div class="wg-chat-thread p-3" id="chatThread">
+                  <?php $previousDateLabel = ''; ?>
                   <?php foreach ($timeline as $message): ?>
                     <?php
                       $isInbound = ($message['direction'] ?? 'inbound') === 'inbound';
                       $source = (string) ($message['source'] ?? '');
                       $label = $isInbound ? 'Client' : ($source === 'ai' ? 'AI Auto Reply' : 'Business');
+                      $dateLabel = gdChatDateLabel((string) ($message['time'] ?? ''));
+                      $timeLabel = gdChatTimeLabel((string) ($message['time'] ?? ''));
                     ?>
+                    <?php if ($dateLabel !== '' && $dateLabel !== $previousDateLabel): ?>
+                      <div class="text-center my-3">
+                        <span class="badge rounded-pill bg-light text-secondary border fw-normal px-3 py-2"><?php echo h($dateLabel); ?></span>
+                      </div>
+                      <?php $previousDateLabel = $dateLabel; ?>
+                    <?php endif; ?>
                     <div class="d-flex mb-3 <?php echo $isInbound ? 'justify-content-start' : 'justify-content-end'; ?>">
                       <div class="wg-chat-bubble <?php echo $isInbound ? 'inbound' : 'outbound'; ?> p-3 shadow-sm">
                         <div class="d-flex flex-wrap align-items-center gap-2 mb-1 wg-chat-meta">
@@ -352,7 +533,7 @@ include __DIR__ . '/header.php';
                         </div>
                         <div><?php echo h($message['body'] ?? ''); ?></div>
                         <div class="wg-chat-meta text-end mt-2">
-                          <?php echo h($message['time'] ?? ''); ?>
+                          <?php echo h($timeLabel); ?>
                           <?php if (!$isInbound && !empty($message['status'])): ?>
                             <span class="ms-2 text-uppercase"><?php echo h($message['status']); ?></span>
                           <?php endif; ?>
