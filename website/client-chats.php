@@ -223,7 +223,7 @@ function gdChatTimeline(mysqli $db, int $bizId, array $contact): array
         }
     }
 
-    usort($timeline, static fn ($left, $right) => (strtotime((string) ($left['time'] ?? '')) ?: 0) <=> (strtotime((string) ($right['time'] ?? '')) ?: 0));
+    usort($timeline, static fn ($left, $right) => (strtotime((string) ($right['time'] ?? '')) ?: 0) <=> (strtotime((string) ($left['time'] ?? '')) ?: 0));
     return $timeline;
 }
 
@@ -231,7 +231,7 @@ function gdChatLastActivity(mysqli $db, int $bizId, array $contact): string
 {
     $timeline = gdChatTimeline($db, $bizId, $contact);
     if ($timeline !== []) {
-        $last = end($timeline);
+        $last = reset($timeline);
         return (string) ($last['time'] ?? '');
     }
 
@@ -459,20 +459,36 @@ include __DIR__ . '/header.php';
       <div class="row g-3 mt-2">
         <div class="col-lg-4 col-xl-3">
           <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-white"><strong>Clients</strong></div>
+            <div class="card-header bg-white">
+              <strong>Clients</strong>
+              <div class="input-group input-group-sm mt-3">
+                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                <input type="search" class="form-control" id="chatSearch" placeholder="Search name or number">
+              </div>
+            </div>
             <div class="list-group list-group-flush wg-chat-list">
               <?php foreach ($contacts as $contact): ?>
                 <?php
-                  $isActive = $selectedContact && (int) $selectedContact['id'] === (int) $contact['id'];
+                  $isActive = $selectedContact
+                    && (
+                      ((int) ($selectedContact['id'] ?? 0) > 0 && (int) $selectedContact['id'] === (int) $contact['id'])
+                      || ((int) ($selectedContact['id'] ?? 0) === 0 && gdChatPhoneKey((string) ($selectedContact['phone_number'] ?? '')) === gdChatPhoneKey((string) ($contact['phone_number'] ?? '')))
+                    );
                   $replyPath = trim((string) ($contact['reply_path'] ?? ''));
                   $lastReply = trim((string) ($contact['last_reply_text'] ?? ''));
                   $lastAt = gdChatTimeLabel((string) ($contact['chat_last_at'] ?? ''));
+                  $contactName = (string) ($contact['full_name'] ?? 'Client');
+                  $contactPhone = (string) ($contact['phone_number'] ?? '');
+                  $contactUrl = ((int) ($contact['id'] ?? 0) > 0)
+                    ? app_url('business/client-chats?contact_id=' . (int) $contact['id'])
+                    : app_url('business/client-chats?phone=' . urlencode($contactPhone));
+                  $searchText = strtolower($contactName . ' ' . $contactPhone);
                 ?>
-                <a href="<?php echo h(app_url('business/client-chats?contact_id=' . (int) $contact['id'])); ?>" class="list-group-item list-group-item-action wg-chat-item <?php echo $isActive ? 'active' : ''; ?>">
+                <a href="<?php echo h($contactUrl); ?>" class="list-group-item list-group-item-action wg-chat-item <?php echo $isActive ? 'active' : ''; ?>" data-search="<?php echo h($searchText); ?>">
                   <div class="d-flex align-items-start justify-content-between gap-2">
                     <div>
-                      <div class="fw-semibold text-truncate"><?php echo h($contact['full_name'] ?? 'Client'); ?></div>
-                      <div class="small text-muted"><?php echo h($contact['phone_number'] ?? ''); ?></div>
+                      <div class="fw-semibold text-truncate"><?php echo h($contactName); ?></div>
+                      <div class="small text-muted"><?php echo h($contactPhone); ?></div>
                     </div>
                     <?php if ($lastAt !== ''): ?>
                       <span class="small text-muted"><?php echo h($lastAt); ?></span>
@@ -556,6 +572,7 @@ include __DIR__ . '/header.php';
                 <form action="<?php echo h(app_url('business/client-chats')); ?>" method="post" class="wg-chat-compose">
                   <?php echo Security::csrfField(); ?>
                   <input type="hidden" name="contact_id" value="<?php echo h($selectedContactId); ?>">
+                  <input type="hidden" name="phone" value="<?php echo h($selectedContact['phone_number'] ?? ''); ?>">
                   <div class="input-group">
                     <textarea name="message" class="form-control" rows="2" maxlength="1200" required placeholder="Type a WhatsApp reply"></textarea>
                     <button class="btn btn-success px-4" type="submit"><i class="bi bi-send-fill"></i></button>
@@ -580,6 +597,16 @@ include __DIR__ . '/header.php';
 <script>
   var chatThread = document.getElementById('chatThread');
   if (chatThread) {
-    chatThread.scrollTop = chatThread.scrollHeight;
+    chatThread.scrollTop = 0;
+  }
+
+  var chatSearch = document.getElementById('chatSearch');
+  if (chatSearch) {
+    chatSearch.addEventListener('input', function () {
+      var query = chatSearch.value.trim().toLowerCase();
+      document.querySelectorAll('.wg-chat-item[data-search]').forEach(function (item) {
+        item.style.display = item.dataset.search.indexOf(query) === -1 ? 'none' : '';
+      });
+    });
   }
 </script>

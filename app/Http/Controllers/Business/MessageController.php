@@ -374,6 +374,7 @@ class MessageController extends Controller
     {
         $phoneVariants = $this->phoneVariants((string) ($contact->phone_number ?? ''));
         $phoneWithoutPlus = array_values(array_unique(array_map(static fn ($phone) => ltrim($phone, '+'), $phoneVariants)));
+        $phoneKey = $this->phoneKey((string) ($contact->phone_number ?? ''));
 
         $webhookLogs = collect();
         if (Schema::hasTable('gd_webhook_logs')) {
@@ -388,13 +389,30 @@ class MessageController extends Controller
                     if (!empty($phoneWithoutPlus)) {
                         $query->orWhereIn(DB::raw('REPLACE(from_phone, "+", "")'), $phoneWithoutPlus);
                     }
+                    if ($phoneKey !== '') {
+                        $query->orWhereRaw('RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(from_phone, ""), "+", ""), " ", ""), "-", ""), "(", ""), ")", ""), 10) = ?', [$phoneKey]);
+                    }
                 })
                 ->get()
                 ->map(static function ($row) {
+                    $body = trim((string) ($row->message_text ?? ''));
+                    if ($body === '' && !empty($row->payload_json)) {
+                        $payload = json_decode((string) $row->payload_json, true);
+                        if (is_array($payload)) {
+                            $body = trim((string) (
+                                $payload['text']['body']
+                                ?? $payload['button']['text']
+                                ?? $payload['interactive']['button_reply']['title']
+                                ?? $payload['interactive']['list_reply']['title']
+                                ?? ''
+                            ));
+                        }
+                    }
+
                     return [
                         'direction' => strtolower((string) ($row->direction ?? 'inbound')) === 'inbound' ? 'inbound' : 'outbound',
                         'title' => strtolower((string) ($row->direction ?? 'inbound')) === 'inbound' ? 'Client' : 'Business',
-                        'body' => trim((string) ($row->message_text ?? '')),
+                        'body' => $body,
                         'status' => (string) ($row->delivery_status ?? ''),
                         'source' => 'webhook',
                         'time' => (string) ($row->webhook_at ?? $row->created_at ?? ''),
@@ -413,6 +431,9 @@ class MessageController extends Controller
                     $method = !empty($phoneVariants) ? 'orWhereIn' : 'whereIn';
                     $query->{$method}(DB::raw('REPLACE(phone_number, "+", "")'), $phoneWithoutPlus);
                 }
+                if ($phoneKey !== '') {
+                    $query->orWhereRaw('RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone_number, ""), "+", ""), " ", ""), "-", ""), "(", ""), ")", ""), 10) = ?', [$phoneKey]);
+                }
             })
             ->get()
             ->map(static function ($row) {
@@ -430,7 +451,7 @@ class MessageController extends Controller
         return $webhookLogs
             ->merge($sentMessages)
             ->filter(static fn ($item) => trim((string) ($item['body'] ?? '')) !== '')
-            ->sortBy(static fn ($item) => strtotime((string) ($item['time'] ?? '')) ?: 0)
+            ->sortByDesc(static fn ($item) => strtotime((string) ($item['time'] ?? '')) ?: 0)
             ->values()
             ->all();
     }
@@ -446,6 +467,12 @@ class MessageController extends Controller
         ]);
 
         return array_values(array_unique($variants));
+    }
+
+    private function phoneKey(string $phone): string
+    {
+        $digits = preg_replace('/\D+/', '', $phone) ?? '';
+        return strlen($digits) > 10 ? substr($digits, -10) : $digits;
     }
 
     private function storeSentMessage(array $data): void

@@ -64,6 +64,10 @@
       <div class="card shadow-sm border-0 h-100">
         <div class="card-header bg-white">
           <strong>Clients</strong>
+          <div class="input-group input-group-sm mt-3">
+            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+            <input type="search" class="form-control" id="chatSearch" placeholder="Search name or number">
+          </div>
         </div>
         <div class="list-group list-group-flush wg-chat-list">
           @forelse ($contacts ?? [] as $contact)
@@ -71,8 +75,9 @@
               $isActive = $selectedContact && (int) $selectedContact->id === (int) $contact->id;
               $replyPath = trim((string) ($contact->reply_path ?? ''));
               $lastReply = trim((string) ($contact->last_reply_text ?? ''));
+              $searchText = strtolower((string) ($contact->full_name ?? '') . ' ' . (string) ($contact->phone_number ?? ''));
             @endphp
-            <a href="{{ route('business.messages.chat', ['contact' => $contact->id]) }}" class="list-group-item list-group-item-action wg-chat-item {{ $isActive ? 'active' : '' }}">
+            <a href="{{ route('business.messages.chat', ['contact' => $contact->id]) }}" class="list-group-item list-group-item-action wg-chat-item {{ $isActive ? 'active' : '' }}" data-search="{{ $searchText }}">
               <div class="d-flex align-items-start justify-content-between gap-2">
                 <div class="min-w-0">
                   <div class="fw-semibold text-truncate">{{ $contact->full_name ?: 'Client' }}</div>
@@ -111,6 +116,7 @@
 
           <div class="card-body p-0">
             <div class="wg-chat-thread p-3" id="chatThread">
+              @php($previousDateLabel = '')
               @forelse ($timeline ?? [] as $message)
                 @php
                   $isInbound = ($message['direction'] ?? 'inbound') === 'inbound';
@@ -118,7 +124,21 @@
                   $label = $isInbound ? 'Client' : (($source === 'ai') ? 'AI Auto Reply' : 'Business');
                   $time = trim((string) ($message['time'] ?? ''));
                   $status = trim((string) ($message['status'] ?? ''));
+                  $timestamp = $time !== '' ? strtotime($time) : false;
+                  $dateLabel = '';
+                  $timeLabel = '';
+                  if ($timestamp) {
+                    $messageDate = date('Y-m-d', $timestamp);
+                    $dateLabel = $messageDate === date('Y-m-d') ? 'Today' : ($messageDate === date('Y-m-d', strtotime('-1 day')) ? 'Yesterday' : date('M j, Y', $timestamp));
+                    $timeLabel = date('g:i A', $timestamp);
+                  }
                 @endphp
+                @if ($dateLabel !== '' && $dateLabel !== $previousDateLabel)
+                  <div class="text-center my-3">
+                    <span class="badge rounded-pill bg-light text-secondary border fw-normal px-3 py-2">{{ $dateLabel }}</span>
+                  </div>
+                  @php($previousDateLabel = $dateLabel)
+                @endif
                 <div class="d-flex mb-3 {{ $isInbound ? 'justify-content-start' : 'justify-content-end' }}">
                   <div class="wg-chat-bubble {{ $isInbound ? 'inbound' : 'outbound' }} p-3 shadow-sm">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-1 wg-chat-meta">
@@ -129,7 +149,7 @@
                     </div>
                     <div>{{ $message['body'] }}</div>
                     <div class="wg-chat-meta text-end mt-2">
-                      {{ $time !== '' ? $time : '' }}
+                      {{ $timeLabel }}
                       @if (!$isInbound && $status !== '')
                         <span class="ms-2 text-uppercase">{{ $status }}</span>
                       @endif
@@ -175,7 +195,17 @@
 <script>
   const chatThread = document.getElementById('chatThread');
   if (chatThread) {
-    chatThread.scrollTop = chatThread.scrollHeight;
+    chatThread.scrollTop = 0;
+  }
+
+  const chatSearch = document.getElementById('chatSearch');
+  if (chatSearch) {
+    chatSearch.addEventListener('input', () => {
+      const query = chatSearch.value.trim().toLowerCase();
+      document.querySelectorAll('.wg-chat-item[data-search]').forEach((item) => {
+        item.style.display = item.dataset.search.includes(query) ? '' : 'none';
+      });
+    });
   }
 </script>
 @endpush
