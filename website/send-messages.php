@@ -195,12 +195,12 @@ if (isset($_POST['send'])) {
             <div class="alert alert-info py-2">
                 This page sends the selected template to a contact group. Sequence planning now lives on the dedicated WhatsApp Sequence Planner page.
             </div>
-            <form action="" method="post">
+            <form action="" method="post" id="sendMessageForm">
                 <?php echo Security::csrfField(); ?>
                 <div class="row">
                     <div class="mb-3">
-                        <select id="templateDropdown" name="template_id" class="form-control">
-                            <option>--Select Template--</option>
+                        <select id="templateDropdown" name="template_id" class="form-control" required>
+                            <option value="">--Select Template--</option>
                             <?php
                             $biz_id = Auth::requireLogin();
                             $stmt = $db->prepare('SELECT * FROM gd_whatsapp_templates WHERE biz_id = ? ORDER BY id DESC');
@@ -232,8 +232,8 @@ if (isset($_POST['send'])) {
 
                 <div class="row">
                     <div class="mb-3">
-                        <select name="group_id" class="form-control">
-                            <option>--Select Group--</option>
+                        <select id="groupDropdown" name="group_id" class="form-control" required>
+                            <option value="">--Select Group--</option>
                             <?php
                             $biz_id = Auth::requireLogin();
                             $stmt = $db->prepare('SELECT id, group_name FROM gd_groups WHERE biz_id = ? ORDER BY group_name');
@@ -252,8 +252,22 @@ if (isset($_POST['send'])) {
                     </div>
                 </div>
                 
-                <button class="btn btn-success" name="send"><i class="bi bi-send-check me-1"></i> Send Message</button>
+                <button class="btn btn-success" name="send" id="sendMessageButton"><i class="bi bi-send-check me-1"></i> Send Message</button>
             </form>
+
+            <div class="card border-0 shadow-sm mt-3 d-none" id="sendProgressCard">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong id="sendProgressTitle">Sending messages</strong>
+                        <span class="small text-muted" id="sendProgressCount">0 / 0</span>
+                    </div>
+                    <div class="progress" style="height: 14px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" id="sendProgressBar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                    </div>
+                    <div class="small text-muted mt-2" id="sendProgressStatus">Preparing recipients...</div>
+                    <div class="small text-danger mt-2 d-none" id="sendProgressErrors"></div>
+                </div>
+            </div>
         </div>
 
         <div class="col-lg-5 col-md-9 wg-main">
@@ -275,6 +289,113 @@ if (isset($_POST['send'])) {
 </div>
 
 <script>
+    const sendForm = document.getElementById('sendMessageForm');
+    const sendButton = document.getElementById('sendMessageButton');
+    const progressCard = document.getElementById('sendProgressCard');
+    const progressBar = document.getElementById('sendProgressBar');
+    const progressCount = document.getElementById('sendProgressCount');
+    const progressStatus = document.getElementById('sendProgressStatus');
+    const progressErrors = document.getElementById('sendProgressErrors');
+
+    function setProgress(done, total, sent, failed) {
+        const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+        progressBar.style.width = percent + '%';
+        progressBar.setAttribute('aria-valuenow', String(percent));
+        progressBar.textContent = percent + '%';
+        progressCount.textContent = `${done} / ${total}`;
+        progressStatus.textContent = `Sent: ${sent} | Failed: ${failed}`;
+    }
+
+    async function postBatch(formData) {
+        const response = await fetch('<?php echo h(app_url('business/send-message-batch')); ?>', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+            throw new Error(data.error || 'Unable to send messages.');
+        }
+        return data;
+    }
+
+    if (sendForm) {
+        sendForm.addEventListener('submit', async function (event) {
+            event.preventDefault();
+
+            if (!sendForm.reportValidity()) {
+                return;
+            }
+
+            progressCard.classList.remove('d-none');
+            progressErrors.classList.add('d-none');
+            progressErrors.textContent = '';
+            progressBar.classList.add('bg-success', 'progress-bar-animated');
+            progressBar.classList.remove('bg-danger');
+            setProgress(0, 0, 0, 0);
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Sending';
+
+            const baseData = new FormData(sendForm);
+            let totalSent = 0;
+            let totalFailed = 0;
+            let offset = 0;
+            const batchSize = 5;
+
+            try {
+                const prepareData = new FormData();
+                prepareData.append('_csrf_token', baseData.get('_csrf_token'));
+                prepareData.append('template_id', baseData.get('template_id'));
+                prepareData.append('group_id', baseData.get('group_id'));
+                prepareData.append('limit', String(batchSize));
+                prepareData.append('action', 'prepare');
+
+                const prepared = await postBatch(prepareData);
+                const total = Number(prepared.total || 0);
+                setProgress(0, total, 0, 0);
+
+                while (offset < total) {
+                    const batchData = new FormData();
+                    batchData.append('_csrf_token', baseData.get('_csrf_token'));
+                    batchData.append('template_id', baseData.get('template_id'));
+                    batchData.append('group_id', baseData.get('group_id'));
+                    batchData.append('limit', String(batchSize));
+                    batchData.append('offset', String(offset));
+                    batchData.append('action', 'send');
+
+                    const result = await postBatch(batchData);
+                    offset = Number(result.offset || (offset + batchSize));
+                    totalSent += Number(result.sent || 0);
+                    totalFailed += Number(result.failed || 0);
+                    setProgress(Math.min(offset, total), total, totalSent, totalFailed);
+
+                    if (Array.isArray(result.errors) && result.errors.length > 0) {
+                        progressErrors.classList.remove('d-none');
+                        progressErrors.textContent = result.errors.join(' ');
+                    }
+
+                    if (result.done) {
+                        break;
+                    }
+                }
+
+                progressBar.classList.remove('progress-bar-animated');
+                progressStatus.textContent = `Completed. Sent: ${totalSent} | Failed: ${totalFailed}`;
+            } catch (error) {
+                progressBar.classList.remove('bg-success');
+                progressBar.classList.add('bg-danger');
+                progressErrors.classList.remove('d-none');
+                progressErrors.textContent = error.message;
+                progressStatus.textContent = 'Stopped before completion.';
+            } finally {
+                sendButton.disabled = false;
+                sendButton.innerHTML = '<i class="bi bi-send-check me-1"></i> Send Message';
+            }
+        });
+    }
+
     document.getElementById('templateDropdown').addEventListener('change', function () {
         const templateId = this.value;
 
