@@ -141,9 +141,9 @@ function gdChatTimeline(mysqli $db, int $bizId, array $contact): array
         }
 
         $sql = '
-            SELECT direction, message_text, payload_json, delivery_status, notes, webhook_at, created_at
+            SELECT direction, event_type, message_text, payload_json, delivery_status, notes, webhook_at, created_at
             FROM gd_webhook_logs
-            WHERE biz_id = ? AND event_type = "message" AND (' . implode(' OR ', $where ?: ['1=0']) . ')
+            WHERE biz_id = ? AND (' . implode(' OR ', $where ?: ['1=0']) . ')
         ';
         array_unshift($params, $bizId);
         $types = 'i' . $types;
@@ -160,7 +160,13 @@ function gdChatTimeline(mysqli $db, int $bizId, array $contact): array
             if ($body === '') {
                 continue;
             }
-            $direction = strtolower((string) ($row['direction'] ?? 'inbound')) === 'inbound' ? 'inbound' : 'outbound';
+            $directionValue = strtolower((string) ($row['direction'] ?? 'inbound'));
+            $eventType = strtolower((string) ($row['event_type'] ?? ''));
+            if (!in_array($directionValue, ['inbound', 'message'], true) && $eventType !== 'message') {
+                continue;
+            }
+
+            $direction = 'inbound';
             $timeline[] = [
                 'direction' => $direction,
                 'source' => 'webhook',
@@ -169,6 +175,30 @@ function gdChatTimeline(mysqli $db, int $bizId, array $contact): array
                 'status' => (string) ($row['delivery_status'] ?? ''),
                 'time' => (string) ($row['webhook_at'] ?? $row['created_at'] ?? ''),
                 'notes' => (string) ($row['notes'] ?? ''),
+            ];
+        }
+    }
+
+    $lastReplyText = trim((string) ($contact['last_reply_text'] ?? ''));
+    if ($lastReplyText !== '') {
+        $lastReplyTime = (string) ($contact['last_inbound_at'] ?? $contact['reply_verified_at'] ?? $contact['updated_at'] ?? $contact['created_at'] ?? date('Y-m-d H:i:s'));
+        $alreadyShown = false;
+        foreach ($timeline as $message) {
+            if (($message['direction'] ?? '') === 'inbound' && trim((string) ($message['body'] ?? '')) === $lastReplyText) {
+                $alreadyShown = true;
+                break;
+            }
+        }
+
+        if (!$alreadyShown) {
+            $timeline[] = [
+                'direction' => 'inbound',
+                'source' => 'contact',
+                'title' => 'Client',
+                'body' => $lastReplyText,
+                'status' => '',
+                'time' => $lastReplyTime,
+                'notes' => 'Last reply saved on contact.',
             ];
         }
     }
@@ -346,7 +376,7 @@ try {
         $stmt = $db->prepare('
             SELECT from_phone, message_text, payload_json, webhook_at, created_at
             FROM gd_webhook_logs
-            WHERE biz_id = ? AND event_type = "message" AND LOWER(direction) = "inbound" AND COALESCE(from_phone, "") <> ""
+            WHERE biz_id = ? AND LOWER(direction) = "inbound" AND COALESCE(from_phone, "") <> ""
             ORDER BY COALESCE(webhook_at, created_at) DESC, id DESC
             LIMIT 150
         ');

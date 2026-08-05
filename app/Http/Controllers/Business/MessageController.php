@@ -380,8 +380,7 @@ class MessageController extends Controller
         if (Schema::hasTable('gd_webhook_logs')) {
             $webhookLogs = DB::table('gd_webhook_logs')
                 ->where('biz_id', $bizId)
-                ->where('event_type', 'message')
-                ->where(function ($query) use ($contact, $phoneVariants, $phoneWithoutPlus) {
+                ->where(function ($query) use ($contact, $phoneVariants, $phoneWithoutPlus, $phoneKey) {
                     $query->where('contact_id', $contact->id);
                     if (!empty($phoneVariants)) {
                         $query->orWhereIn('from_phone', $phoneVariants);
@@ -395,6 +394,12 @@ class MessageController extends Controller
                 })
                 ->get()
                 ->map(static function ($row) {
+                    $directionValue = strtolower((string) ($row->direction ?? 'inbound'));
+                    $eventType = strtolower((string) ($row->event_type ?? ''));
+                    if (!in_array($directionValue, ['inbound', 'message'], true) && $eventType !== 'message') {
+                        return null;
+                    }
+
                     $body = trim((string) ($row->message_text ?? ''));
                     if ($body === '' && !empty($row->payload_json)) {
                         $payload = json_decode((string) $row->payload_json, true);
@@ -410,20 +415,41 @@ class MessageController extends Controller
                     }
 
                     return [
-                        'direction' => strtolower((string) ($row->direction ?? 'inbound')) === 'inbound' ? 'inbound' : 'outbound',
-                        'title' => strtolower((string) ($row->direction ?? 'inbound')) === 'inbound' ? 'Client' : 'Business',
+                        'direction' => 'inbound',
+                        'title' => 'Client',
                         'body' => $body,
                         'status' => (string) ($row->delivery_status ?? ''),
                         'source' => 'webhook',
                         'time' => (string) ($row->webhook_at ?? $row->created_at ?? ''),
                         'notes' => (string) ($row->notes ?? ''),
                     ];
-                });
+                })
+                ->filter();
+        }
+
+        $lastReplyText = trim((string) ($contact->last_reply_text ?? ''));
+        if ($lastReplyText !== '') {
+            $lastReplyTime = (string) ($contact->last_inbound_at ?? $contact->reply_verified_at ?? $contact->updated_at ?? $contact->created_at ?? now());
+            $alreadyShown = $webhookLogs->contains(static function ($message) use ($lastReplyText) {
+                return ($message['direction'] ?? '') === 'inbound' && trim((string) ($message['body'] ?? '')) === $lastReplyText;
+            });
+
+            if (!$alreadyShown) {
+                $webhookLogs->push([
+                    'direction' => 'inbound',
+                    'title' => 'Client',
+                    'body' => $lastReplyText,
+                    'status' => '',
+                    'source' => 'contact',
+                    'time' => $lastReplyTime,
+                    'notes' => 'Last reply saved on contact.',
+                ]);
+            }
         }
 
         $sentMessages = DB::table('gd_sent_messages')
             ->where('biz_id', $bizId)
-            ->where(function ($query) use ($phoneVariants, $phoneWithoutPlus) {
+            ->where(function ($query) use ($phoneVariants, $phoneWithoutPlus, $phoneKey) {
                 if (!empty($phoneVariants)) {
                     $query->whereIn('phone_number', $phoneVariants);
                 }
