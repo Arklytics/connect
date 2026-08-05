@@ -10,6 +10,109 @@ use Illuminate\Support\Facades\Schema;
 
 class MessageController extends Controller
 {
+    public function chat(Request $request, ?int $contact = null)
+    {
+        $bizId = (int) $request->session()->get('biz_id');
+        $contacts = DB::table('gd_user_contacts')
+            ->where('biz_id', $bizId)
+            ->orderByDesc(Schema::hasColumn('gd_user_contacts', 'last_inbound_at') ? 'last_inbound_at' : 'updated_at')
+            ->orderByDesc('id')
+            ->limit(150)
+            ->get();
+
+        $selectedContact = null;
+        if ($contact !== null) {
+            $selectedContact = DB::table('gd_user_contacts')
+                ->where('biz_id', $bizId)
+                ->where('id', $contact)
+                ->first();
+        }
+
+        if (!$selectedContact && $contacts->isNotEmpty()) {
+            $selectedContact = $contacts->first();
+        }
+
+        $timeline = $selectedContact ? $this->conversationTimeline($bizId, $selectedContact) : [];
+
+        return view('business.messages.chat', [
+            'contacts' => $contacts,
+            'selectedContact' => $selectedContact,
+            'timeline' => $timeline,
+        ]);
+    }
+
+    public function reply(Request $request, int $contact)
+    {
+        $data = $request->validate([
+            'message' => ['required', 'string', 'max:1200'],
+        ]);
+
+        $bizId = (int) $request->session()->get('biz_id');
+        $contactRow = DB::table('gd_user_contacts')
+            ->where('biz_id', $bizId)
+            ->where('id', $contact)
+            ->first();
+
+        if (!$contactRow) {
+            return back()->with('error', 'Client contact was not found.');
+        }
+
+        $phone = \ApiSupport::normalizePhone((string) ($contactRow->phone_number ?? ''));
+        if ($phone === '') {
+            return back()->with('error', 'Client phone number is missing.');
+        }
+
+        $business = DB::table('gd_orders')->where('id', $bizId)->first();
+        if (!$business || empty($business->phone_number_id)) {
+            return back()->with('error', 'WhatsApp phone number ID is missing.');
+        }
+
+        $whatsappToken = trim((string) ($business->auth_token ?? ''));
+        if ($whatsappToken === '') {
+            $whatsappToken = (string) (DB::table('gd_app_settings')
+                ->where('admin_id', 0)
+                ->where('setting_key', 'META_ACCESS_TOKEN')
+                ->value('setting_value') ?: '');
+        }
+        if ($whatsappToken === '') {
+            $whatsappToken = (string) \Config::get('META_ACCESS_TOKEN', '');
+        }
+        if ($whatsappToken === '') {
+            return back()->with('error', 'WhatsApp access token is missing.');
+        }
+
+        $message = trim((string) $data['message']);
+        $payload = \ApiSupport::whatsappTextPayload($phone, $message);
+        $response = \ApiSupport::whatsappSendRequest((string) $business->phone_number_id, $whatsappToken, $payload);
+
+        $this->storeSentMessage([
+            'biz_id' => $bizId,
+            'phone_number' => $phone,
+            'template_id' => null,
+            'message_title' => 'Manual Chat Reply',
+            'message_body' => $message,
+            'status' => $response['ok'] ? 'sent' : 'failed',
+            'delivery_status' => $response['ok'] ? 'sent' : 'failed',
+            'error_message' => $response['ok'] ? null : (string) ($response['failure_reason'] ?? $response['error'] ?? 'Unknown error'),
+            'message_id' => $response['message_id'] !== null ? (string) $response['message_id'] : null,
+            'sent_at' => now(),
+            'request_json' => $response['request_json'] ?? \ApiSupport::encodeJson($payload),
+            'response_json' => $response['response_json'] ?? null,
+            'http_status_code' => $response['http_code'] ?? null,
+            'failure_reason' => $response['failure_reason'] ?? null,
+        ]);
+
+        if (!$response['ok']) {
+            return back()->with('error', 'Reply failed: ' . (string) ($response['failure_reason'] ?? $response['error'] ?? 'Unknown WhatsApp error.'));
+        }
+
+        if (Schema::hasColumn('gd_orders', 'messages_used')) {
+            DB::table('gd_orders')->where('id', $bizId)->increment('messages_used');
+        }
+
+        return redirect()->route('business.messages.chat', ['contact' => $contact])->with('success', 'Reply sent to client.');
+    }
+
     public function index(Request $request)
     {
         $bizId = $request->session()->get('biz_id');
@@ -265,6 +368,84 @@ class MessageController extends Controller
     {
         $rows = DB::select('SHOW COLUMNS FROM gd_user_contacts');
         return array_map(static fn ($row) => $row->Field ?? '', $rows);
+    }
+
+    private function conversationTimeline(int $bizId, object $contact): array
+    {
+        $phoneVariants = $this->phoneVariants((string) ($contact->phone_number ?? ''));
+        $phoneWithoutPlus = array_values(array_unique(array_map(static fn ($phone) => ltrim($phone, '+'), $phoneVariants)));
+
+        $webhookLogs = collect();
+        if (Schema::hasTable('gd_webhook_logs')) {
+            $webhookLogs = DB::table('gd_webhook_logs')
+                ->where('biz_id', $bizId)
+                ->where('event_type', 'message')
+                ->where(function ($query) use ($contact, $phoneVariants, $phoneWithoutPlus) {
+                    $query->where('contact_id', $contact->id);
+                    if (!empty($phoneVariants)) {
+                        $query->orWhereIn('from_phone', $phoneVariants);
+                    }
+                    if (!empty($phoneWithoutPlus)) {
+                        $query->orWhereIn(DB::raw('REPLACE(from_phone, "+", "")'), $phoneWithoutPlus);
+                    }
+                })
+                ->get()
+                ->map(static function ($row) {
+                    return [
+                        'direction' => strtolower((string) ($row->direction ?? 'inbound')) === 'inbound' ? 'inbound' : 'outbound',
+                        'title' => strtolower((string) ($row->direction ?? 'inbound')) === 'inbound' ? 'Client' : 'Business',
+                        'body' => trim((string) ($row->message_text ?? '')),
+                        'status' => (string) ($row->delivery_status ?? ''),
+                        'source' => 'webhook',
+                        'time' => (string) ($row->webhook_at ?? $row->created_at ?? ''),
+                        'notes' => (string) ($row->notes ?? ''),
+                    ];
+                });
+        }
+
+        $sentMessages = DB::table('gd_sent_messages')
+            ->where('biz_id', $bizId)
+            ->where(function ($query) use ($phoneVariants, $phoneWithoutPlus) {
+                if (!empty($phoneVariants)) {
+                    $query->whereIn('phone_number', $phoneVariants);
+                }
+                if (!empty($phoneWithoutPlus)) {
+                    $method = !empty($phoneVariants) ? 'orWhereIn' : 'whereIn';
+                    $query->{$method}(DB::raw('REPLACE(phone_number, "+", "")'), $phoneWithoutPlus);
+                }
+            })
+            ->get()
+            ->map(static function ($row) {
+                return [
+                    'direction' => 'outbound',
+                    'title' => (string) ($row->message_title ?? 'Business Reply'),
+                    'body' => trim((string) ($row->message_body ?? '')),
+                    'status' => (string) ($row->delivery_status ?? $row->status ?? ''),
+                    'source' => strcasecmp((string) ($row->message_title ?? ''), 'AI Auto Reply') === 0 ? 'ai' : 'sent',
+                    'time' => (string) ($row->sent_at ?? $row->created_at ?? ''),
+                    'notes' => (string) ($row->failure_reason ?? $row->error_message ?? ''),
+                ];
+            });
+
+        return $webhookLogs
+            ->merge($sentMessages)
+            ->filter(static fn ($item) => trim((string) ($item['body'] ?? '')) !== '')
+            ->sortBy(static fn ($item) => strtotime((string) ($item['time'] ?? '')) ?: 0)
+            ->values()
+            ->all();
+    }
+
+    private function phoneVariants(string $phone): array
+    {
+        $normalized = \ApiSupport::normalizePhone($phone);
+        $variants = array_filter([
+            trim($phone),
+            $normalized,
+            ltrim($normalized, '+'),
+            ltrim(trim($phone), '+'),
+        ]);
+
+        return array_values(array_unique($variants));
     }
 
     private function storeSentMessage(array $data): void

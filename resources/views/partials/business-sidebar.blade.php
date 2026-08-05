@@ -24,6 +24,9 @@
     <a href="{{ route('business.messages.create') }}" class="text-decoration-none">
       <li class="list-group-item text-light shadow rounded mt-2 p-3"><i class="bi bi-send-check-fill"></i> Send Messages</li>
     </a>
+    <a href="{{ route('business.messages.chat') }}" class="text-decoration-none">
+      <li class="list-group-item text-light shadow rounded mt-2 p-3"><i class="bi bi-chat-dots-fill"></i> Client Chats</li>
+    </a>
     <a href="{{ route('business.messages.index') }}" class="text-decoration-none">
       <li class="list-group-item text-light shadow rounded mt-2 p-3"><i class="bi bi-clipboard-data-fill"></i> Reports</li>
     </a>

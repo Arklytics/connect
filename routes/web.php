@@ -61,6 +61,8 @@ Route::prefix('business')->name('business.')->group(function () {
         Route::post('sequences', [SequenceController::class, 'store'])->name('sequences.store');
 
         Route::get('messages', [MessageController::class, 'index'])->name('messages.index');
+        Route::get('messages/chat/{contact?}', [MessageController::class, 'chat'])->name('messages.chat');
+        Route::post('messages/chat/{contact}/reply', [MessageController::class, 'reply'])->name('messages.chat.reply');
         Route::get('messages/send', [MessageController::class, 'create'])->name('messages.create');
         Route::post('messages/send', [MessageController::class, 'send'])->name('messages.send');
         Route::post('packages/request', [BusinessDashboardController::class, 'requestLimitIncrease'])->name('packages.request');
