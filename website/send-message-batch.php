@@ -4,8 +4,24 @@ include __DIR__ . '/../db_conn.php';
 
 $biz_id = Auth::requireLogin();
 
-function batchRecipients(mysqli $db, int $bizId, int $groupId, int $offset, int $limit): array
+function batchRange(array $payload, int $total): array
 {
+    $mode = strtolower(trim((string) ($payload['send_scope'] ?? 'all')));
+    if ($mode !== 'partial') {
+        return [1, $total, $total];
+    }
+
+    $start = max(1, Security::intFrom($payload['range_start'] ?? 1, 1));
+    $end = max($start, Security::intFrom($payload['range_end'] ?? $total, $total));
+    $start = min($start, max(1, $total));
+    $end = min($end, $total);
+
+    return [$start, $end, max(0, $end - $start + 1)];
+}
+
+function batchRecipients(mysqli $db, int $bizId, int $groupId, int $offset, int $limit, int $rangeStart): array
+{
+    $sqlOffset = max(0, ($rangeStart - 1) + $offset);
     $stmt = $db->prepare(
         'SELECT DISTINCT c.id, c.full_name, c.phone_number
          FROM gd_user_contacts c
@@ -14,7 +30,7 @@ function batchRecipients(mysqli $db, int $bizId, int $groupId, int $offset, int 
          ORDER BY c.id ASC
          LIMIT ? OFFSET ?'
     );
-    $stmt->bind_param('iiiii', $bizId, $groupId, $groupId, $limit, $offset);
+    $stmt->bind_param('iiiii', $bizId, $groupId, $groupId, $limit, $sqlOffset);
     $stmt->execute();
 
     $rows = [];
@@ -106,22 +122,31 @@ try {
     }
     $templateComponents = is_array($templateSend['components'] ?? null) ? $templateSend['components'] : [];
 
-    $total = batchRecipientCount($db, (int) $biz_id, $groupId);
-    if ($total <= 0) {
+    $groupTotal = batchRecipientCount($db, (int) $biz_id, $groupId);
+    if ($groupTotal <= 0) {
         ApiSupport::jsonResponse(['ok' => false, 'error' => 'No members found in the selected group.'], 422);
+    }
+
+    [$rangeStart, $rangeEnd, $total] = batchRange($_POST, $groupTotal);
+    if ($total <= 0) {
+        ApiSupport::jsonResponse(['ok' => false, 'error' => 'Selected contact range is empty.'], 422);
     }
 
     if ($action === 'prepare') {
         ApiSupport::jsonResponse([
             'ok' => true,
             'total' => $total,
+            'group_total' => $groupTotal,
+            'range_start' => $rangeStart,
+            'range_end' => $rangeEnd,
             'offset' => 0,
             'batch_size' => $limit,
         ]);
     }
 
     [$phoneNumberId, $whatsappToken] = batchCredentials($db, (int) $biz_id);
-    $recipients = batchRecipients($db, (int) $biz_id, $groupId, $offset, $limit);
+    $limit = min($limit, max(0, $total - $offset));
+    $recipients = batchRecipients($db, (int) $biz_id, $groupId, $offset, $limit, $rangeStart);
     $sent = 0;
     $failed = 0;
     $errors = [];

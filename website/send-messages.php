@@ -251,6 +251,36 @@ if (isset($_POST['send'])) {
                         </select>
                     </div>
                 </div>
+
+                <div class="row">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Send Scope</label>
+                        <div class="d-flex flex-wrap gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="send_scope" id="sendScopeAll" value="all" checked>
+                                <label class="form-check-label" for="sendScopeAll">All contacts</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="send_scope" id="sendScopePartial" value="partial">
+                                <label class="form-check-label" for="sendScopePartial">Partial range</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row d-none" id="partialRangeFields">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label" for="rangeStart">Start contact no.</label>
+                        <input type="number" class="form-control" id="rangeStart" name="range_start" min="1" value="1" placeholder="1">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label" for="rangeEnd">End contact no.</label>
+                        <input type="number" class="form-control" id="rangeEnd" name="range_end" min="1" placeholder="30">
+                    </div>
+                    <div class="col-12">
+                        <div class="small text-muted mb-3">Example: use 1 to 30 now, then 31 to 60 later. Contacts are counted in the selected group order.</div>
+                    </div>
+                </div>
                 
                 <button class="btn btn-success" name="send" id="sendMessageButton"><i class="bi bi-send-check me-1"></i> Send Message</button>
             </form>
@@ -296,6 +326,23 @@ if (isset($_POST['send'])) {
     const progressCount = document.getElementById('sendProgressCount');
     const progressStatus = document.getElementById('sendProgressStatus');
     const progressErrors = document.getElementById('sendProgressErrors');
+    const partialRangeFields = document.getElementById('partialRangeFields');
+    const sendScopeInputs = document.querySelectorAll('input[name="send_scope"]');
+
+    function selectedSendScope() {
+        const selected = document.querySelector('input[name="send_scope"]:checked');
+        return selected ? selected.value : 'all';
+    }
+
+    function syncRangeFields() {
+        const isPartial = selectedSendScope() === 'partial';
+        partialRangeFields.classList.toggle('d-none', !isPartial);
+        document.getElementById('rangeStart').required = isPartial;
+        document.getElementById('rangeEnd').required = isPartial;
+    }
+
+    sendScopeInputs.forEach((input) => input.addEventListener('change', syncRangeFields));
+    syncRangeFields();
 
     function setProgress(done, total, sent, failed) {
         const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
@@ -329,6 +376,18 @@ if (isset($_POST['send'])) {
                 return;
             }
 
+            if (selectedSendScope() === 'partial') {
+                const start = Number(document.getElementById('rangeStart').value || 0);
+                const end = Number(document.getElementById('rangeEnd').value || 0);
+                if (start <= 0 || end <= 0 || end < start) {
+                    progressCard.classList.remove('d-none');
+                    progressErrors.classList.remove('d-none');
+                    progressErrors.textContent = 'Enter a valid partial range. End contact no. must be greater than or equal to start contact no.';
+                    progressStatus.textContent = 'Range needs correction.';
+                    return;
+                }
+            }
+
             progressCard.classList.remove('d-none');
             progressErrors.classList.add('d-none');
             progressErrors.textContent = '';
@@ -351,10 +410,16 @@ if (isset($_POST['send'])) {
                 prepareData.append('group_id', baseData.get('group_id'));
                 prepareData.append('limit', String(batchSize));
                 prepareData.append('action', 'prepare');
+                prepareData.append('send_scope', baseData.get('send_scope') || 'all');
+                prepareData.append('range_start', baseData.get('range_start') || '');
+                prepareData.append('range_end', baseData.get('range_end') || '');
 
                 const prepared = await postBatch(prepareData);
                 const total = Number(prepared.total || 0);
                 setProgress(0, total, 0, 0);
+                if ((baseData.get('send_scope') || 'all') === 'partial') {
+                    progressStatus.textContent = `Preparing range ${prepared.range_start} to ${prepared.range_end}`;
+                }
 
                 while (offset < total) {
                     const batchData = new FormData();
@@ -364,6 +429,9 @@ if (isset($_POST['send'])) {
                     batchData.append('limit', String(batchSize));
                     batchData.append('offset', String(offset));
                     batchData.append('action', 'send');
+                    batchData.append('send_scope', baseData.get('send_scope') || 'all');
+                    batchData.append('range_start', baseData.get('range_start') || '');
+                    batchData.append('range_end', baseData.get('range_end') || '');
 
                     const result = await postBatch(batchData);
                     offset = Number(result.offset || (offset + batchSize));
