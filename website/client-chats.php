@@ -1,6 +1,6 @@
 <?php
-include '../session.php';
-include '../db_conn.php';
+include __DIR__ . '/../session.php';
+include __DIR__ . '/../db_conn.php';
 
 $biz_id = Auth::requireLogin();
 
@@ -30,10 +30,14 @@ function gdChatBind(mysqli_stmt $stmt, string $types, array $params): void
 
 function gdChatHasTable(mysqli $db, string $table): bool
 {
-    $stmt = $db->prepare('SHOW TABLES LIKE ?');
-    $stmt->bind_param('s', $table);
-    $stmt->execute();
-    return (bool) $stmt->get_result()->fetch_row();
+    try {
+        $stmt = $db->prepare('SHOW TABLES LIKE ?');
+        $stmt->bind_param('s', $table);
+        $stmt->execute();
+        return (bool) $stmt->get_result()->fetch_row();
+    } catch (Throwable $exception) {
+        return false;
+    }
 }
 
 function gdChatTimeline(mysqli $db, int $bizId, array $contact): array
@@ -139,96 +143,110 @@ function gdChatTimeline(mysqli $db, int $bizId, array $contact): array
 }
 
 $selectedContactId = Security::intFrom($_GET['contact_id'] ?? null);
+$pageError = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    Security::verifyCsrf();
-    $selectedContactId = Security::intFrom($_POST['contact_id'] ?? null);
-    $replyText = trim((string) ($_POST['message'] ?? ''));
+    try {
+        Security::verifyCsrf();
+        $selectedContactId = Security::intFrom($_POST['contact_id'] ?? null);
+        $replyText = trim((string) ($_POST['message'] ?? ''));
 
-    if ($replyText !== '' && $selectedContactId > 0) {
-        $stmt = $db->prepare('SELECT * FROM gd_user_contacts WHERE biz_id = ? AND id = ? LIMIT 1');
-        $stmt->bind_param('ii', $biz_id, $selectedContactId);
-        $stmt->execute();
-        $contact = $stmt->get_result()->fetch_assoc();
+        if ($replyText !== '' && $selectedContactId > 0) {
+            $stmt = $db->prepare('SELECT * FROM gd_user_contacts WHERE biz_id = ? AND id = ? LIMIT 1');
+            $stmt->bind_param('ii', $biz_id, $selectedContactId);
+            $stmt->execute();
+            $contact = $stmt->get_result()->fetch_assoc();
 
-        $stmt = $db->prepare('SELECT phone_number_id, auth_token FROM gd_orders WHERE id = ? LIMIT 1');
-        $stmt->bind_param('i', $biz_id);
-        $stmt->execute();
-        $business = $stmt->get_result()->fetch_assoc();
+            $stmt = $db->prepare('SELECT phone_number_id, auth_token FROM gd_orders WHERE id = ? LIMIT 1');
+            $stmt->bind_param('i', $biz_id);
+            $stmt->execute();
+            $business = $stmt->get_result()->fetch_assoc();
 
-        $phone = $contact ? ApiSupport::normalizePhone((string) ($contact['phone_number'] ?? '')) : '';
-        $token = trim((string) ($business['auth_token'] ?? ''));
-        if ($token === '') {
-            $token = AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', ''));
-        }
-
-        if ($contact && $phone !== '' && !empty($business['phone_number_id']) && $token !== '') {
-            $payload = ApiSupport::whatsappTextPayload($phone, $replyText);
-            $response = ApiSupport::whatsappSendRequest((string) $business['phone_number_id'], $token, $payload);
-            $status = $response['ok'] ? 'sent' : 'failed';
-            $error = $response['ok'] ? null : (string) ($response['failure_reason'] ?? $response['error'] ?? 'Unknown error');
-
-            ApiSupport::storeSentMessage(
-                $db,
-                (int) $biz_id,
-                $phone,
-                null,
-                'Manual Chat Reply',
-                $replyText,
-                $status,
-                $status,
-                $error,
-                $response['message_id'] ?? null,
-                date('Y-m-d H:i:s'),
-                $response['request_json'] ?? ApiSupport::encodeJson($payload),
-                $response['response_json'] ?? null,
-                $response['http_code'] ?? null,
-                $error
-            );
-
-            if ($response['ok']) {
-                ApiSupport::consumeMessageCredit($db, (int) $biz_id);
-                $_SESSION['flash_success'] = 'Reply sent to client.';
-            } else {
-                $_SESSION['flash_error'] = 'Reply failed: ' . $error;
+            $phone = $contact ? ApiSupport::normalizePhone((string) ($contact['phone_number'] ?? '')) : '';
+            $token = trim((string) ($business['auth_token'] ?? ''));
+            if ($token === '') {
+                $token = AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', ''));
             }
-        } else {
-            $_SESSION['flash_error'] = 'WhatsApp credentials or client phone number is missing.';
+
+            if ($contact && $phone !== '' && !empty($business['phone_number_id']) && $token !== '') {
+                $payload = ApiSupport::whatsappTextPayload($phone, $replyText);
+                $response = ApiSupport::whatsappSendRequest((string) $business['phone_number_id'], $token, $payload);
+                $status = $response['ok'] ? 'sent' : 'failed';
+                $error = $response['ok'] ? null : (string) ($response['failure_reason'] ?? $response['error'] ?? 'Unknown error');
+
+                ApiSupport::storeSentMessage(
+                    $db,
+                    (int) $biz_id,
+                    $phone,
+                    null,
+                    'Manual Chat Reply',
+                    $replyText,
+                    $status,
+                    $status,
+                    $error,
+                    $response['message_id'] ?? null,
+                    date('Y-m-d H:i:s'),
+                    $response['request_json'] ?? ApiSupport::encodeJson($payload),
+                    $response['response_json'] ?? null,
+                    $response['http_code'] ?? null,
+                    $error
+                );
+
+                if ($response['ok']) {
+                    ApiSupport::consumeMessageCredit($db, (int) $biz_id);
+                    $_SESSION['flash_success'] = 'Reply sent to client.';
+                } else {
+                    $_SESSION['flash_error'] = 'Reply failed: ' . $error;
+                }
+            } else {
+                $_SESSION['flash_error'] = 'WhatsApp credentials or client phone number is missing.';
+            }
         }
+    } catch (Throwable $exception) {
+        error_log('Client chat reply failed: ' . $exception->getMessage());
+        $_SESSION['flash_error'] = 'Unable to send reply right now. Please check WhatsApp credentials and database tables.';
     }
 
     header('Location: ' . app_url('business/client-chats?contact_id=' . $selectedContactId));
     exit;
 }
 
-$contactColumns = Crm::tableColumns($db, 'gd_user_contacts');
-$orderColumn = in_array('last_inbound_at', $contactColumns, true) ? 'last_inbound_at' : 'updated_at';
-$stmt = $db->prepare("SELECT * FROM gd_user_contacts WHERE biz_id = ? ORDER BY `$orderColumn` DESC, id DESC LIMIT 150");
-$stmt->bind_param('i', $biz_id);
-$stmt->execute();
-$contactsResult = $stmt->get_result();
 $contacts = [];
-while ($row = $contactsResult->fetch_assoc()) {
-    $contacts[] = $row;
-}
-
 $selectedContact = null;
-if ($selectedContactId > 0) {
-    foreach ($contacts as $contactRow) {
-        if ((int) $contactRow['id'] === $selectedContactId) {
-            $selectedContact = $contactRow;
-            break;
+$timeline = [];
+
+try {
+    $contactColumns = Crm::tableColumns($db, 'gd_user_contacts');
+    $orderColumn = in_array('last_inbound_at', $contactColumns, true) ? 'last_inbound_at' : 'updated_at';
+    $stmt = $db->prepare("SELECT * FROM gd_user_contacts WHERE biz_id = ? ORDER BY `$orderColumn` DESC, id DESC LIMIT 150");
+    $stmt->bind_param('i', $biz_id);
+    $stmt->execute();
+    $contactsResult = $stmt->get_result();
+    while ($row = $contactsResult->fetch_assoc()) {
+        $contacts[] = $row;
+    }
+
+    if ($selectedContactId > 0) {
+        foreach ($contacts as $contactRow) {
+            if ((int) $contactRow['id'] === $selectedContactId) {
+                $selectedContact = $contactRow;
+                break;
+            }
         }
     }
-}
-if ($selectedContact === null && $contacts !== []) {
-    $selectedContact = $contacts[0];
-    $selectedContactId = (int) $selectedContact['id'];
+
+    if ($selectedContact === null && $contacts !== []) {
+        $selectedContact = $contacts[0];
+        $selectedContactId = (int) $selectedContact['id'];
+    }
+
+    $timeline = $selectedContact ? gdChatTimeline($db, (int) $biz_id, $selectedContact) : [];
+} catch (Throwable $exception) {
+    error_log('Client chats page failed: ' . $exception->getMessage());
+    $pageError = 'Unable to load client chats right now. Please confirm the contact, sent message, and webhook log tables are available.';
 }
 
-$timeline = $selectedContact ? gdChatTimeline($db, (int) $biz_id, $selectedContact) : [];
-
-include 'header.php';
+include __DIR__ . '/header.php';
 ?>
 
 <style>
@@ -245,7 +263,7 @@ include 'header.php';
 <div class="container-fluid">
   <div class="row bg-light">
     <div class="col-lg-2 col-md-3 p-0 wg-sidebar">
-      <?php include 'sidebar.php'; ?>
+      <?php include __DIR__ . '/sidebar.php'; ?>
     </div>
 
     <div class="col-lg-10 col-md-9 wg-main">
@@ -264,6 +282,9 @@ include 'header.php';
       <?php endif; ?>
       <?php if (!empty($_SESSION['flash_error'])): ?>
         <div class="alert alert-danger mt-3"><?php echo h($_SESSION['flash_error']); unset($_SESSION['flash_error']); ?></div>
+      <?php endif; ?>
+      <?php if ($pageError !== null): ?>
+        <div class="alert alert-warning mt-3"><?php echo h($pageError); ?></div>
       <?php endif; ?>
 
       <div class="row g-3 mt-2">
