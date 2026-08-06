@@ -1297,6 +1297,112 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
         $stmt->execute();
     }
 
+    public static function ensureApiWebhookColumns(mysqli $db): void
+    {
+        $columns = self::tableColumns($db, 'gd_orders');
+
+        if (!in_array('api_webhook_url', $columns, true)) {
+            $db->query('ALTER TABLE gd_orders ADD COLUMN api_webhook_url VARCHAR(500) NULL');
+            $columns[] = 'api_webhook_url';
+        }
+
+        if (!in_array('api_webhook_secret', $columns, true)) {
+            $db->query('ALTER TABLE gd_orders ADD COLUMN api_webhook_secret VARCHAR(120) NULL');
+            $columns[] = 'api_webhook_secret';
+        }
+
+        if (!in_array('api_webhook_enabled', $columns, true)) {
+            $db->query('ALTER TABLE gd_orders ADD COLUMN api_webhook_enabled TINYINT(1) NOT NULL DEFAULT 0');
+        }
+    }
+
+    public static function apiWebhookConfig(mysqli $db, int $bizId): array
+    {
+        self::ensureApiWebhookColumns($db);
+
+        $stmt = $db->prepare('SELECT api_webhook_url, api_webhook_secret, api_webhook_enabled FROM gd_orders WHERE id = ? LIMIT 1');
+        $stmt->bind_param('i', $bizId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc() ?: [];
+
+        return [
+            'url' => trim((string) ($row['api_webhook_url'] ?? '')),
+            'secret' => trim((string) ($row['api_webhook_secret'] ?? '')),
+            'enabled' => (bool) ((int) ($row['api_webhook_enabled'] ?? 0)),
+        ];
+    }
+
+    public static function dispatchApiWebhook(mysqli $db, int $bizId, string $event, array $data, array $rawPayload = []): array
+    {
+        try {
+            $config = self::apiWebhookConfig($db, $bizId);
+        } catch (Throwable $exception) {
+            error_log('API webhook config unavailable for business ' . $bizId . ': ' . $exception->getMessage());
+            return ['ok' => false, 'skipped' => true, 'error' => 'API webhook config is unavailable.'];
+        }
+
+        if (!$config['enabled'] || $config['url'] === '') {
+            return ['ok' => false, 'skipped' => true, 'error' => 'API webhook is not configured.'];
+        }
+
+        $deliveryId = 'whd_' . bin2hex(random_bytes(16));
+        $createdAt = gmdate('c');
+        $body = self::encodeJson([
+            'event' => $event,
+            'delivery_id' => $deliveryId,
+            'api_version' => '2026-07-01',
+            'created_at' => $createdAt,
+            'biz_id' => $bizId,
+            'data' => $data,
+            'raw' => $rawPayload,
+        ]);
+
+        if ($body === null) {
+            return ['ok' => false, 'skipped' => false, 'error' => 'Could not encode webhook payload.'];
+        }
+
+        $timestamp = (string) time();
+        $headers = [
+            'Content-Type: application/json',
+            'User-Agent: Arklytics-Connect-Webhooks/1.0',
+            'X-Arklytics-Event: ' . $event,
+            'X-Arklytics-Delivery: ' . $deliveryId,
+            'X-Arklytics-Timestamp: ' . $timestamp,
+        ];
+
+        if ($config['secret'] !== '') {
+            $signature = hash_hmac('sha256', $timestamp . '.' . $body, $config['secret']);
+            $headers[] = 'X-Arklytics-Signature: sha256=' . $signature;
+        }
+
+        $curl = curl_init($config['url']);
+        curl_setopt_array($curl, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $body,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => 10,
+        ]);
+
+        $response = curl_exec($curl);
+        $httpCode = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($curl);
+        curl_close($curl);
+
+        $ok = $curlError === '' && $httpCode >= 200 && $httpCode < 300;
+        if (!$ok) {
+            error_log('API webhook delivery failed for business ' . $bizId . ': ' . ($curlError !== '' ? $curlError : 'HTTP ' . $httpCode . ' ' . trim((string) $response)));
+        }
+
+        return [
+            'ok' => $ok,
+            'skipped' => false,
+            'delivery_id' => $deliveryId,
+            'http_code' => $httpCode,
+            'error' => $ok ? null : ($curlError !== '' ? $curlError : 'HTTP ' . $httpCode),
+        ];
+    }
+
     public static function businessCredentials(mysqli $db, int $bizId): array
     {
         $stmt = $db->prepare('SELECT phone_number_id, auth_token FROM gd_orders WHERE id = ? LIMIT 1');

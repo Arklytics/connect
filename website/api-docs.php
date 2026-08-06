@@ -80,6 +80,7 @@ $homeUrl = app_url('');
             <a href="#auth">Authentication</a>
             <a href="#send">Send WhatsApp Message</a>
             <a href="#contacts">Import Contacts</a>
+            <a href="#webhooks">Webhooks</a>
             <a href="#examples">Language Examples</a>
             <a href="#responses">Responses</a>
             <a href="#errors">Errors</a>
@@ -167,6 +168,94 @@ X-API-KEY: YOUR_BUSINESS_API_KEY</code></pre>
     }
   ]
 }</code></pre>
+          </section>
+
+          <section id="webhooks" class="api-card p-4 mb-4">
+            <h2 class="h4 fw-bold">Webhooks</h2>
+            <p>Use API webhooks when you want Arklytics Connect to POST inbound WhatsApp replies and delivery updates to your application.</p>
+            <p><span class="method">GET</span> <code>/api/webhooks/config</code> returns the current webhook setup.</p>
+            <p><span class="method">POST</span> <code>/api/webhooks/config</code> enables or updates the destination URL.</p>
+<pre><code>curl -X POST "<?php echo h($baseUrl); ?>/api/webhooks/config" \
+  -H "Authorization: Bearer YOUR_BUSINESS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/webhooks/arklytics","enabled":true}'</code></pre>
+            <p>Successful setup response:</p>
+<pre><code>{
+  "ok": true,
+  "biz_id": 25,
+  "webhook": {
+    "enabled": true,
+    "url": "https://example.com/webhooks/arklytics",
+    "secret": "whsec_..."
+  }
+}</code></pre>
+            <p>Every webhook request is sent as JSON with these headers:</p>
+            <div class="table-responsive">
+              <table class="table align-middle">
+                <thead><tr><th>Header</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>X-Arklytics-Event</code></td><td>Event name, for example <code>message.received</code>.</td></tr>
+                  <tr><td><code>X-Arklytics-Delivery</code></td><td>Unique delivery ID for idempotency.</td></tr>
+                  <tr><td><code>X-Arklytics-Timestamp</code></td><td>Unix timestamp used for signature verification.</td></tr>
+                  <tr><td><code>X-Arklytics-Signature</code></td><td><code>sha256=...</code> HMAC using <code>timestamp + "." + raw_body</code> and your webhook secret.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p><code>message.received</code> payload:</p>
+<pre><code>{
+  "event": "message.received",
+  "delivery_id": "whd_8d6f...",
+  "api_version": "2026-07-01",
+  "created_at": "2026-08-06T08:30:00+00:00",
+  "biz_id": 25,
+  "data": {
+    "message_id": "wamid.HBg...",
+    "from": "+919876543210",
+    "to_phone_number_id": "1234567890",
+    "whatsapp_business_account_id": "9876543210",
+    "type": "text",
+    "text": "I am interested",
+    "timestamp": "2026-08-06T08:29:58+00:00",
+    "contact": {
+      "id": 44,
+      "full_name": "Nisha Patel",
+      "phone_number": "+919876543210"
+    }
+  },
+  "raw": {
+    "from": "919876543210",
+    "id": "wamid.HBg...",
+    "timestamp": "1786004998",
+    "type": "text",
+    "text": { "body": "I am interested" }
+  }
+}</code></pre>
+            <p><code>message.status</code> payload:</p>
+<pre><code>{
+  "event": "message.status",
+  "delivery_id": "whd_7b2a...",
+  "api_version": "2026-07-01",
+  "created_at": "2026-08-06T08:31:00+00:00",
+  "biz_id": 25,
+  "data": {
+    "message_id": "wamid.HBg...",
+    "recipient_id": "919876543210",
+    "status": "delivered",
+    "timestamp": "2026-08-06T08:30:55+00:00",
+    "phone_number_id": "1234567890",
+    "whatsapp_business_account_id": "9876543210",
+    "conversation": null,
+    "pricing": null,
+    "errors": null
+  },
+  "raw": {
+    "id": "wamid.HBg...",
+    "recipient_id": "919876543210",
+    "status": "delivered",
+    "timestamp": "1786005055"
+  }
+}</code></pre>
+            <p class="mb-0">Return any <code>2xx</code> status from your endpoint to mark delivery successful. Arklytics logs delivery failures but does not retry them yet.</p>
           </section>
 
           <section id="examples" class="api-card p-4 mb-4">

@@ -38,5 +38,20 @@ ApiSupport::jsonResponse([
                 ],
             ],
         ],
+        [
+            'method' => 'GET/POST/DELETE',
+            'path' => '/api/webhooks/config',
+            'description' => 'Configure a customer webhook URL for inbound message and delivery status events.',
+            'events' => [
+                'message.received',
+                'message.status',
+            ],
+            'headers_sent' => [
+                'X-Arklytics-Event',
+                'X-Arklytics-Delivery',
+                'X-Arklytics-Timestamp',
+                'X-Arklytics-Signature' => 'sha256 HMAC of "timestamp.body" when a secret is configured.',
+            ],
+        ],
     ],
 ], 200);

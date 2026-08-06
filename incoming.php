@@ -641,6 +641,21 @@ foreach (($payload['entry'] ?? []) as $entry) {
                 'webhook_at' => $replyAt->format('Y-m-d H:i:s'),
             ]);
 
+            ApiSupport::dispatchApiWebhook($db, $bizId, 'message.received', [
+                'message_id' => (string) ($message['id'] ?? $message['message_id'] ?? ''),
+                'from' => $from,
+                'to_phone_number_id' => $phoneNumberId,
+                'whatsapp_business_account_id' => $whatsappId,
+                'type' => (string) ($message['type'] ?? ''),
+                'text' => $replyText,
+                'timestamp' => $replyAt->format(DATE_ATOM),
+                'contact' => $contact ? [
+                    'id' => (int) $contact['id'],
+                    'full_name' => (string) ($contact['full_name'] ?? ''),
+                    'phone_number' => (string) ($contact['phone_number'] ?? ''),
+                ] : null,
+            ], is_array($message) ? $message : []);
+
             incomingSendAiAutoReply($db, $bizId, $from, $replyText, $contact ?: []);
             $processed++;
         }
@@ -665,6 +680,22 @@ foreach (($payload['entry'] ?? []) as $entry) {
                     ? (new DateTimeImmutable())->setTimestamp((int) $statusRow['timestamp'])->format('Y-m-d H:i:s')
                     : date('Y-m-d H:i:s'),
             ]);
+
+            $statusAt = !empty($statusRow['timestamp'])
+                ? (new DateTimeImmutable())->setTimestamp((int) $statusRow['timestamp'])
+                : new DateTimeImmutable();
+
+            ApiSupport::dispatchApiWebhook($db, $bizId, 'message.status', [
+                'message_id' => (string) ($statusRow['id'] ?? $statusRow['message_id'] ?? ''),
+                'recipient_id' => (string) ($statusRow['recipient_id'] ?? ''),
+                'status' => strtolower(trim((string) ($statusRow['status'] ?? ''))),
+                'timestamp' => $statusAt->format(DATE_ATOM),
+                'phone_number_id' => $phoneNumberId,
+                'whatsapp_business_account_id' => $whatsappId,
+                'conversation' => $statusRow['conversation'] ?? null,
+                'pricing' => $statusRow['pricing'] ?? null,
+                'errors' => $statusRow['errors'] ?? null,
+            ], $statusRow);
             $processed++;
         }
     }
