@@ -22,15 +22,26 @@ function batchRange(array $payload, int $total): array
 function batchRecipients(mysqli $db, int $bizId, int $groupId, int $offset, int $limit, int $rangeStart): array
 {
     $sqlOffset = max(0, ($rangeStart - 1) + $offset);
+    $targetGroupIds = ApiSupport::groupTargetIds($db, $bizId, $groupId, true);
+    if (empty($targetGroupIds)) {
+        return [];
+    }
+    $placeholders = implode(',', array_fill(0, count($targetGroupIds), '?'));
+    $types = 'i' . str_repeat('i', count($targetGroupIds)) . str_repeat('i', count($targetGroupIds)) . 'ii';
+    $values = array_merge([$bizId], $targetGroupIds, $targetGroupIds, [$limit, $sqlOffset]);
     $stmt = $db->prepare(
         'SELECT DISTINCT c.id, c.full_name, c.phone_number
          FROM gd_user_contacts c
          LEFT JOIN gd_group_contacts gc ON gc.contact_id = c.id AND gc.biz_id = c.biz_id
-         WHERE c.biz_id = ? AND (c.group_id = ? OR gc.group_id = ?)
+         WHERE c.biz_id = ? AND (c.group_id IN (' . $placeholders . ') OR gc.group_id IN (' . $placeholders . '))
          ORDER BY c.id ASC
          LIMIT ? OFFSET ?'
     );
-    $stmt->bind_param('iiiii', $bizId, $groupId, $groupId, $limit, $sqlOffset);
+    $bind = [$types];
+    foreach ($values as $index => $value) {
+        $bind[] = &$values[$index];
+    }
+    $stmt->bind_param(...$bind);
     $stmt->execute();
 
     $rows = [];
@@ -44,16 +55,27 @@ function batchRecipients(mysqli $db, int $bizId, int $groupId, int $offset, int 
 
 function batchRecipientCount(mysqli $db, int $bizId, int $groupId): int
 {
+    $targetGroupIds = ApiSupport::groupTargetIds($db, $bizId, $groupId, true);
+    if (empty($targetGroupIds)) {
+        return 0;
+    }
+    $placeholders = implode(',', array_fill(0, count($targetGroupIds), '?'));
+    $types = 'i' . str_repeat('i', count($targetGroupIds)) . str_repeat('i', count($targetGroupIds));
+    $values = array_merge([$bizId], $targetGroupIds, $targetGroupIds);
     $stmt = $db->prepare(
         'SELECT COUNT(*) AS total
          FROM (
             SELECT DISTINCT c.id
             FROM gd_user_contacts c
             LEFT JOIN gd_group_contacts gc ON gc.contact_id = c.id AND gc.biz_id = c.biz_id
-            WHERE c.biz_id = ? AND (c.group_id = ? OR gc.group_id = ?)
+            WHERE c.biz_id = ? AND (c.group_id IN (' . $placeholders . ') OR gc.group_id IN (' . $placeholders . '))
          ) recipients'
     );
-    $stmt->bind_param('iii', $bizId, $groupId, $groupId);
+    $bind = [$types];
+    foreach ($values as $index => $value) {
+        $bind[] = &$values[$index];
+    }
+    $stmt->bind_param(...$bind);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc() ?: [];
 

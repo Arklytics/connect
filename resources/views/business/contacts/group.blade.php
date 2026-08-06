@@ -4,6 +4,7 @@
 
 @section('content')
   <h4 class="mt-3"><i class="bi bi-list-columns-reverse"></i> Group Contacts</h4>
+  <p class="text-muted mb-0">Main groups include contacts from their subgroups. Subgroup views show only that subgroup.</p>
   <div class="table-responsive mt-4">
     <table class="table table-striped">
       <thead class="table-dark">

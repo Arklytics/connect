@@ -125,7 +125,9 @@
               <select class="form-select" name="group_id">
                 <option value="">No group</option>
                 @foreach ($groups ?? [] as $group)
-                  <option value="{{ $group->id }}" @selected(old('group_id') == $group->id)>{{ $group->group_name }}</option>
+                  <option value="{{ $group->id }}" @selected(old('group_id') == $group->id)>
+                    {{ !empty($group->parent_id) ? ($group->parent_name . ' / ' . $group->group_name) : $group->group_name }}
+                  </option>
                 @endforeach
               </select>
             </div>

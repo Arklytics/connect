@@ -14,6 +14,11 @@ ApiSupport::jsonResponse([
     ],
     'endpoints' => [
         [
+            'method' => 'GET/POST',
+            'path' => '/api/groups',
+            'description' => 'List groups and subgroups, or create a main group/subgroup with parent_id.',
+        ],
+        [
             'method' => 'POST',
             'path' => '/api/contacts/import',
             'description' => 'Import one or many contacts into a business workspace.',
@@ -22,6 +27,16 @@ ApiSupport::jsonResponse([
             'method' => 'POST',
             'path' => '/api/whatsapp/send',
             'description' => 'Send WhatsApp text or template messages for authentication, utility, and marketing use cases.',
+            'recipient_fields' => [
+                'to',
+                'phone_numbers',
+                'recipients',
+                'contact_ids',
+                'group_id',
+                'group_ids',
+                'subgroup_id',
+                'subgroup_ids',
+            ],
             'examples' => [
                 'authentication_otp' => [
                     'kind' => 'authentication',
@@ -33,7 +48,7 @@ ApiSupport::jsonResponse([
                 'utility_or_marketing_template' => [
                     'kind' => 'utility',
                     'template_name' => 'order_update',
-                    'recipients' => ['+919876543210'],
+                    'group_id' => 12,
                     'parameters' => ['A10045', 'Shipped'],
                 ],
             ],

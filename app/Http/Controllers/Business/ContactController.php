@@ -20,6 +20,7 @@ class ContactController extends Controller
     public function create(Request $request)
     {
         $bizId = $request->session()->get('biz_id');
+        $this->ensureGroupHierarchyColumn();
         $stage = $request->query('stage');
         $status = $request->query('status');
         $followUpOnly = $request->boolean('follow_up_only');
@@ -70,7 +71,7 @@ class ContactController extends Controller
         ];
 
         return view('business.contacts.create', [
-            'groups' => DB::table('gd_groups')->where('biz_id', $bizId)->orderBy('group_name')->get(),
+            'groups' => $this->groupOptions((int) $bizId),
             'contacts' => $contacts,
             'stats' => $stats,
             'followUps' => DB::table('gd_contact_followups as f')
@@ -85,6 +86,7 @@ class ContactController extends Controller
 
     public function store(Request $request)
     {
+        $this->ensureGroupHierarchyColumn();
         $data = $request->validate([
             'group_id' => ['nullable', 'integer', 'exists:gd_groups,id'],
             'full_name' => ['required', 'string', 'max:255'],
@@ -136,7 +138,8 @@ class ContactController extends Controller
 
     public function importForm(Request $request)
     {
-        $groups = DB::table('gd_groups')->where('biz_id', $request->session()->get('biz_id'))->orderBy('group_name')->get();
+        $this->ensureGroupHierarchyColumn();
+        $groups = $this->groupOptions((int) $request->session()->get('biz_id'));
         return view('business.contacts.import', compact('groups'));
     }
 
@@ -178,6 +181,7 @@ class ContactController extends Controller
 
     public function import(Request $request)
     {
+        $this->ensureGroupHierarchyColumn();
         $data = $request->validate([
             'group_id' => ['required', 'integer', 'exists:gd_groups,id'],
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt'],
@@ -210,11 +214,16 @@ class ContactController extends Controller
 
     public function group(Request $request, int $group)
     {
+        $bizId = (int) $request->session()->get('biz_id');
+        $this->ensureGroupHierarchyColumn();
+        $targetIds = $this->groupTargetIds($bizId, $group);
+
         $contacts = DB::table('gd_group_contacts as gc')
             ->join('gd_user_contacts as c', 'c.id', '=', 'gc.contact_id')
-            ->where('gc.biz_id', $request->session()->get('biz_id'))
-            ->where('gc.group_id', $group)
+            ->where('gc.biz_id', $bizId)
+            ->whereIn('gc.group_id', $targetIds)
             ->select('c.*')
+            ->distinct()
             ->get();
 
         return view('business.contacts.group', compact('contacts'));
@@ -382,5 +391,49 @@ class ContactController extends Controller
         }
 
         return in_array(strtolower((string) $value), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    private function ensureGroupHierarchyColumn(): void
+    {
+        if (!Schema::hasColumn('gd_groups', 'parent_id')) {
+            DB::statement('ALTER TABLE gd_groups ADD COLUMN parent_id BIGINT UNSIGNED NULL AFTER biz_id');
+        }
+    }
+
+    private function groupOptions(int $bizId)
+    {
+        return DB::table('gd_groups as g')
+            ->leftJoin('gd_groups as parent', 'parent.id', '=', 'g.parent_id')
+            ->where('g.biz_id', $bizId)
+            ->select('g.*', 'parent.group_name as parent_name')
+            ->orderByRaw('CASE WHEN g.parent_id IS NULL THEN g.id ELSE g.parent_id END DESC')
+            ->orderByRaw('CASE WHEN g.parent_id IS NULL THEN 0 ELSE 1 END')
+            ->orderBy('g.group_name')
+            ->get();
+    }
+
+    private function groupTargetIds(int $bizId, int $groupId): array
+    {
+        $ids = [$groupId];
+        $pending = [$groupId];
+
+        while (!empty($pending)) {
+            $parentId = array_shift($pending);
+            $children = DB::table('gd_groups')
+                ->where('biz_id', $bizId)
+                ->where('parent_id', $parentId)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            foreach ($children as $childId) {
+                if (!in_array($childId, $ids, true)) {
+                    $ids[] = $childId;
+                    $pending[] = $childId;
+                }
+            }
+        }
+
+        return $ids;
     }
 }

@@ -10,6 +10,7 @@ RewriteRule ^terms-conditions/?$ index.php [L,QSA]
 RewriteRule ^api-docs/?$ index.php [L,QSA]
 
 RewriteRule ^api/?$ api/index.php [L,QSA]
+RewriteRule ^api/groups/?$ api/groups.php [L,QSA]
 RewriteRule ^api/contacts/import/?$ api/contacts/import.php [L,QSA]
 RewriteRule ^api/whatsapp/send/?$ api/whatsapp/send.php [L,QSA]
 RewriteRule ^api/webhooks/config/?$ api/webhooks/config.php [L,QSA]

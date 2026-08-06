@@ -200,15 +200,17 @@ class MessageController extends Controller
     public function create(Request $request)
     {
         $bizId = $request->session()->get('biz_id');
+        $this->ensureGroupHierarchyColumn();
 
         return view('business.messages.create', [
             'templates' => DB::table('gd_whatsapp_templates')->where('biz_id', $bizId)->orderByDesc('id')->get(),
-            'groups' => DB::table('gd_groups')->where('biz_id', $bizId)->orderBy('group_name')->get(),
+            'groups' => $this->groupOptions((int) $bizId),
         ]);
     }
 
     public function send(Request $request)
     {
+        $this->ensureGroupHierarchyColumn();
         $data = $request->validate([
             'template_id' => ['required', 'integer', 'exists:gd_whatsapp_templates,id'],
             'group_id' => ['required', 'integer', 'exists:gd_groups,id'],
@@ -245,6 +247,11 @@ class MessageController extends Controller
             return back()->with('warning', 'Group not found for this business.');
         }
 
+        $targetGroupIds = $this->groupTargetIds($bizId, (int) $group->id);
+        if (empty($targetGroupIds)) {
+            return back()->with('warning', 'Group not found for this business.');
+        }
+
         $business = DB::table('gd_orders')->where('id', $bizId)->first();
         if (!$business || empty($business->phone_number_id)) {
             return back()->with('warning', 'WhatsApp credentials are missing. Please save the phone number ID first.');
@@ -253,9 +260,9 @@ class MessageController extends Controller
         $contacts = DB::table('gd_user_contacts as c')
             ->leftJoin('gd_group_contacts as gc', 'gc.contact_id', '=', 'c.id')
             ->where('c.biz_id', $bizId)
-            ->where(function ($query) use ($group) {
-                $query->where('c.group_id', $group->id)
-                    ->orWhere('gc.group_id', $group->id);
+            ->where(function ($query) use ($targetGroupIds) {
+                $query->whereIn('c.group_id', $targetGroupIds)
+                    ->orWhereIn('gc.group_id', $targetGroupIds);
             })
             ->select('c.id', 'c.full_name', 'c.phone_number')
             ->distinct()
@@ -549,5 +556,58 @@ class MessageController extends Controller
         }
 
         DB::table('gd_sent_messages')->insert($payload);
+    }
+
+    private function ensureGroupHierarchyColumn(): void
+    {
+        if (!Schema::hasColumn('gd_groups', 'parent_id')) {
+            DB::statement('ALTER TABLE gd_groups ADD COLUMN parent_id BIGINT UNSIGNED NULL AFTER biz_id');
+        }
+    }
+
+    private function groupOptions(int $bizId)
+    {
+        return DB::table('gd_groups as g')
+            ->leftJoin('gd_groups as parent', 'parent.id', '=', 'g.parent_id')
+            ->where('g.biz_id', $bizId)
+            ->select('g.*', 'parent.group_name as parent_name')
+            ->orderByRaw('CASE WHEN g.parent_id IS NULL THEN g.id ELSE g.parent_id END DESC')
+            ->orderByRaw('CASE WHEN g.parent_id IS NULL THEN 0 ELSE 1 END')
+            ->orderBy('g.group_name')
+            ->get();
+    }
+
+    private function groupTargetIds(int $bizId, int $groupId): array
+    {
+        $group = DB::table('gd_groups')
+            ->where('biz_id', $bizId)
+            ->where('id', $groupId)
+            ->first();
+
+        if (!$group) {
+            return [];
+        }
+
+        $ids = [$groupId];
+        $pending = [$groupId];
+
+        while (!empty($pending)) {
+            $parentId = array_shift($pending);
+            $children = DB::table('gd_groups')
+                ->where('biz_id', $bizId)
+                ->where('parent_id', $parentId)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            foreach ($children as $childId) {
+                if (!in_array($childId, $ids, true)) {
+                    $ids[] = $childId;
+                    $pending[] = $childId;
+                }
+            }
+        }
+
+        return $ids;
     }
 }

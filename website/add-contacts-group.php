@@ -246,6 +246,11 @@ function wgDownloadContactSampleCsv(): void
 }
 
 $biz_id = Auth::requireLogin();
+try {
+    ApiSupport::ensureGroupHierarchyColumns($db);
+} catch (Throwable $exception) {
+    error_log('Group hierarchy ensure failed: ' . $exception->getMessage());
+}
 
 if (isset($_GET['sample_csv'])) {
     wgDownloadContactSampleCsv();
@@ -350,12 +355,23 @@ if (isset($_POST['import'])) {
                             <option value="">--Select Group--</option>
                             <?php
                             $biz_id = Auth::requireLogin();
-                            $stmt = $db->prepare('SELECT id, group_name FROM gd_groups WHERE biz_id = ? ORDER BY group_name');
+                            $stmt = $db->prepare('
+                                SELECT g.id, g.parent_id, g.group_name, parent.group_name AS parent_name
+                                FROM gd_groups g
+                                LEFT JOIN gd_groups parent ON parent.id = g.parent_id
+                                WHERE g.biz_id = ?
+                                ORDER BY CASE WHEN g.parent_id IS NULL THEN g.id ELSE g.parent_id END DESC,
+                                         CASE WHEN g.parent_id IS NULL THEN 0 ELSE 1 END,
+                                         g.group_name
+                            ');
                             $stmt->bind_param('i', $biz_id);
                             $stmt->execute();
                             $sql3 = $stmt->get_result();
                             while ($get3 = mysqli_fetch_assoc($sql3)) {
-                                echo "<option value='" . h($get3['id']) . "'>" . h($get3['group_name']) . "</option>";
+                                $label = !empty($get3['parent_id'])
+                                    ? (($get3['parent_name'] ?? '') . ' / ' . $get3['group_name'])
+                                    : $get3['group_name'];
+                                echo "<option value='" . h($get3['id']) . "'>" . h($label) . "</option>";
                             }
                             ?>
                         </select>

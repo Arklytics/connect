@@ -1316,6 +1316,59 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
         }
     }
 
+    public static function ensureGroupHierarchyColumns(mysqli $db): void
+    {
+        $columns = self::tableColumns($db, 'gd_groups');
+
+        if (!in_array('parent_id', $columns, true)) {
+            $db->query('ALTER TABLE gd_groups ADD COLUMN parent_id BIGINT UNSIGNED NULL AFTER biz_id');
+        }
+    }
+
+    public static function groupTargetIds(mysqli $db, int $bizId, int $groupId, bool $includeChildren = true): array
+    {
+        if ($groupId <= 0) {
+            return [];
+        }
+
+        try {
+            self::ensureGroupHierarchyColumns($db);
+        } catch (Throwable $exception) {
+            error_log('Group hierarchy unavailable: ' . $exception->getMessage());
+            return [$groupId];
+        }
+
+        $stmt = $db->prepare('SELECT id FROM gd_groups WHERE id = ? AND biz_id = ? LIMIT 1');
+        $stmt->bind_param('ii', $groupId, $bizId);
+        $stmt->execute();
+        if (!$stmt->get_result()->fetch_assoc()) {
+            return [];
+        }
+
+        $ids = [$groupId];
+        if (!$includeChildren) {
+            return $ids;
+        }
+
+        $pending = [$groupId];
+        while (!empty($pending)) {
+            $parentId = array_shift($pending);
+            $childStmt = $db->prepare('SELECT id FROM gd_groups WHERE biz_id = ? AND parent_id = ?');
+            $childStmt->bind_param('ii', $bizId, $parentId);
+            $childStmt->execute();
+            $result = $childStmt->get_result();
+            while ($row = $result->fetch_assoc()) {
+                $childId = (int) ($row['id'] ?? 0);
+                if ($childId > 0 && !in_array($childId, $ids, true)) {
+                    $ids[] = $childId;
+                    $pending[] = $childId;
+                }
+            }
+        }
+
+        return $ids;
+    }
+
     public static function apiWebhookConfig(mysqli $db, int $bizId): array
     {
         self::ensureApiWebhookColumns($db);

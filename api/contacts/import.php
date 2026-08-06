@@ -25,8 +25,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $payload = ApiSupport::requestJson();
 $requestedBizId = Security::intFrom($payload['biz_id'] ?? null);
 $bizId = ApiSupport::requireBusinessApiKey($db, $requestedBizId);
-$groupId = Security::intFrom($payload['group_id'] ?? null);
+$groupId = Security::intFrom($payload['subgroup_id'] ?? $payload['group_id'] ?? null);
 $rows = $payload['contacts'] ?? $payload['contact'] ?? $payload['rows'] ?? [];
+
+try {
+    ApiSupport::ensureGroupHierarchyColumns($db);
+} catch (Throwable $exception) {
+    error_log('Group hierarchy ensure failed: ' . $exception->getMessage());
+}
 
 if (!is_array($rows)) {
     $rows = [$rows];
@@ -189,6 +195,7 @@ ApiSupport::jsonResponse([
     'ok' => true,
     'biz_id' => $bizId,
     'group_id' => $groupId > 0 ? $groupId : null,
+    'subgroup_id' => $groupId > 0 ? $groupId : null,
     'created' => $created,
     'updated' => $updated,
     'skipped' => $skipped,

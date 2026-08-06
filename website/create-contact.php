@@ -143,6 +143,11 @@ function gdDynamicUpdate(mysqli $db, string $table, array $data, string $whereSq
 }
 
 $biz_id = Auth::requireLogin();
+try {
+    ApiSupport::ensureGroupHierarchyColumns($db);
+} catch (Throwable $exception) {
+    error_log('Group hierarchy ensure failed: ' . $exception->getMessage());
+}
 
 include 'header.php';
 $contactColumns = gdTableColumns($db, 'gd_user_contacts');
@@ -306,7 +311,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $groups = [];
-$stmt = $db->prepare('SELECT id, group_name FROM gd_groups WHERE biz_id = ? ORDER BY group_name');
+$stmt = $db->prepare('
+    SELECT g.id, g.parent_id, g.group_name, parent.group_name AS parent_name
+    FROM gd_groups g
+    LEFT JOIN gd_groups parent ON parent.id = g.parent_id
+    WHERE g.biz_id = ?
+    ORDER BY CASE WHEN g.parent_id IS NULL THEN g.id ELSE g.parent_id END DESC,
+             CASE WHEN g.parent_id IS NULL THEN 0 ELSE 1 END,
+             g.group_name
+');
 $stmt->bind_param('i', $biz_id);
 $stmt->execute();
 $groupResult = $stmt->get_result();
@@ -452,7 +465,8 @@ if ($followupTableExists) {
                                 <select class="form-control p-2 shadow" name="group_id" required>
                                     <option value="">--Select Group--</option>
                                     <?php foreach ($groups as $group): ?>
-                                        <option value="<?php echo h($group['id']); ?>"><?php echo h($group['group_name']); ?></option>
+                                        <?php $label = !empty($group['parent_id']) ? (($group['parent_name'] ?? '') . ' / ' . $group['group_name']) : $group['group_name']; ?>
+                                        <option value="<?php echo h($group['id']); ?>"><?php echo h($label); ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>

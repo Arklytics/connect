@@ -79,6 +79,7 @@ $homeUrl = app_url('');
             <a href="#quick-start">Quick Start</a>
             <a href="#auth">Authentication</a>
             <a href="#send">Send WhatsApp Message</a>
+            <a href="#groups">Groups</a>
             <a href="#contacts">Import Contacts</a>
             <a href="#webhooks">Webhooks</a>
             <a href="#examples">Language Examples</a>
@@ -115,7 +116,7 @@ X-API-KEY: YOUR_BUSINESS_API_KEY</code></pre>
                 <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
                 <tbody>
                   <tr><td><code>kind</code></td><td>string</td><td>No</td><td><code>text</code>, <code>template</code>, <code>utility</code>, <code>marketing</code>, or <code>authentication</code>. Default is <code>text</code>.</td></tr>
-                  <tr><td><code>to</code></td><td>string/array</td><td>Yes</td><td>One phone number or many phone numbers. Also accepts <code>phone_numbers</code>, <code>recipients</code>, or <code>contact_ids</code>.</td></tr>
+                  <tr><td><code>to</code></td><td>string/array</td><td>Yes*</td><td>One phone number or many phone numbers. Also accepts <code>phone_numbers</code>, <code>recipients</code>, <code>contact_ids</code>, <code>group_id</code>, <code>group_ids</code>, <code>subgroup_id</code>, or <code>subgroup_ids</code>.</td></tr>
                   <tr><td><code>message</code></td><td>string</td><td>For text</td><td>Text body for free-form WhatsApp text messages.</td></tr>
                   <tr><td><code>template_name</code></td><td>string</td><td>For templates</td><td>Approved WhatsApp template name saved in Arklytics Connect.</td></tr>
                   <tr><td><code>language</code></td><td>string</td><td>No</td><td>Template language, for example <code>en_US</code>. Defaults from the saved template.</td></tr>
@@ -125,12 +126,26 @@ X-API-KEY: YOUR_BUSINESS_API_KEY</code></pre>
                 </tbody>
               </table>
             </div>
+            <p class="small text-muted">*Provide at least one recipient source: phone numbers, contact IDs, group IDs, or subgroup IDs.</p>
 <pre><code>{
   "kind": "utility",
   "template_name": "order_update",
   "language": "en_US",
-  "to": ["+919876543210"],
+  "group_id": 12,
   "parameters": ["A10045", "Shipped"]
+}</code></pre>
+          </section>
+
+          <section id="groups" class="api-card p-4 mb-4">
+            <h2 class="h4 fw-bold">Groups & Subgroups</h2>
+            <p><span class="method">GET</span> <code>/api/groups</code> lists all main groups and subgroups.</p>
+            <p><span class="method">POST</span> <code>/api/groups</code> creates a main group. Add <code>parent_id</code> to create a subgroup under a main group.</p>
+<pre><code>{
+  "group_name": "Retail Leads"
+}</code></pre>
+<pre><code>{
+  "group_name": "Hot Leads",
+  "parent_id": 12
 }</code></pre>
           </section>
 
@@ -141,7 +156,8 @@ X-API-KEY: YOUR_BUSINESS_API_KEY</code></pre>
               <table class="table align-middle">
                 <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
                 <tbody>
-                  <tr><td><code>group_id</code></td><td>integer</td><td>No</td><td>Add imported contacts to an existing contact group.</td></tr>
+                  <tr><td><code>group_id</code></td><td>integer</td><td>No</td><td>Add imported contacts to an existing main group or subgroup.</td></tr>
+                  <tr><td><code>subgroup_id</code></td><td>integer</td><td>No</td><td>Alias for <code>group_id</code> when importing directly into a subgroup.</td></tr>
                   <tr><td><code>contacts</code></td><td>array</td><td>Yes</td><td>Contact rows. Also accepts <code>contact</code> or <code>rows</code>.</td></tr>
                   <tr><td><code>full_name</code></td><td>string</td><td>No</td><td>Also accepts <code>name</code> or <code>contact_name</code>.</td></tr>
                   <tr><td><code>phone_number</code></td><td>string</td><td>Yes</td><td>Also accepts <code>mobile_number</code> or <code>phone</code>.</td></tr>
@@ -168,6 +184,7 @@ X-API-KEY: YOUR_BUSINESS_API_KEY</code></pre>
     }
   ]
 }</code></pre>
+            <p class="mb-0">When sending messages, a main <code>group_id</code> includes contacts in its subgroups. A subgroup ID sends only to that subgroup.</p>
           </section>
 
           <section id="webhooks" class="api-card p-4 mb-4">

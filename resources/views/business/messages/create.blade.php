@@ -9,7 +9,7 @@
         <div>
           <div class="text-uppercase small opacity-75 mb-2">Broadcast Center</div>
           <h4 class="mb-2">Send Messages</h4>
-          <div class="opacity-75">This page sends templates to a chosen group. Sequence planning lives on the planner page.</div>
+          <div class="opacity-75">Send templates to a main group or one subgroup. Main groups include their subgroups.</div>
         </div>
         <a href="{{ route('business.sequences.index') }}" class="btn btn-light text-success fw-semibold">
           <i class="bi bi-diagram-3"></i> Open Sequence Planner
@@ -40,11 +40,14 @@
         </div>
         <div class="mb-3">
           <select name="group_id" class="form-control" required>
-            <option value="">--Select Group--</option>
+            <option value="">--Select Group or Subgroup--</option>
             @foreach ($groups ?? [] as $group)
-              <option value="{{ $group->id }}">{{ $group->group_name }}</option>
+              <option value="{{ $group->id }}">
+                {{ !empty($group->parent_id) ? ($group->parent_name . ' / ' . $group->group_name) : $group->group_name . ' (includes subgroups)' }}
+              </option>
             @endforeach
           </select>
+          <div class="form-text">Choosing a main group sends to contacts in that group and all subgroups under it.</div>
         </div>
         <button class="btn btn-success" type="submit">Send Message</button>
       </form>

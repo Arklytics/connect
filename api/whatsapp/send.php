@@ -8,6 +8,12 @@ function apiResolveRecipients(mysqli $db, int $bizId, array $payload): array
 {
     $recipients = [];
 
+    try {
+        ApiSupport::ensureGroupHierarchyColumns($db);
+    } catch (Throwable $exception) {
+        error_log('Group hierarchy ensure failed: ' . $exception->getMessage());
+    }
+
     $phoneNumbers = $payload['phone_numbers'] ?? $payload['to'] ?? $payload['phone_number'] ?? [];
     if (!is_array($phoneNumbers)) {
         $phoneNumbers = [$phoneNumbers];
@@ -55,6 +61,56 @@ function apiResolveRecipients(mysqli $db, int $bizId, array $payload): array
             'contact_id' => $contactId,
             'full_name' => (string) ($contact['full_name'] ?? ''),
         ];
+    }
+
+    $groupIds = [];
+    foreach (['group_id', 'subgroup_id', 'group_ids', 'subgroup_ids'] as $key) {
+        $values = $payload[$key] ?? [];
+        if (!is_array($values)) {
+            $values = [$values];
+        }
+
+        foreach ($values as $value) {
+            $id = Security::intFrom($value);
+            if ($id > 0) {
+                $groupIds[] = $id;
+            }
+        }
+    }
+
+    $targetGroupIds = [];
+    foreach (array_values(array_unique($groupIds)) as $groupId) {
+        $targetGroupIds = array_merge($targetGroupIds, ApiSupport::groupTargetIds($db, $bizId, $groupId, true));
+    }
+    $targetGroupIds = array_values(array_unique(array_filter($targetGroupIds)));
+
+    if (!empty($targetGroupIds)) {
+        $placeholders = implode(',', array_fill(0, count($targetGroupIds), '?'));
+        $types = 'i' . str_repeat('i', count($targetGroupIds)) . str_repeat('i', count($targetGroupIds));
+        $values = array_merge([$bizId], $targetGroupIds, $targetGroupIds);
+        $sql = 'SELECT DISTINCT c.id, c.full_name, c.phone_number
+                FROM gd_user_contacts c
+                LEFT JOIN gd_group_contacts gc ON gc.contact_id = c.id AND gc.biz_id = c.biz_id
+                WHERE c.biz_id = ?
+                  AND (c.group_id IN (' . $placeholders . ') OR gc.group_id IN (' . $placeholders . '))';
+        $stmt = $db->prepare($sql);
+        $bind = [$types];
+        foreach ($values as $index => $value) {
+            $bind[] = &$values[$index];
+        }
+        $stmt->bind_param(...$bind);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($contact = $result->fetch_assoc()) {
+            $phone = ApiSupport::normalizePhone((string) ($contact['phone_number'] ?? ''));
+            if ($phone !== '') {
+                $recipients[] = [
+                    'phone_number' => $phone,
+                    'contact_id' => (int) ($contact['id'] ?? 0),
+                    'full_name' => (string) ($contact['full_name'] ?? ''),
+                ];
+            }
+        }
     }
 
     $rawRecipients = $payload['recipients'] ?? [];

@@ -26,7 +26,9 @@
           <select class="form-select" name="group_id" required>
             <option value="">--Select Group--</option>
             @foreach ($groups ?? [] as $group)
-              <option value="{{ $group->id }}">{{ $group->group_name }}</option>
+              <option value="{{ $group->id }}" @selected((string) request('group_id') === (string) $group->id)>
+                {{ !empty($group->parent_id) ? ($group->parent_name . ' / ' . $group->group_name) : $group->group_name }}
+              </option>
             @endforeach
           </select>
         </div>

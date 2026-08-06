@@ -3,6 +3,11 @@ include '../session.php';
 include '../db_conn.php';
 
 $biz_id = Auth::requireLogin();
+try {
+    ApiSupport::ensureGroupHierarchyColumns($db);
+} catch (Throwable $exception) {
+    error_log('Group hierarchy ensure failed: ' . $exception->getMessage());
+}
 
 include 'header.php'; 
 
@@ -52,6 +57,14 @@ $contactColumns = gdTableColumns($db, 'gd_user_contacts');
                     $i=0;
                     $biz_id = Auth::requireLogin();
                     $group_id = Security::intFrom($_GET['group_id'] ?? null);
+                    if ($group_id <= 0) {
+                        $targetGroupIds = [0];
+                    } else {
+                        $targetGroupIds = ApiSupport::groupTargetIds($db, (int) $biz_id, (int) $group_id, true);
+                        if (empty($targetGroupIds)) {
+                            $targetGroupIds = [0];
+                        }
+                    }
                     $selectFields = ['full_name', 'phone_number', 'email', 'status'];
                     foreach (['lead_stage', 'lead_status', 'next_follow_up_at'] as $field) {
                         if (in_array($field, $contactColumns, true)) {
@@ -59,8 +72,15 @@ $contactColumns = gdTableColumns($db, 'gd_user_contacts');
                         }
                     }
 
-                    $stmt = $db->prepare('SELECT contact_id FROM gd_group_contacts WHERE biz_id = ? AND group_id = ?');
-                    $stmt->bind_param('ii', $biz_id, $group_id);
+                    $placeholders = implode(',', array_fill(0, count($targetGroupIds), '?'));
+                    $types = 'i' . str_repeat('i', count($targetGroupIds));
+                    $values = array_merge([(int) $biz_id], $targetGroupIds);
+                    $stmt = $db->prepare('SELECT DISTINCT contact_id FROM gd_group_contacts WHERE biz_id = ? AND group_id IN (' . $placeholders . ')');
+                    $bind = [$types];
+                    foreach ($values as $index => $value) {
+                        $bind[] = &$values[$index];
+                    }
+                    $stmt->bind_param(...$bind);
                     $stmt->execute();
                     $sql3 = $stmt->get_result();
                     while($get3 = mysqli_fetch_assoc($sql3))

@@ -5,6 +5,12 @@ include '../db_conn.php';
 $biz_id = Auth::requireLogin();
 
 include 'header.php';
+
+try {
+    ApiSupport::ensureGroupHierarchyColumns($db);
+} catch (Throwable $exception) {
+    error_log('Group hierarchy ensure failed: ' . $exception->getMessage());
+}
 ?>
 <?php
 if (isset($_POST['send'])) {
@@ -40,14 +46,25 @@ if (isset($_POST['send'])) {
     }
     $templateComponents = is_array($templateSend) ? ($templateSend['components'] ?? []) : [];
 
-    // Fetch group members
+    // Fetch group members. Main groups include contacts in their subgroups.
+    $targetGroupIds = ApiSupport::groupTargetIds($db, (int) $biz_id, (int) $group_id, true);
+    if (empty($targetGroupIds)) {
+        die("<script>alert('Group not found!');</script>");
+    }
+    $placeholders = implode(',', array_fill(0, count($targetGroupIds), '?'));
+    $types = 'i' . str_repeat('i', count($targetGroupIds)) . str_repeat('i', count($targetGroupIds));
+    $values = array_merge([(int) $biz_id], $targetGroupIds, $targetGroupIds);
     $stmt = $db->prepare(
         'SELECT DISTINCT c.id, c.full_name, c.phone_number
          FROM gd_user_contacts c
          LEFT JOIN gd_group_contacts gc ON gc.contact_id = c.id AND gc.biz_id = c.biz_id
-         WHERE c.biz_id = ? AND (c.group_id = ? OR gc.group_id = ?)'
+         WHERE c.biz_id = ? AND (c.group_id IN (' . $placeholders . ') OR gc.group_id IN (' . $placeholders . '))'
     );
-    $stmt->bind_param('iii', $biz_id, $group_id, $group_id);
+    $bind = [$types];
+    foreach ($values as $index => $value) {
+        $bind[] = &$values[$index];
+    }
+    $stmt->bind_param(...$bind);
     $stmt->execute();
     $groupQuery = $stmt->get_result();
 
@@ -193,7 +210,7 @@ if (isset($_POST['send'])) {
         <div class="col-lg-5 col-md-9 wg-main">
             <h4 class="mt-2"><i class="bi bi-send"></i> Send Messages</h4>
             <div class="alert alert-info py-2">
-                This page sends the selected template to a contact group. Sequence planning now lives on the dedicated WhatsApp Sequence Planner page.
+                This page sends the selected template to a main group or subgroup. Main groups include contacts in all subgroups.
             </div>
             <form action="" method="post" id="sendMessageForm">
                 <?php echo Security::csrfField(); ?>
@@ -233,17 +250,25 @@ if (isset($_POST['send'])) {
                 <div class="row">
                     <div class="mb-3">
                         <select id="groupDropdown" name="group_id" class="form-control" required>
-                            <option value="">--Select Group--</option>
+                            <option value="">--Select Group or Subgroup--</option>
                             <?php
                             $biz_id = Auth::requireLogin();
-                            $stmt = $db->prepare('SELECT id, group_name FROM gd_groups WHERE biz_id = ? ORDER BY group_name');
+                            $stmt = $db->prepare('
+                                SELECT g.id, g.parent_id, g.group_name, parent.group_name AS parent_name
+                                FROM gd_groups g
+                                LEFT JOIN gd_groups parent ON parent.id = g.parent_id
+                                WHERE g.biz_id = ?
+                                ORDER BY CASE WHEN g.parent_id IS NULL THEN g.id ELSE g.parent_id END DESC,
+                                         CASE WHEN g.parent_id IS NULL THEN 0 ELSE 1 END,
+                                         g.group_name
+                            ');
                             $stmt->bind_param('i', $biz_id);
                             $stmt->execute();
                             $sql3 = $stmt->get_result();
                             while ($get3 = mysqli_fetch_assoc($sql3)) {
                                 ?>
                                 <option value="<?php echo h($get3['id']); ?>">
-                                    <?php echo h($get3['group_name']); ?>
+                                    <?php echo h(!empty($get3['parent_id']) ? (($get3['parent_name'] ?? '') . ' / ' . $get3['group_name']) : ($get3['group_name'] . ' (includes subgroups)')); ?>
                                 </option>
                                 <?php
                             }
