@@ -56,7 +56,7 @@ if ($method !== 'POST') {
 }
 
 $groupName = trim((string) ($payload['group_name'] ?? $payload['name'] ?? ''));
-$parentId = Security::intFrom($payload['parent_id'] ?? $payload['group_id'] ?? null);
+$parentId = Security::intFrom($payload['parent_id'] ?? null);
 
 if ($groupName === '') {
     ApiSupport::jsonResponse(['ok' => false, 'error' => 'group_name is required.'], 422);

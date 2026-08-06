@@ -121,13 +121,20 @@
           <form action="{{ route('business.contacts.store') }}" method="POST" class="row g-3">
             @csrf
             <div class="col-md-4">
-              <label class="form-label">Group</label>
-              <select class="form-select" name="group_id">
-                <option value="">No group</option>
-                @foreach ($groups ?? [] as $group)
-                  <option value="{{ $group->id }}" @selected(old('group_id') == $group->id)>
-                    {{ !empty($group->parent_id) ? ($group->parent_name . ' / ' . $group->group_name) : $group->group_name }}
-                  </option>
+              <label class="form-label">Parent Group</label>
+              <select class="form-select parent-select" name="parent_group_id" data-child="#contactSubgroup" required>
+                <option value="">Select parent group</option>
+                @foreach ($parentGroups ?? [] as $group)
+                  <option value="{{ $group->id }}" @selected(old('parent_group_id') == $group->id)>{{ $group->group_name }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Subgroup</label>
+              <select class="form-select subgroup-select" id="contactSubgroup" name="subgroup_id" required>
+                <option value="">Select subgroup</option>
+                @foreach ($subgroups ?? [] as $group)
+                  <option value="{{ $group->id }}" data-parent="{{ $group->parent_id }}" @selected(old('subgroup_id') == $group->id)>{{ $group->group_name }}</option>
                 @endforeach
               </select>
             </div>
@@ -414,5 +421,24 @@
       followupForm.action = `{{ url('/business/contacts') }}/${this.value}/followups`;
     });
   }
+
+  document.querySelectorAll('.parent-select').forEach((parentSelect) => {
+    const childSelect = document.querySelector(parentSelect.dataset.child);
+    if (!childSelect) return;
+
+    const options = Array.from(childSelect.querySelectorAll('option[data-parent]'));
+    const syncSubgroups = () => {
+      const parentId = parentSelect.value;
+      options.forEach((option) => {
+        option.hidden = option.dataset.parent !== parentId;
+        if (option.hidden && option.selected) {
+          childSelect.value = '';
+        }
+      });
+    };
+
+    parentSelect.addEventListener('change', syncSubgroups);
+    syncSubgroups();
+  });
 </script>
 @endpush

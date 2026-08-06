@@ -72,6 +72,8 @@ class ContactController extends Controller
 
         return view('business.contacts.create', [
             'groups' => $this->groupOptions((int) $bizId),
+            'parentGroups' => $this->parentGroupOptions((int) $bizId),
+            'subgroups' => $this->subgroupOptions((int) $bizId),
             'contacts' => $contacts,
             'stats' => $stats,
             'followUps' => DB::table('gd_contact_followups as f')
@@ -88,7 +90,8 @@ class ContactController extends Controller
     {
         $this->ensureGroupHierarchyColumn();
         $data = $request->validate([
-            'group_id' => ['nullable', 'integer', 'exists:gd_groups,id'],
+            'parent_group_id' => ['required', 'integer', 'exists:gd_groups,id'],
+            'subgroup_id' => ['required', 'integer', 'exists:gd_groups,id'],
             'full_name' => ['required', 'string', 'max:255'],
             'mobile_number' => ['required', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
@@ -101,6 +104,11 @@ class ContactController extends Controller
             'whatsapp_opt_in' => ['nullable', 'boolean'],
         ]);
         $bizId = $request->session()->get('biz_id');
+        $subgroupId = (int) $data['subgroup_id'];
+        if (!$this->isSubgroup((int) $bizId, $subgroupId, (int) $data['parent_group_id'])) {
+            return back()->with('warning', 'Please select a valid subgroup under the selected parent group.')->withInput();
+        }
+
         $phone = \ApiSupport::normalizePhone($data['mobile_number']);
         $leadStage = $data['lead_stage'] ?? 'lead';
         $leadStatus = $data['lead_status'] ?? 'new';
@@ -108,7 +116,7 @@ class ContactController extends Controller
 
         $contactId = DB::table('gd_user_contacts')->insertGetId([
             'biz_id' => $bizId,
-            'group_id' => $data['group_id'] ?? null,
+            'group_id' => $subgroupId,
             'full_name' => $data['full_name'],
             'phone_number' => $phone,
             'email' => $data['email'] ?? '',
@@ -125,13 +133,11 @@ class ContactController extends Controller
             'lost_at' => $leadStatus === 'lost' ? now() : null,
         ]);
 
-        if (!empty($data['group_id'])) {
-            DB::table('gd_group_contacts')->insertOrIgnore([
-                'biz_id' => $bizId,
-                'group_id' => $data['group_id'],
-                'contact_id' => $contactId,
-            ]);
-        }
+        DB::table('gd_group_contacts')->insertOrIgnore([
+            'biz_id' => $bizId,
+            'group_id' => $subgroupId,
+            'contact_id' => $contactId,
+        ]);
 
         return redirect()->route('business.contacts.index')->with('success', 'Contact saved successfully.');
     }
@@ -140,7 +146,9 @@ class ContactController extends Controller
     {
         $this->ensureGroupHierarchyColumn();
         $groups = $this->groupOptions((int) $request->session()->get('biz_id'));
-        return view('business.contacts.import', compact('groups'));
+        $parentGroups = $this->parentGroupOptions((int) $request->session()->get('biz_id'));
+        $subgroups = $this->subgroupOptions((int) $request->session()->get('biz_id'));
+        return view('business.contacts.import', compact('groups', 'parentGroups', 'subgroups'));
     }
 
     public function importSample(Request $request)
@@ -183,11 +191,17 @@ class ContactController extends Controller
     {
         $this->ensureGroupHierarchyColumn();
         $data = $request->validate([
-            'group_id' => ['required', 'integer', 'exists:gd_groups,id'],
+            'parent_group_id' => ['required', 'integer', 'exists:gd_groups,id'],
+            'subgroup_id' => ['required', 'integer', 'exists:gd_groups,id'],
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt'],
         ]);
 
         $bizId = $request->session()->get('biz_id');
+        $subgroupId = (int) $data['subgroup_id'];
+        if (!$this->isSubgroup((int) $bizId, $subgroupId, (int) $data['parent_group_id'])) {
+            return back()->with('warning', 'Please select a valid subgroup under the selected parent group.')->withInput();
+        }
+
         $spreadsheet = IOFactory::load($request->file('file')->getRealPath());
         $sheet = $spreadsheet->getActiveSheet();
         $rows = $sheet->toArray(null, true, true, true);
@@ -205,7 +219,7 @@ class ContactController extends Controller
                 continue;
             }
 
-            $this->upsertContact($bizId, (int) $data['group_id'], $payload);
+            $this->upsertContact($bizId, $subgroupId, $payload);
             $imported++;
         }
 
@@ -410,6 +424,33 @@ class ContactController extends Controller
             ->orderByRaw('CASE WHEN g.parent_id IS NULL THEN 0 ELSE 1 END')
             ->orderBy('g.group_name')
             ->get();
+    }
+
+    private function parentGroupOptions(int $bizId)
+    {
+        return DB::table('gd_groups')
+            ->where('biz_id', $bizId)
+            ->whereNull('parent_id')
+            ->orderBy('group_name')
+            ->get();
+    }
+
+    private function subgroupOptions(int $bizId)
+    {
+        return DB::table('gd_groups')
+            ->where('biz_id', $bizId)
+            ->whereNotNull('parent_id')
+            ->orderBy('group_name')
+            ->get();
+    }
+
+    private function isSubgroup(int $bizId, int $subgroupId, int $parentId): bool
+    {
+        return DB::table('gd_groups')
+            ->where('biz_id', $bizId)
+            ->where('id', $subgroupId)
+            ->where('parent_id', $parentId)
+            ->exists();
     }
 
     private function groupTargetIds(int $bizId, int $groupId): array

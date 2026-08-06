@@ -80,7 +80,14 @@ function apiResolveRecipients(mysqli $db, int $bizId, array $payload): array
 
     $targetGroupIds = [];
     foreach (array_values(array_unique($groupIds)) as $groupId) {
-        $targetGroupIds = array_merge($targetGroupIds, ApiSupport::groupTargetIds($db, $bizId, $groupId, true));
+        if (!ApiSupport::isSubgroup($db, $bizId, $groupId)) {
+            ApiSupport::jsonResponse([
+                'ok' => false,
+                'error' => 'Messages can only target subgroup IDs. Select a parent group first, then send subgroup_id/subgroup_ids.',
+            ], 422);
+        }
+
+        $targetGroupIds[] = $groupId;
     }
     $targetGroupIds = array_values(array_unique(array_filter($targetGroupIds)));
 

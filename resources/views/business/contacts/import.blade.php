@@ -21,22 +21,29 @@
 
       <form action="{{ route('business.contacts.import.store') }}" method="post" enctype="multipart/form-data" class="row g-3">
         @csrf
-        <div class="col-md-4">
-          <label class="form-label">Target Group</label>
-          <select class="form-select" name="group_id" required>
-            <option value="">--Select Group--</option>
-            @foreach ($groups ?? [] as $group)
-              <option value="{{ $group->id }}" @selected((string) request('group_id') === (string) $group->id)>
-                {{ !empty($group->parent_id) ? ($group->parent_name . ' / ' . $group->group_name) : $group->group_name }}
-              </option>
+        <div class="col-md-3">
+          <label class="form-label">Parent Group</label>
+          <select class="form-select parent-select" name="parent_group_id" data-child="#importSubgroup" required>
+            <option value="">Select parent</option>
+            @foreach ($parentGroups ?? [] as $group)
+              <option value="{{ $group->id }}" @selected((string) old('parent_group_id', request('parent_group_id')) === (string) $group->id)>{{ $group->group_name }}</option>
             @endforeach
           </select>
         </div>
-        <div class="col-md-5">
+        <div class="col-md-3">
+          <label class="form-label">Subgroup</label>
+          <select class="form-select subgroup-select" id="importSubgroup" name="subgroup_id" required>
+            <option value="">Select subgroup</option>
+            @foreach ($subgroups ?? [] as $group)
+              <option value="{{ $group->id }}" data-parent="{{ $group->parent_id }}" @selected((string) old('subgroup_id', request('subgroup_id')) === (string) $group->id)>{{ $group->group_name }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-md-4">
           <label class="form-label">File</label>
           <input type="file" name="file" class="form-control" accept=".csv,.xls,.xlsx" required>
         </div>
-        <div class="col-md-3 d-flex align-items-end">
+        <div class="col-md-2 d-flex align-items-end">
           <button class="btn btn-success w-100" type="submit">Import Contacts</button>
         </div>
       </form>
@@ -47,3 +54,26 @@
     The importer will update an existing contact when the same phone number already exists for this business.
   </div>
 @endsection
+
+@push('scripts')
+<script>
+  document.querySelectorAll('.parent-select').forEach((parentSelect) => {
+    const childSelect = document.querySelector(parentSelect.dataset.child);
+    if (!childSelect) return;
+
+    const options = Array.from(childSelect.querySelectorAll('option[data-parent]'));
+    const syncSubgroups = () => {
+      const parentId = parentSelect.value;
+      options.forEach((option) => {
+        option.hidden = option.dataset.parent !== parentId;
+        if (option.hidden && option.selected) {
+          childSelect.value = '';
+        }
+      });
+    };
+
+    parentSelect.addEventListener('change', syncSubgroups);
+    syncSubgroups();
+  });
+</script>
+@endpush

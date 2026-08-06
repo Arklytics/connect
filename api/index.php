@@ -32,8 +32,6 @@ ApiSupport::jsonResponse([
                 'phone_numbers',
                 'recipients',
                 'contact_ids',
-                'group_id',
-                'group_ids',
                 'subgroup_id',
                 'subgroup_ids',
             ],
@@ -48,7 +46,7 @@ ApiSupport::jsonResponse([
                 'utility_or_marketing_template' => [
                     'kind' => 'utility',
                     'template_name' => 'order_update',
-                    'group_id' => 12,
+                    'subgroup_id' => 18,
                     'parameters' => ['A10045', 'Shipped'],
                 ],
             ],

@@ -39,15 +39,21 @@
           </select>
         </div>
         <div class="mb-3">
-          <select name="group_id" class="form-control" required>
-            <option value="">--Select Group or Subgroup--</option>
-            @foreach ($groups ?? [] as $group)
-              <option value="{{ $group->id }}">
-                {{ !empty($group->parent_id) ? ($group->parent_name . ' / ' . $group->group_name) : $group->group_name . ' (includes subgroups)' }}
-              </option>
+          <select name="parent_group_id" class="form-control parent-select" data-child="#messageSubgroup" required>
+            <option value="">--Select Parent Group--</option>
+            @foreach ($parentGroups ?? [] as $group)
+              <option value="{{ $group->id }}">{{ $group->group_name }}</option>
             @endforeach
           </select>
-          <div class="form-text">Choosing a main group sends to contacts in that group and all subgroups under it.</div>
+        </div>
+        <div class="mb-3">
+          <select name="subgroup_id" id="messageSubgroup" class="form-control subgroup-select" required>
+            <option value="">--Select Subgroup--</option>
+            @foreach ($subgroups ?? [] as $group)
+              <option value="{{ $group->id }}" data-parent="{{ $group->parent_id }}">{{ $group->group_name }}</option>
+            @endforeach
+          </select>
+          <div class="form-text">Messages can be sent only to a subgroup. Select the parent group first.</div>
         </div>
         <button class="btn btn-success" type="submit">Send Message</button>
       </form>
@@ -86,6 +92,25 @@
     previewTitle.textContent = data.message_title || '[Message Title]';
     previewBody.textContent = data.message_body || '[Message Body]';
     previewSubtitle.textContent = data.subtitle || '[Sub Title]';
+  });
+
+  document.querySelectorAll('.parent-select').forEach((parentSelect) => {
+    const childSelect = document.querySelector(parentSelect.dataset.child);
+    if (!childSelect) return;
+
+    const options = Array.from(childSelect.querySelectorAll('option[data-parent]'));
+    const syncSubgroups = () => {
+      const parentId = parentSelect.value;
+      options.forEach((option) => {
+        option.hidden = option.dataset.parent !== parentId;
+        if (option.hidden && option.selected) {
+          childSelect.value = '';
+        }
+      });
+    };
+
+    parentSelect.addEventListener('change', syncSubgroups);
+    syncSubgroups();
   });
 </script>
 @endpush

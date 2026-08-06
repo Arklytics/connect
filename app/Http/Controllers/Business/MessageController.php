@@ -205,6 +205,8 @@ class MessageController extends Controller
         return view('business.messages.create', [
             'templates' => DB::table('gd_whatsapp_templates')->where('biz_id', $bizId)->orderByDesc('id')->get(),
             'groups' => $this->groupOptions((int) $bizId),
+            'parentGroups' => $this->parentGroupOptions((int) $bizId),
+            'subgroups' => $this->subgroupOptions((int) $bizId),
         ]);
     }
 
@@ -213,10 +215,16 @@ class MessageController extends Controller
         $this->ensureGroupHierarchyColumn();
         $data = $request->validate([
             'template_id' => ['required', 'integer', 'exists:gd_whatsapp_templates,id'],
-            'group_id' => ['required', 'integer', 'exists:gd_groups,id'],
+            'parent_group_id' => ['required', 'integer', 'exists:gd_groups,id'],
+            'subgroup_id' => ['required', 'integer', 'exists:gd_groups,id'],
         ]);
 
         $bizId = (int) $request->session()->get('biz_id');
+        $subgroupId = (int) $data['subgroup_id'];
+        if (!$this->isSubgroup($bizId, $subgroupId, (int) $data['parent_group_id'])) {
+            return back()->with('warning', 'Please select a valid subgroup under the selected parent group.')->withInput();
+        }
+
         $template = DB::table('gd_whatsapp_templates')
             ->where('id', $data['template_id'])
             ->where('biz_id', $bizId)
@@ -239,7 +247,7 @@ class MessageController extends Controller
         $templateSendComponents = is_array($templateComponents['components'] ?? null) ? $templateComponents['components'] : [];
 
         $group = DB::table('gd_groups')
-            ->where('id', $data['group_id'])
+            ->where('id', $subgroupId)
             ->where('biz_id', $bizId)
             ->first();
 
@@ -247,7 +255,7 @@ class MessageController extends Controller
             return back()->with('warning', 'Group not found for this business.');
         }
 
-        $targetGroupIds = $this->groupTargetIds($bizId, (int) $group->id);
+        $targetGroupIds = [(int) $group->id];
         if (empty($targetGroupIds)) {
             return back()->with('warning', 'Group not found for this business.');
         }
@@ -575,6 +583,33 @@ class MessageController extends Controller
             ->orderByRaw('CASE WHEN g.parent_id IS NULL THEN 0 ELSE 1 END')
             ->orderBy('g.group_name')
             ->get();
+    }
+
+    private function parentGroupOptions(int $bizId)
+    {
+        return DB::table('gd_groups')
+            ->where('biz_id', $bizId)
+            ->whereNull('parent_id')
+            ->orderBy('group_name')
+            ->get();
+    }
+
+    private function subgroupOptions(int $bizId)
+    {
+        return DB::table('gd_groups')
+            ->where('biz_id', $bizId)
+            ->whereNotNull('parent_id')
+            ->orderBy('group_name')
+            ->get();
+    }
+
+    private function isSubgroup(int $bizId, int $subgroupId, int $parentId): bool
+    {
+        return DB::table('gd_groups')
+            ->where('biz_id', $bizId)
+            ->where('id', $subgroupId)
+            ->where('parent_id', $parentId)
+            ->exists();
     }
 
     private function groupTargetIds(int $bizId, int $groupId): array

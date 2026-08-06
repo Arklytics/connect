@@ -38,13 +38,21 @@ if (!is_array($rows)) {
     $rows = [$rows];
 }
 
+if ($groupId <= 0) {
+    ApiSupport::jsonResponse(['ok' => false, 'error' => 'subgroup_id is required. Create/select a subgroup under a parent group before importing contacts.'], 422);
+}
+
+if (!ApiSupport::isSubgroup($db, $bizId, $groupId)) {
+    ApiSupport::jsonResponse(['ok' => false, 'error' => 'Contacts can only be imported into a subgroup, not a parent group.'], 422);
+}
+
 if ($groupId > 0) {
     $groupStmt = $db->prepare('SELECT id FROM gd_groups WHERE id = ? AND biz_id = ? LIMIT 1');
     $groupStmt->bind_param('ii', $groupId, $bizId);
     $groupStmt->execute();
     $groupExists = $groupStmt->get_result()->fetch_assoc();
     if (!$groupExists) {
-        ApiSupport::jsonResponse(['ok' => false, 'error' => 'group_id not found for this business.'], 404);
+        ApiSupport::jsonResponse(['ok' => false, 'error' => 'subgroup_id not found for this business.'], 404);
     }
 }
 

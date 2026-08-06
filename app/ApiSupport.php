@@ -1369,6 +1369,26 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
         return $ids;
     }
 
+    public static function isSubgroup(mysqli $db, int $bizId, int $groupId): bool
+    {
+        if ($groupId <= 0) {
+            return false;
+        }
+
+        try {
+            self::ensureGroupHierarchyColumns($db);
+        } catch (Throwable $exception) {
+            error_log('Group hierarchy unavailable: ' . $exception->getMessage());
+            return false;
+        }
+
+        $stmt = $db->prepare('SELECT id FROM gd_groups WHERE id = ? AND biz_id = ? AND parent_id IS NOT NULL LIMIT 1');
+        $stmt->bind_param('ii', $groupId, $bizId);
+        $stmt->execute();
+
+        return (bool) $stmt->get_result()->fetch_assoc();
+    }
+
     public static function apiWebhookConfig(mysqli $db, int $bizId): array
     {
         self::ensureApiWebhookColumns($db);

@@ -164,7 +164,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $full_name = trim((string) ($_POST['full_name'] ?? ''));
         $phone_number = gdNormalizePhone((string) ($_POST['mobile_number'] ?? ''));
         $email = trim((string) ($_POST['email'] ?? ''));
-        $group_id = Security::intFrom($_POST['group_id'] ?? null);
+        $parent_group_id = Security::intFrom($_POST['parent_group_id'] ?? null);
+        $group_id = Security::intFrom($_POST['subgroup_id'] ?? null);
 
         $lead_stage = trim((string) ($_POST['lead_stage'] ?? 'lead'));
         $lead_status = trim((string) ($_POST['lead_status'] ?? 'new'));
@@ -177,8 +178,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($full_name === '' || $phone_number === '') {
             $message = 'Full name and mobile number are required.';
             $message_type = 'danger';
-        } elseif ($group_id <= 0) {
-            $message = 'Please select a group before saving a contact.';
+        } elseif ($group_id <= 0 || !ApiSupport::isSubgroup($db, (int) $biz_id, (int) $group_id)) {
+            $message = 'Please select a subgroup before saving a contact.';
+            $message_type = 'warning';
+        } elseif ($parent_group_id <= 0) {
+            $message = 'Please select the parent group first.';
             $message_type = 'warning';
         } else {
             $existingStmt = $db->prepare('SELECT id FROM gd_user_contacts WHERE phone_number = ? AND biz_id = ? LIMIT 1');
@@ -461,12 +465,24 @@ if ($followupTableExists) {
                             <?php echo Security::csrfField(); ?>
                             <input type="hidden" name="save_contact" value="1">
                             <div class="col-md-4">
-                                <label class="form-label">Group</label>
-                                <select class="form-control p-2 shadow" name="group_id" required>
-                                    <option value="">--Select Group--</option>
+                                <label class="form-label">Parent Group</label>
+                                <select class="form-control p-2 shadow parent-select" name="parent_group_id" data-child="#legacyContactSubgroup" required>
+                                    <option value="">--Select Parent--</option>
                                     <?php foreach ($groups as $group): ?>
-                                        <?php $label = !empty($group['parent_id']) ? (($group['parent_name'] ?? '') . ' / ' . $group['group_name']) : $group['group_name']; ?>
-                                        <option value="<?php echo h($group['id']); ?>"><?php echo h($label); ?></option>
+                                        <?php if (empty($group['parent_id'])): ?>
+                                            <option value="<?php echo h($group['id']); ?>"><?php echo h($group['group_name']); ?></option>
+                                        <?php endif; ?>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Subgroup</label>
+                                <select class="form-control p-2 shadow subgroup-select" id="legacyContactSubgroup" name="subgroup_id" required>
+                                    <option value="">--Select Subgroup--</option>
+                                    <?php foreach ($groups as $group): ?>
+                                        <?php if (!empty($group['parent_id'])): ?>
+                                            <option value="<?php echo h($group['id']); ?>" data-parent="<?php echo h($group['parent_id']); ?>"><?php echo h($group['group_name']); ?></option>
+                                        <?php endif; ?>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
