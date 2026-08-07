@@ -16,7 +16,23 @@ ApiSupport::jsonResponse([
         [
             'method' => 'GET/POST',
             'path' => '/api/groups',
-            'description' => 'List groups and subgroups, or create a main group/subgroup with parent_id.',
+            'description' => 'List groups and subgroups, create a main group, or create a subgroup with parent_id, parent_group_id, or parent_name.',
+            'examples' => [
+                'create_group' => [
+                    'group_name' => 'Retail Leads',
+                    'group_type' => 'group',
+                ],
+                'create_subgroup_by_id' => [
+                    'group_name' => 'Hot Leads',
+                    'group_type' => 'subgroup',
+                    'parent_id' => 12,
+                ],
+                'create_subgroup_by_name' => [
+                    'group_name' => 'Website Leads',
+                    'group_type' => 'subgroup',
+                    'parent_name' => 'Retail Leads',
+                ],
+            ],
         ],
         [
             'method' => 'POST',
@@ -26,6 +42,7 @@ ApiSupport::jsonResponse([
         [
             'method' => 'POST',
             'path' => '/api/templates/create',
+            'aliases' => ['/api/templates', '/api/template/create'],
             'description' => 'Create a WhatsApp Cloud API message template and save it to the business template library.',
             'supported_headers' => ['NONE', 'TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT'],
             'example' => [

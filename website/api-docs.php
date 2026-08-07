@@ -112,6 +112,7 @@ X-API-KEY: YOUR_BUSINESS_API_KEY</code></pre>
           <section id="templates" class="api-card p-4 mb-4">
             <h2 class="h4 fw-bold">Create WhatsApp Template</h2>
             <p><span class="method">POST</span> <code>/api/templates/create</code></p>
+            <p class="small text-muted">Aliases are also available at <code>/api/templates</code> and <code>/api/template/create</code>.</p>
             <p>Create a WhatsApp Cloud API message template and save the submitted template in the business template library after Meta accepts it for review.</p>
             <div class="table-responsive">
               <table class="table align-middle">
@@ -202,13 +203,47 @@ X-API-KEY: YOUR_BUSINESS_API_KEY</code></pre>
           <section id="groups" class="api-card p-4 mb-4">
             <h2 class="h4 fw-bold">Groups & Subgroups</h2>
             <p><span class="method">GET</span> <code>/api/groups</code> lists all main groups and subgroups.</p>
-            <p><span class="method">POST</span> <code>/api/groups</code> creates a main group. Add <code>parent_id</code> to create a subgroup under a main group.</p>
+            <p><span class="method">POST</span> <code>/api/groups</code> creates a main group or a subgroup. Use <code>parent_id</code>, <code>parent_group_id</code>, or <code>parent_name</code> when creating a subgroup.</p>
+            <div class="table-responsive">
+              <table class="table align-middle">
+                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>group_name</code></td><td>string</td><td>Yes</td><td>Name of the group or subgroup. Also accepts <code>name</code>.</td></tr>
+                  <tr><td><code>group_type</code></td><td>string</td><td>No</td><td>Use <code>group</code> for a main group or <code>subgroup</code> for a child group.</td></tr>
+                  <tr><td><code>parent_id</code></td><td>integer</td><td>For subgroup*</td><td>ID of an existing main group. Also accepts <code>parent_group_id</code>.</td></tr>
+                  <tr><td><code>parent_name</code></td><td>string</td><td>For subgroup*</td><td>Name of an existing main group. Also accepts <code>parent_group_name</code>.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="small text-muted">*A subgroup needs either parent ID or parent name. Parent groups cannot be nested under another subgroup.</p>
+            <p>Create a main group:</p>
 <pre><code>{
-  "group_name": "Retail Leads"
+  "group_name": "Retail Leads",
+  "group_type": "group"
 }</code></pre>
+            <p>Create a subgroup using parent ID:</p>
 <pre><code>{
   "group_name": "Hot Leads",
+  "group_type": "subgroup",
   "parent_id": 12
+}</code></pre>
+            <p>Create a subgroup using parent group name:</p>
+<pre><code>{
+  "group_name": "Website Leads",
+  "group_type": "subgroup",
+  "parent_name": "Retail Leads"
+}</code></pre>
+            <p>Successful response:</p>
+<pre><code>{
+  "ok": true,
+  "biz_id": 25,
+  "group": {
+    "id": 18,
+    "parent_id": 12,
+    "group_name": "Hot Leads",
+    "type": "subgroup",
+    "is_subgroup": true
+  }
 }</code></pre>
           </section>
 

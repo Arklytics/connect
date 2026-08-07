@@ -24,6 +24,15 @@ function app_dispatch(string $relativeFile): void
 
 $requestPath = parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/';
 $requestPath = preg_replace('~/{2,}~', '/', $requestPath) ?? '/';
+$configuredBase = '/' . trim((string) Config::get('APP_BASE', ''), '/');
+if ($configuredBase !== '/' && str_starts_with($requestPath, $configuredBase . '/')) {
+    $requestPath = substr($requestPath, strlen($configuredBase)) ?: '/';
+}
+
+$scriptBase = rtrim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? ''))), '/');
+if ($scriptBase !== '' && $scriptBase !== '.' && $scriptBase !== '/' && str_starts_with($requestPath, $scriptBase . '/')) {
+    $requestPath = substr($requestPath, strlen($scriptBase)) ?: '/';
+}
 
 if ($requestPath === '/' || $requestPath === '/index.php') {
     app_dispatch('website/landing.php');
@@ -55,13 +64,33 @@ if ($requestPath === '/api') {
     return;
 }
 
+if ($requestPath === '/api/groups') {
+    app_dispatch('api/groups.php');
+    return;
+}
+
 if ($requestPath === '/api/contacts/import') {
     app_dispatch('api/contacts/import.php');
     return;
 }
 
+if ($requestPath === '/api/templates/create') {
+    app_dispatch('api/templates/create.php');
+    return;
+}
+
+if ($requestPath === '/api/templates' || $requestPath === '/api/template/create') {
+    app_dispatch('api/templates/create.php');
+    return;
+}
+
 if ($requestPath === '/api/whatsapp/send') {
     app_dispatch('api/whatsapp/send.php');
+    return;
+}
+
+if ($requestPath === '/api/webhooks/config') {
+    app_dispatch('api/webhooks/config.php');
     return;
 }
 

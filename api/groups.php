@@ -56,10 +56,28 @@ if ($method !== 'POST') {
 }
 
 $groupName = trim((string) ($payload['group_name'] ?? $payload['name'] ?? ''));
-$parentId = Security::intFrom($payload['parent_id'] ?? null);
+$groupType = strtolower(trim((string) ($payload['group_type'] ?? $payload['type'] ?? '')));
+$parentName = trim((string) ($payload['parent_name'] ?? $payload['parent_group_name'] ?? ''));
+$parentId = Security::intFrom($payload['parent_id'] ?? $payload['parent_group_id'] ?? null);
 
 if ($groupName === '') {
     ApiSupport::jsonResponse(['ok' => false, 'error' => 'group_name is required.'], 422);
+}
+
+if (in_array($groupType, ['subgroup', 'sub_group', 'child'], true) && $parentId <= 0 && $parentName === '') {
+    ApiSupport::jsonResponse(['ok' => false, 'error' => 'parent_id, parent_group_id, or parent_name is required when group_type is subgroup.'], 422);
+}
+
+if ($parentName !== '' && $parentId <= 0) {
+    $parentNameStmt = $db->prepare('SELECT id FROM gd_groups WHERE biz_id = ? AND group_name = ? AND parent_id IS NULL LIMIT 1');
+    $parentNameStmt->bind_param('is', $bizId, $parentName);
+    $parentNameStmt->execute();
+    $parentRow = $parentNameStmt->get_result()->fetch_assoc();
+    if (!$parentRow) {
+        ApiSupport::jsonResponse(['ok' => false, 'error' => 'parent_name must match an existing main group.'], 422);
+    }
+
+    $parentId = (int) $parentRow['id'];
 }
 
 if ($parentId > 0) {
@@ -90,5 +108,6 @@ ApiSupport::jsonResponse([
         'parent_id' => $parentValue,
         'group_name' => $groupName,
         'type' => $parentValue ? 'subgroup' : 'group',
+        'is_subgroup' => $parentValue !== null,
     ],
 ], 201);
