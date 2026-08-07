@@ -577,6 +577,298 @@ final class ApiSupport
         return $numbers;
     }
 
+    public static function normalizeTemplateName(string $name): string
+    {
+        $name = strtolower(trim($name));
+        $name = preg_replace('/[^a-z0-9_]+/', '_', $name) ?? '';
+        $name = preg_replace('/_+/', '_', $name) ?? '';
+
+        return trim($name, '_');
+    }
+
+    public static function normalizeTemplateText(string $text): string
+    {
+        $text = trim($text);
+        $text = preg_replace('/{{\s*(\d+)\s*}}/', '{{$1}}', $text) ?? $text;
+        $text = preg_replace('/\[\s*(\d+)\s*\]/', '{{$1}}', $text) ?? $text;
+        $text = preg_replace('/(?<!\{)\{\s*(\d+)\s*\}(?!\})/', '{{$1}}', $text) ?? $text;
+
+        return $text;
+    }
+
+    public static function createWhatsappTemplate(mysqli $db, int $bizId, array $input, ?array $mediaFile = null): array
+    {
+        $templateName = self::normalizeTemplateName((string) ($input['template_name'] ?? $input['name'] ?? ''));
+        $category = strtoupper(trim((string) ($input['category'] ?? 'MARKETING')));
+        $language = trim((string) ($input['language'] ?? 'en_US')) ?: 'en_US';
+        $headerType = strtoupper(trim((string) ($input['header_type'] ?? 'NONE')));
+        $headerText = self::normalizeTemplateText((string) ($input['header_text'] ?? ''));
+        $headerSample = trim((string) ($input['header_sample'] ?? ''));
+        $headerMediaHandle = trim((string) ($input['header_media_handle'] ?? ''));
+        $mediaUrl = trim((string) ($input['header_media_url'] ?? $input['media_url'] ?? ''));
+        $bodyText = self::normalizeTemplateText((string) ($input['body_text'] ?? $input['message_body'] ?? $input['body'] ?? ''));
+        $footerText = trim((string) ($input['footer_text'] ?? $input['subtitle'] ?? ''));
+        $bodySamples = is_array($input['body_samples'] ?? null) ? $input['body_samples'] : [];
+        $buttonsInput = is_array($input['buttons'] ?? null) ? $input['buttons'] : [];
+
+        if ($templateName === '') {
+            return ['ok' => false, 'status' => 422, 'error' => 'template_name is required.'];
+        }
+        if (!in_array($category, ['MARKETING', 'UTILITY', 'AUTHENTICATION'], true)) {
+            return ['ok' => false, 'status' => 422, 'error' => 'category must be MARKETING, UTILITY, or AUTHENTICATION.'];
+        }
+        if (!in_array($headerType, ['NONE', 'TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
+            return ['ok' => false, 'status' => 422, 'error' => 'header_type must be NONE, TEXT, IMAGE, VIDEO, or DOCUMENT.'];
+        }
+        if ($bodyText === '') {
+            return ['ok' => false, 'status' => 422, 'error' => 'body_text is required.'];
+        }
+        if ($category === 'AUTHENTICATION') {
+            return ['ok' => false, 'status' => 422, 'error' => 'Authentication templates need Meta OTP formatting. Use Marketing or Utility for text, image, video, or document templates.'];
+        }
+
+        $credentialStmt = $db->prepare('SELECT whatsapp_id, auth_token FROM gd_orders WHERE id = ? LIMIT 1');
+        $credentialStmt->bind_param('i', $bizId);
+        $credentialStmt->execute();
+        $business = $credentialStmt->get_result()->fetch_assoc() ?: [];
+
+        $accessToken = trim((string) ($business['auth_token'] ?? ''));
+        if ($accessToken === '') {
+            $accessToken = trim((string) AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', '')));
+        }
+        $whatsappBusinessId = trim((string) ($business['whatsapp_id'] ?? ''));
+        $appId = trim((string) AppSettings::getGlobal($db, 'META_APP_ID', Config::get('META_APP_ID', '')));
+
+        if (is_array($mediaFile) && (int) ($mediaFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            if ((int) ($mediaFile['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                return ['ok' => false, 'status' => 422, 'error' => 'header_media_file upload failed.'];
+            }
+
+            $mimeType = (string) ($mediaFile['type'] ?? '');
+            if (function_exists('mime_content_type')) {
+                $detected = mime_content_type((string) ($mediaFile['tmp_name'] ?? ''));
+                if (is_string($detected) && $detected !== '') {
+                    $mimeType = $detected;
+                }
+            }
+
+            $allowedTypes = ['image/jpeg', 'image/png', 'video/mp4', 'video/3gpp', 'application/pdf'];
+            if (!in_array($mimeType, $allowedTypes, true)) {
+                return ['ok' => false, 'status' => 422, 'error' => 'Unsupported file type. Use JPG, PNG, MP4, 3GP, or PDF.'];
+            }
+            if ($appId === '' || $accessToken === '') {
+                return ['ok' => false, 'status' => 422, 'error' => 'Meta App ID or access token is missing. Add API credentials first.'];
+            }
+
+            $filePath = (string) ($mediaFile['tmp_name'] ?? '');
+            $fileName = (string) ($mediaFile['name'] ?? 'template-media');
+            $fileSize = (int) ($mediaFile['size'] ?? 0);
+            $s3Upload = self::s3UploadFile($filePath, $fileName, $mimeType);
+            if (!($s3Upload['ok'] ?? false)) {
+                return ['ok' => false, 'status' => 422, 'error' => 'S3 upload failed: ' . (string) ($s3Upload['error'] ?? 'Unknown S3 upload error.')];
+            }
+
+            $uploadResult = self::metaUploadMediaHandle($appId, $accessToken, $filePath, $fileName, $mimeType, $fileSize);
+            if (!($uploadResult['ok'] ?? false)) {
+                return ['ok' => false, 'status' => 422, 'error' => 'Media handle generation failed: ' . (string) ($uploadResult['error'] ?? 'Unknown error.')];
+            }
+
+            $mediaUrl = (string) ($s3Upload['url'] ?? '');
+            $headerMediaHandle = (string) ($uploadResult['handle'] ?? '');
+            self::storeTemplateMedia($db, $bizId, $fileName, $mimeType, $fileSize, $mediaUrl, $headerMediaHandle, (string) ($s3Upload['key'] ?? ''));
+        }
+
+        $validationErrors = [];
+        $headerVariableNumbers = self::templatePlaceholderNumbers($headerText);
+        $bodyVariableNumbers = self::templatePlaceholderNumbers($bodyText);
+        $bodySequenceError = self::sequentialTemplateVariableError($bodyVariableNumbers, 'Body');
+        if ($bodySequenceError !== '') {
+            $validationErrors[] = $bodySequenceError;
+        }
+
+        $components = [];
+        if ($headerType === 'TEXT' && $headerText !== '') {
+            $header = ['type' => 'HEADER', 'format' => 'TEXT', 'text' => $headerText];
+            if (count($headerVariableNumbers) > 1) {
+                $validationErrors[] = 'Text header can contain only one variable.';
+            } elseif ($headerVariableNumbers !== []) {
+                if ($headerSample === '') {
+                    return ['ok' => false, 'status' => 422, 'error' => 'Header variable example is required.'];
+                }
+                $header['example'] = ['header_text' => [$headerSample]];
+            }
+            $components[] = $header;
+        } elseif (in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
+            if ($headerMediaHandle === '') {
+                return ['ok' => false, 'status' => 422, 'error' => ucfirst(strtolower($headerType)) . ' header requires a WhatsApp media handle for template review.'];
+            }
+            $components[] = [
+                'type' => 'HEADER',
+                'format' => $headerType,
+                'example' => ['header_handle' => [$headerMediaHandle]],
+            ];
+        }
+
+        $body = ['type' => 'BODY', 'text' => $bodyText];
+        if (!empty($bodyVariableNumbers)) {
+            $sampleRow = [];
+            foreach ($bodyVariableNumbers as $number) {
+                $sampleRow[] = self::templateExampleValue($bodySamples, $number);
+            }
+            if (in_array('', $sampleRow, true)) {
+                return ['ok' => false, 'status' => 422, 'error' => 'Every body variable needs an example value.'];
+            }
+            $body['example'] = ['body_text' => [$sampleRow]];
+        }
+        $components[] = $body;
+
+        if ($footerText !== '') {
+            $components[] = ['type' => 'FOOTER', 'text' => $footerText];
+        }
+
+        $buttons = [];
+        foreach ($buttonsInput as $button) {
+            if (!is_array($button)) {
+                continue;
+            }
+
+            $buttonType = strtoupper(trim((string) ($button['type'] ?? '')));
+            $buttonText = trim((string) ($button['text'] ?? ''));
+            $buttonValue = self::normalizeTemplateText((string) ($button['value'] ?? $button['url'] ?? $button['phone_number'] ?? ''));
+            if ($buttonType === '' || $buttonText === '') {
+                continue;
+            }
+
+            if ($buttonType === 'URL' && $buttonValue !== '') {
+                $urlButton = ['type' => 'URL', 'text' => $buttonText, 'url' => $buttonValue];
+                $buttonNumbers = self::templatePlaceholderNumbers($buttonValue);
+                if (!empty($buttonNumbers)) {
+                    if (count($buttonNumbers) > 1 || $buttonNumbers !== [1]) {
+                        $validationErrors[] = 'Dynamic URL buttons can use only {{1}}.';
+                    } else {
+                        $urlExample = preg_replace('/{{\s*1\s*}}/', self::templateExampleValue($bodySamples, 1) ?: 'sample', $buttonValue) ?? $buttonValue;
+                        $urlButton['example'] = [$urlExample];
+                        if (!self::validTemplateUrlExample($urlExample)) {
+                            $validationErrors[] = 'URL button example must be a valid http or https URL.';
+                        }
+                    }
+                } elseif (!self::validTemplateUrlExample($buttonValue)) {
+                    $validationErrors[] = 'URL button must be a valid http or https URL.';
+                }
+                $buttons[] = $urlButton;
+            } elseif ($buttonType === 'PHONE_NUMBER' && $buttonValue !== '') {
+                $buttons[] = ['type' => 'PHONE_NUMBER', 'text' => $buttonText, 'phone_number' => $buttonValue];
+            } elseif ($buttonType === 'QUICK_REPLY') {
+                $buttons[] = ['type' => 'QUICK_REPLY', 'text' => $buttonText];
+            }
+        }
+
+        if (!empty($buttons)) {
+            $components[] = ['type' => 'BUTTONS', 'buttons' => $buttons];
+        }
+        if (!empty($validationErrors)) {
+            return ['ok' => false, 'status' => 422, 'error' => implode(' ', $validationErrors)];
+        }
+        if ($whatsappBusinessId === '' || $accessToken === '') {
+            return ['ok' => false, 'status' => 422, 'error' => 'WhatsApp Business ID or access token is missing. Add API credentials first.'];
+        }
+
+        $payload = [
+            'name' => $templateName,
+            'category' => $category,
+            'language' => $language,
+            'components' => $components,
+        ];
+
+        $ch = curl_init('https://graph.facebook.com/' . self::GRAPH_VERSION . '/' . rawurlencode($whatsappBusinessId) . '/message_templates');
+        curl_setopt_array($ch, [
+            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $accessToken, 'Content-Type: application/json'],
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => self::encodeJson($payload) ?? json_encode($payload),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        $apiResponse = json_decode((string) $response, true);
+        if ($curlError !== '') {
+            return ['ok' => false, 'status' => 502, 'error' => 'WhatsApp API request failed: ' . $curlError];
+        }
+        if ($httpStatus < 200 || $httpStatus >= 300 || isset($apiResponse['error'])) {
+            $apiError = is_array($apiResponse) ? (string) ($apiResponse['error']['message'] ?? 'Unexpected WhatsApp API error.') : 'Unexpected WhatsApp API error.';
+            $apiDetails = is_array($apiResponse) ? ($apiResponse['error']['error_data']['details'] ?? $apiResponse['error']['error_user_msg'] ?? '') : '';
+            if (is_string($apiDetails) && trim($apiDetails) !== '') {
+                $apiError .= ' Details: ' . trim($apiDetails);
+            }
+            return ['ok' => false, 'status' => 422, 'error' => 'WhatsApp API rejected the template: ' . $apiError, 'meta_response' => $apiResponse];
+        }
+
+        $templateId = (string) ($apiResponse['id'] ?? '');
+        $status = (string) ($apiResponse['status'] ?? 'PENDING');
+        $apiCategory = (string) ($apiResponse['category'] ?? $category);
+        $placeholdersJson = self::encodeJson([
+            'header_type' => $headerType,
+            'header_text' => $headerText,
+            'header_sample' => $headerSample,
+            'header_media_handle' => $headerMediaHandle,
+            'header_media_url' => $mediaUrl,
+            'body_samples' => $bodySamples,
+            'body_placeholder_numbers' => $bodyVariableNumbers,
+            'buttons' => $buttons,
+            'payload' => $payload,
+        ]);
+        $buttonsJson = self::encodeJson($buttons);
+
+        $insertStmt = $db->prepare(
+            'INSERT INTO gd_whatsapp_templates (biz_id, template_id, template_name, message_title, message_body, placeholders, subtitle, media_url, status, category, buttons, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())'
+        );
+        $messageTitle = $headerType === 'TEXT' && $headerText !== '' ? $headerText : ($headerType !== 'NONE' ? ucfirst(strtolower($headerType)) . ' Header' : 'Template');
+        $insertStmt->bind_param('issssssssss', $bizId, $templateId, $templateName, $messageTitle, $bodyText, $placeholdersJson, $footerText, $mediaUrl, $status, $apiCategory, $buttonsJson);
+        $insertStmt->execute();
+        $localId = (int) $insertStmt->insert_id;
+
+        return [
+            'ok' => true,
+            'status' => 201,
+            'template' => [
+                'id' => $localId,
+                'biz_id' => $bizId,
+                'template_id' => $templateId,
+                'template_name' => $templateName,
+                'message_title' => $messageTitle,
+                'message_body' => $bodyText,
+                'subtitle' => $footerText,
+                'media_url' => $mediaUrl,
+                'status' => $status,
+                'category' => $apiCategory,
+                'buttons' => $buttons,
+            ],
+            'meta_response' => $apiResponse,
+            'payload' => $payload,
+        ];
+    }
+
+    private static function sequentialTemplateVariableError(array $numbers, string $label): string
+    {
+        if (empty($numbers)) {
+            return '';
+        }
+
+        return $numbers === range(1, count($numbers)) ? '' : $label . ' variables must start at {{1}} and continue without gaps.';
+    }
+
+    private static function validTemplateUrlExample(string $url): bool
+    {
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+
+        return filter_var($url, FILTER_VALIDATE_URL) !== false && in_array($scheme, ['http', 'https'], true);
+    }
+
     private static function sampleValue(array $values, int $index): string
     {
         if (array_key_exists($index, $values)) {

@@ -78,6 +78,7 @@ $homeUrl = app_url('');
           <div class="api-card api-sidebar p-3">
             <a href="#quick-start">Quick Start</a>
             <a href="#auth">Authentication</a>
+            <a href="#templates">Create Template</a>
             <a href="#send">Send WhatsApp Message</a>
             <a href="#groups">Groups</a>
             <a href="#contacts">Import Contacts</a>
@@ -106,6 +107,68 @@ $homeUrl = app_url('');
 <pre><code>Authorization: Bearer YOUR_BUSINESS_API_KEY
 X-API-KEY: YOUR_BUSINESS_API_KEY</code></pre>
             <p class="mb-0">If you manage multiple business workspaces, include <code>biz_id</code> in the JSON body. The API rejects the request if the key does not belong to that business.</p>
+          </section>
+
+          <section id="templates" class="api-card p-4 mb-4">
+            <h2 class="h4 fw-bold">Create WhatsApp Template</h2>
+            <p><span class="method">POST</span> <code>/api/templates/create</code></p>
+            <p>Create a WhatsApp Cloud API message template and save the submitted template in the business template library after Meta accepts it for review.</p>
+            <div class="table-responsive">
+              <table class="table align-middle">
+                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>template_name</code></td><td>string</td><td>Yes</td><td>Template name. It is normalized to lowercase letters, numbers, and underscores.</td></tr>
+                  <tr><td><code>category</code></td><td>string</td><td>No</td><td><code>MARKETING</code> or <code>UTILITY</code>. Default is <code>MARKETING</code>. Authentication templates are not supported by this endpoint yet.</td></tr>
+                  <tr><td><code>language</code></td><td>string</td><td>No</td><td>WhatsApp template language, for example <code>en_US</code>. Default is <code>en_US</code>.</td></tr>
+                  <tr><td><code>header_type</code></td><td>string</td><td>No</td><td><code>NONE</code>, <code>TEXT</code>, <code>IMAGE</code>, <code>VIDEO</code>, or <code>DOCUMENT</code>. Default is <code>NONE</code>.</td></tr>
+                  <tr><td><code>header_text</code></td><td>string</td><td>For text header</td><td>Header content. Text headers can include only one variable.</td></tr>
+                  <tr><td><code>header_sample</code></td><td>string</td><td>When header has variable</td><td>Example value for the header variable.</td></tr>
+                  <tr><td><code>header_media_handle</code></td><td>string</td><td>For media header*</td><td>WhatsApp upload handle used for Meta template review.</td></tr>
+                  <tr><td><code>header_media_url</code></td><td>string</td><td>No</td><td>Public URL saved locally for sending media-header templates later.</td></tr>
+                  <tr><td><code>body_text</code></td><td>string</td><td>Yes</td><td>Template body. Variables can be sent as <code>{{1}}</code>, <code>[1]</code>, or <code>{1}</code>.</td></tr>
+                  <tr><td><code>body_samples</code></td><td>object/array</td><td>When body has variables</td><td>Example values for every body variable, keyed by placeholder number.</td></tr>
+                  <tr><td><code>footer_text</code></td><td>string</td><td>No</td><td>Optional footer text.</td></tr>
+                  <tr><td><code>buttons</code></td><td>array</td><td>No</td><td>Supports <code>URL</code>, <code>PHONE_NUMBER</code>, and <code>QUICK_REPLY</code> buttons.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="small text-muted">*Instead of <code>header_media_handle</code>, multipart clients may upload <code>header_media_file</code>. The API uploads it to S3, generates the WhatsApp media handle, and saves the public media URL.</p>
+<pre><code>curl -X POST "<?php echo h($baseUrl); ?>/api/templates/create" \
+  -H "Authorization: Bearer YOUR_BUSINESS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template_name": "order_update",
+    "category": "UTILITY",
+    "language": "en_US",
+    "header_type": "TEXT",
+    "header_text": "Order update",
+    "body_text": "Hi {{1}}, your order {{2}} is {{3}}.",
+    "body_samples": {
+      "1": "Nisha",
+      "2": "A10045",
+      "3": "Shipped"
+    },
+    "footer_text": "Thank you",
+    "buttons": [
+      {
+        "type": "URL",
+        "text": "Track order",
+        "value": "https://example.com/orders/{{1}}"
+      }
+    ]
+  }'</code></pre>
+            <p>Successful response:</p>
+<pre><code>{
+  "ok": true,
+  "template": {
+    "id": 88,
+    "biz_id": 25,
+    "template_id": "1234567890",
+    "template_name": "order_update",
+    "status": "PENDING",
+    "category": "UTILITY"
+  }
+}</code></pre>
           </section>
 
           <section id="send" class="api-card p-4 mb-4">

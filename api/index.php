@@ -25,6 +25,22 @@ ApiSupport::jsonResponse([
         ],
         [
             'method' => 'POST',
+            'path' => '/api/templates/create',
+            'description' => 'Create a WhatsApp Cloud API message template and save it to the business template library.',
+            'supported_headers' => ['NONE', 'TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT'],
+            'example' => [
+                'template_name' => 'order_update',
+                'category' => 'UTILITY',
+                'language' => 'en_US',
+                'header_type' => 'TEXT',
+                'header_text' => 'Order update',
+                'body_text' => 'Hi {{1}}, your order {{2}} is {{3}}.',
+                'body_samples' => ['1' => 'Nisha', '2' => 'A10045', '3' => 'Shipped'],
+                'footer_text' => 'Thank you',
+            ],
+        ],
+        [
+            'method' => 'POST',
             'path' => '/api/whatsapp/send',
             'description' => 'Send WhatsApp text or template messages for authentication, utility, and marketing use cases.',
             'recipient_fields' => [
