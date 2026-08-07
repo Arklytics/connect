@@ -209,7 +209,7 @@
               <label class="form-label">Contact</label>
               <select class="form-select" name="contact_id" id="followupContactSelect" required>
                 <option value="">Choose contact</option>
-                @foreach ($contacts ?? [] as $contact)
+                @foreach ($contactOptions ?? [] as $contact)
                   <option value="{{ $contact->id }}">{{ $contact->full_name }} - {{ $contact->phone_number }}</option>
                 @endforeach
               </select>
@@ -249,7 +249,11 @@
   <div class="card shadow-sm mt-4">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
       <strong>Contacts</strong>
-      <span class="text-muted small">{{ $contacts->count() }} shown</span>
+      @if ($contacts instanceof \Illuminate\Contracts\Pagination\Paginator)
+        <span class="text-muted small">Showing {{ $contacts->firstItem() ?? 0 }}-{{ $contacts->lastItem() ?? 0 }} of {{ $contacts->total() }}</span>
+      @else
+        <span class="text-muted small">{{ ($contacts ?? collect())->count() }} shown</span>
+      @endif
     </div>
     <div class="table-responsive">
       <table class="table table-striped mb-0 align-middle">
@@ -270,7 +274,7 @@
         <tbody>
           @forelse ($contacts ?? [] as $contact)
             <tr>
-              <td>{{ $loop->iteration }}</td>
+              <td>{{ method_exists($contacts, 'firstItem') ? (($contacts->firstItem() ?? 1) + $loop->index) : $loop->iteration }}</td>
               <td>
                 <div class="fw-semibold">{{ $contact->full_name }}</div>
                 <div class="text-muted small">{{ $contact->email ?: 'No email' }}</div>
@@ -354,6 +358,11 @@
         </tbody>
       </table>
     </div>
+    @if ($contacts instanceof \Illuminate\Contracts\Pagination\Paginator && $contacts->hasPages())
+      <div class="card-footer bg-white">
+        {{ $contacts->links('pagination::bootstrap-5') }}
+      </div>
+    @endif
   </div>
 
   <div class="card shadow-sm mt-4">

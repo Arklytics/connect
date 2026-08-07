@@ -46,7 +46,8 @@ class ContactController extends Controller
         $contacts = $contactsQuery
             ->orderByRaw('CASE WHEN c.next_follow_up_at IS NULL THEN 1 ELSE 0 END')
             ->orderByDesc('c.id')
-            ->get();
+            ->paginate(25)
+            ->withQueryString();
 
         $stats = [
             'total' => DB::table('gd_user_contacts')->where('biz_id', $bizId)->count(),
@@ -75,6 +76,12 @@ class ContactController extends Controller
             'parentGroups' => $this->parentGroupOptions((int) $bizId),
             'subgroups' => $this->subgroupOptions((int) $bizId),
             'contacts' => $contacts,
+            'contactOptions' => DB::table('gd_user_contacts')
+                ->where('biz_id', $bizId)
+                ->select('id', 'full_name', 'phone_number')
+                ->orderByDesc('id')
+                ->limit(500)
+                ->get(),
             'stats' => $stats,
             'followUps' => DB::table('gd_contact_followups as f')
                 ->join('gd_user_contacts as c', 'c.id', '=', 'f.contact_id')
@@ -238,7 +245,9 @@ class ContactController extends Controller
             ->whereIn('gc.group_id', $targetIds)
             ->select('c.*')
             ->distinct()
-            ->get();
+            ->orderByDesc('c.id')
+            ->paginate(25)
+            ->withQueryString();
 
         return view('business.contacts.group', compact('contacts'));
     }

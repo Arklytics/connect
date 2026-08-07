@@ -53,6 +53,7 @@ Route::prefix('business')->name('business.')->group(function () {
         Route::post('contacts/{contact}/status', [ContactController::class, 'updateStatus'])->name('contacts.status');
         Route::post('contacts/{contact}/followups', [ContactController::class, 'storeFollowUp'])->name('contacts.followups.store');
         Route::resource('groups', GroupController::class)->only(['index', 'store']);
+        Route::post('groups/contacts', [GroupController::class, 'storeContacts'])->name('groups.contacts.store');
 
         Route::get('templates/fetch/{template}', [BusinessTemplateController::class, 'fetch'])->name('templates.fetch');
         Route::resource('templates', BusinessTemplateController::class)->only(['index', 'create', 'store']);
