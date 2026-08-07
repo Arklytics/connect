@@ -63,6 +63,9 @@
         <a href="<?php echo h(app_url('master/webhook-logs')); ?>" class="list-group-item list-group-item-action">
           <i class="bi bi-chat-left-text"></i> Webhook Logs
         </a>
+        <a href="<?php echo h(app_url('master/api-calls')); ?>" class="list-group-item list-group-item-action">
+          <i class="bi bi-activity"></i> API Calls
+        </a>
         <span class="list-group-item"><i class="bi bi-file-earmark-text"></i> Templates</span>
         <span class="list-group-item"><i class="bi bi-bag"></i> Orders</span>
       </div>

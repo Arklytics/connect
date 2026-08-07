@@ -142,6 +142,7 @@ class OrderController extends Controller
         DB::transaction(function () use ($order) {
             foreach ([
                 'gd_contact_followups',
+                'gd_api_call_logs',
                 'gd_whatsapp_sequence_plans',
                 'gd_sent_messages',
                 'gd_whatsapp_templates',

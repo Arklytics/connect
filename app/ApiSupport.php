@@ -5,6 +5,8 @@ declare(strict_types=1);
 final class ApiSupport
 {
     public const GRAPH_VERSION = 'v23.0';
+    private static ?mysqli $apiCallLogDb = null;
+    private static ?int $apiCallLogId = null;
 
     public static function tableColumns(mysqli $db, string $table): array
     {
@@ -74,6 +76,34 @@ final class ApiSupport
                 INDEX gd_webhook_logs_message_id_index (message_id),
                 INDEX gd_webhook_logs_delivery_status_index (delivery_status),
                 INDEX gd_webhook_logs_webhook_at_index (webhook_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    }
+
+    public static function ensureApiCallLogTable(mysqli $db): void
+    {
+        $db->query(
+            "CREATE TABLE IF NOT EXISTS gd_api_call_logs (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                biz_id BIGINT UNSIGNED NULL,
+                endpoint VARCHAR(255) NOT NULL,
+                method VARCHAR(12) NOT NULL,
+                status_code SMALLINT UNSIGNED NULL,
+                ok TINYINT(1) NOT NULL DEFAULT 0,
+                api_key_prefix VARCHAR(20) NULL,
+                ip_address VARCHAR(60) NULL,
+                user_agent VARCHAR(500) NULL,
+                request_json MEDIUMTEXT NULL,
+                response_json MEDIUMTEXT NULL,
+                error_message TEXT NULL,
+                started_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                finished_at TIMESTAMP NULL,
+                created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX gd_api_call_logs_biz_id_index (biz_id),
+                INDEX gd_api_call_logs_endpoint_index (endpoint),
+                INDEX gd_api_call_logs_status_code_index (status_code),
+                INDEX gd_api_call_logs_started_at_index (started_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
     }
@@ -378,6 +408,7 @@ final class ApiSupport
 
     public static function jsonResponse(array $payload, int $status = 200): void
     {
+        self::finishApiCallLog($payload, $status);
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
@@ -460,7 +491,67 @@ final class ApiSupport
             ], 403);
         }
 
+        self::startApiCallLog($db, $bizId, $provided);
+
         return $bizId;
+    }
+
+    private static function startApiCallLog(mysqli $db, int $bizId, string $apiKey): void
+    {
+        if (self::$apiCallLogId !== null) {
+            return;
+        }
+
+        try {
+            self::ensureApiCallLogTable($db);
+            $endpoint = parse_url((string) ($_SERVER['REQUEST_URI'] ?? $_SERVER['SCRIPT_NAME'] ?? ''), PHP_URL_PATH) ?: '';
+            $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+            $ipAddress = trim((string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? ''));
+            if (str_contains($ipAddress, ',')) {
+                $ipAddress = trim(explode(',', $ipAddress)[0]);
+            }
+            $userAgent = substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500);
+            $requestJson = trim((string) file_get_contents('php://input'));
+            if ($requestJson === '' && !empty($_POST)) {
+                $requestJson = self::encodeJson($_POST) ?? '';
+            }
+            $prefix = substr($apiKey, 0, 12);
+
+            $stmt = $db->prepare(
+                'INSERT INTO gd_api_call_logs (biz_id, endpoint, method, api_key_prefix, ip_address, user_agent, request_json, started_at, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), NOW())'
+            );
+            $stmt->bind_param('issssss', $bizId, $endpoint, $method, $prefix, $ipAddress, $userAgent, $requestJson);
+            $stmt->execute();
+
+            self::$apiCallLogDb = $db;
+            self::$apiCallLogId = (int) $stmt->insert_id;
+        } catch (Throwable $exception) {
+            error_log('API call log start failed: ' . $exception->getMessage());
+        }
+    }
+
+    private static function finishApiCallLog(array $payload, int $status): void
+    {
+        if (self::$apiCallLogDb === null || self::$apiCallLogId === null) {
+            return;
+        }
+
+        try {
+            $responseJson = self::encodeJson($payload) ?? '';
+            $ok = !empty($payload['ok']) && $status >= 200 && $status < 300 ? 1 : 0;
+            $error = trim((string) ($payload['error'] ?? $payload['message'] ?? ''));
+            $id = self::$apiCallLogId;
+            $stmt = self::$apiCallLogDb->prepare(
+                'UPDATE gd_api_call_logs
+                 SET status_code = ?, ok = ?, response_json = ?, error_message = ?, finished_at = NOW(), updated_at = NOW()
+                 WHERE id = ?'
+            );
+            $stmt->bind_param('iissi', $status, $ok, $responseJson, $error, $id);
+            $stmt->execute();
+        } catch (Throwable $exception) {
+            error_log('API call log finish failed: ' . $exception->getMessage());
+        }
     }
 
     public static function extractToken(): string

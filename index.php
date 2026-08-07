@@ -94,6 +94,12 @@ if ($requestPath === '/api/webhooks/config') {
     return;
 }
 
+if (str_starts_with($requestPath, '/master/master/')) {
+    $fixedPath = '/master/' . ltrim(substr($requestPath, strlen('/master/master/')), '/');
+    header('Location: ' . app_url($fixedPath), true, 302);
+    return;
+}
+
 if (str_starts_with($requestPath, '/business')) {
     $subPath = trim(substr($requestPath, strlen('/business')), '/');
     app_dispatch($subPath === '' ? 'website/index.php' : 'website/' . $subPath . '.php');

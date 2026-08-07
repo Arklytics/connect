@@ -54,7 +54,18 @@ function app_base_path(): string
 function app_url(string $path = ''): string
 {
     $basePath = app_base_path();
-    $path = '/' . ltrim($path, '/');
+    $path = '/' . ltrim(str_replace('\\', '/', $path), '/');
+
+    if ($basePath !== '') {
+        if ($path === $basePath || str_starts_with($path, $basePath . '/')) {
+            return $path;
+        }
+
+        $baseSegment = basename($basePath);
+        if ($baseSegment !== '' && str_starts_with($path, '/' . $baseSegment . '/')) {
+            return $path;
+        }
+    }
 
     return ($basePath !== '' ? $basePath : '') . $path;
 }

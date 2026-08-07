@@ -128,6 +128,10 @@ try {
                         <i class="bi bi-chat-left-text"></i>
                         <span><strong>Webhook Logs</strong><span>Review inbound webhooks and full message history</span></span>
                     </a>
+ <a class="wg-card wg-action-card" href="<?php echo h(app_url('master/api-calls')); ?>">
+                        <i class="bi bi-activity"></i>
+                        <span><strong>API Calls</strong><span>Inspect business-wise API requests and responses</span></span>
+                    </a>
                 </div>
             </div>
         </main>
