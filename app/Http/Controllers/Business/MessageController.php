@@ -217,6 +217,9 @@ class MessageController extends Controller
             'template_id' => ['required', 'integer', 'exists:gd_whatsapp_templates,id'],
             'parent_group_id' => ['required', 'integer', 'exists:gd_groups,id'],
             'subgroup_id' => ['required', 'integer', 'exists:gd_groups,id'],
+            'header_values' => ['nullable', 'array'],
+            'body_values' => ['nullable', 'array'],
+            'button_values' => ['nullable', 'array'],
         ]);
 
         $bizId = (int) $request->session()->get('biz_id');
@@ -240,7 +243,7 @@ class MessageController extends Controller
             $languageCode = 'en_US';
         }
 
-        $templateComponents = \ApiSupport::buildTemplateSendComponents((array) $template);
+        $templateComponents = \ApiSupport::buildTemplateSendComponents((array) $template, \ApiSupport::templateSendValuesFromInput($request->all()));
         if (!empty($templateComponents['error'])) {
             return back()->with('warning', (string) $templateComponents['error']);
         }

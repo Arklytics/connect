@@ -36,6 +36,7 @@ if (isset($_GET['template_id'])) {
             'subtitle' => $template['subtitle'],
             'media_url' => $template['media_url'],
             'header_type' => $headerType,
+            'variable_requirements' => ApiSupport::templateVariableRequirements($template),
             'buttons' => $buttons, // Include parsed buttons
         ]);
     } else {

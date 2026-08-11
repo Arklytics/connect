@@ -35,7 +35,7 @@ if (isset($_POST['send'])) {
     $messageBody = $templateData['message_body'];
     $subtitle = $templateData['subtitle'];
     $placeholderData = json_decode((string) ($templateData['placeholders'] ?? ''), true);
-    $templateSend = ApiSupport::buildTemplateSendComponents($templateData);
+    $templateSend = ApiSupport::buildTemplateSendComponents($templateData, ApiSupport::templateSendValuesFromInput($_POST));
     $languageCode = is_array($placeholderData) ? (string) ($placeholderData['payload']['language'] ?? 'en_US') : 'en_US';
     if ($languageCode === '') {
         $languageCode = 'en_US';
@@ -247,6 +247,13 @@ if (isset($_POST['send'])) {
                     </div>
                 </div>
 
+                <div class="row d-none" id="templateVariableFields">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Template Variable Values</label>
+                        <div id="templateVariableInputs" class="row g-2"></div>
+                    </div>
+                </div>
+
                 <div class="row">
                     <div class="mb-3">
                         <select id="groupDropdown" name="group_id" class="form-control" required>
@@ -366,6 +373,54 @@ if (isset($_POST['send'])) {
         document.getElementById('rangeEnd').required = isPartial;
     }
 
+    function addTemplateVariableInput(container, name, label) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'col-md-6';
+
+        const inputLabel = document.createElement('label');
+        inputLabel.className = 'form-label';
+        inputLabel.textContent = label;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.name = name;
+        input.className = 'form-control';
+        input.required = true;
+
+        wrapper.appendChild(inputLabel);
+        wrapper.appendChild(input);
+        container.appendChild(wrapper);
+    }
+
+    function renderTemplateVariableFields(requirements) {
+        const fields = document.getElementById('templateVariableFields');
+        const inputs = document.getElementById('templateVariableInputs');
+        inputs.innerHTML = '';
+
+        const header = Array.isArray(requirements?.header) ? requirements.header : [];
+        const body = Array.isArray(requirements?.body) ? requirements.body : [];
+        const buttons = Array.isArray(requirements?.buttons) ? requirements.buttons : [];
+
+        header.forEach((number) => addTemplateVariableInput(inputs, `header_values[${number}]`, `Header {{${number}}}`));
+        body.forEach((number) => addTemplateVariableInput(inputs, `body_values[${number}]`, `Body {{${number}}}`));
+        buttons.forEach((button) => {
+            const index = Number(button.index || 0);
+            (Array.isArray(button.numbers) ? button.numbers : []).forEach((number) => {
+                addTemplateVariableInput(inputs, `button_values[${index}][${number}]`, `${button.text || 'Button'} {{${number}}}`);
+            });
+        });
+
+        fields.classList.toggle('d-none', inputs.children.length === 0);
+    }
+
+    function appendTemplateVariableValues(source, target) {
+        for (const [key, value] of source.entries()) {
+            if (/^(header_values|body_values|button_values)\[/.test(key)) {
+                target.append(key, value);
+            }
+        }
+    }
+
     sendScopeInputs.forEach((input) => input.addEventListener('change', syncRangeFields));
     syncRangeFields();
 
@@ -438,6 +493,7 @@ if (isset($_POST['send'])) {
                 prepareData.append('send_scope', baseData.get('send_scope') || 'all');
                 prepareData.append('range_start', baseData.get('range_start') || '');
                 prepareData.append('range_end', baseData.get('range_end') || '');
+                appendTemplateVariableValues(baseData, prepareData);
 
                 const prepared = await postBatch(prepareData);
                 const total = Number(prepared.total || 0);
@@ -457,6 +513,7 @@ if (isset($_POST['send'])) {
                     batchData.append('send_scope', baseData.get('send_scope') || 'all');
                     batchData.append('range_start', baseData.get('range_start') || '');
                     batchData.append('range_end', baseData.get('range_end') || '');
+                    appendTemplateVariableValues(baseData, batchData);
 
                     const result = await postBatch(batchData);
                     offset = Number(result.offset || (offset + batchSize));
@@ -505,6 +562,7 @@ if (isset($_POST['send'])) {
                     document.getElementById('previewTitle').textContent = data.message_title || '[Message Title]';
                     document.getElementById('previewBody').textContent = data.message_body || '[Message Body]';
                     document.getElementById('previewSubtitle').textContent = data.subtitle || '[Sub Title]';
+                    renderTemplateVariableFields(data.variable_requirements || {});
 
                     const mediaPreviewContainer = document.getElementById('previewMediaUrl');
                     mediaPreviewContainer.innerHTML = ''; // Clear previous content
@@ -571,6 +629,7 @@ if (isset($_POST['send'])) {
             document.getElementById('previewSubtitle').textContent = '[Sub Title]';
             document.getElementById('previewMediaUrl').innerHTML = '[No Media Available]';
             document.getElementById('previewButtons').innerHTML = ''; // Clear buttons
+            renderTemplateVariableFields({});
         }
     });
 </script>

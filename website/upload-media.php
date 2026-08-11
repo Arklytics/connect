@@ -39,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tmpPath = (string) $file['tmp_name'];
         $fileSize = (int) $file['size'];
         $fileType = mime_content_type($tmpPath) ?: (string) $file['type'];
+        $fileHash = is_file($tmpPath) ? (string) hash_file('sha256', $tmpPath) : '';
         $allowedTypes = [
             'image/jpeg', 'image/png',
             'video/mp4', 'video/3gpp',
@@ -52,29 +53,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $s3Error = '';
             $metaError = '';
 
-            $s3Upload = ApiSupport::s3UploadFile($tmpPath, $fileName, $fileType);
-            if (!($s3Upload['ok'] ?? false)) {
-                $s3Error = (string) ($s3Upload['error'] ?? 'Unknown S3 upload error.');
+            $existingMedia = ApiSupport::findTemplateMediaByFile($db, (int) $biz_id, $fileName, $fileType, $fileSize, $fileHash);
+            if (is_array($existingMedia)) {
+                $previewUrl = (string) ($existingMedia['s3_url'] ?? '');
+                $mediaHandle = (string) ($existingMedia['media_handle'] ?? '');
+                $s3Upload = ['ok' => $previewUrl !== '', 'key' => (string) ($existingMedia['s3_key'] ?? '')];
             } else {
-                $previewUrl = (string) ($s3Upload['url'] ?? '');
-
-                $uploadResult = ApiSupport::metaUploadMediaHandle(
-                    $appId,
-                    $accessToken,
-                    $tmpPath,
-                    $fileName,
-                    $fileType,
-                    $fileSize
-                );
-
-                if (!($uploadResult['ok'] ?? false)) {
-                    $metaError = (string) ($uploadResult['error'] ?? 'Unknown error.');
+                $s3Upload = ApiSupport::s3UploadFile($tmpPath, $fileName, $fileType);
+                if (!($s3Upload['ok'] ?? false)) {
+                    $s3Error = (string) ($s3Upload['error'] ?? 'Unknown S3 upload error.');
                 } else {
-                    $mediaHandle = (string) ($uploadResult['handle'] ?? '');
+                    $previewUrl = (string) ($s3Upload['url'] ?? '');
+
+                    $uploadResult = ApiSupport::metaUploadMediaHandle(
+                        $appId,
+                        $accessToken,
+                        $tmpPath,
+                        $fileName,
+                        $fileType,
+                        $fileSize
+                    );
+
+                    if (!($uploadResult['ok'] ?? false)) {
+                        $metaError = (string) ($uploadResult['error'] ?? 'Unknown error.');
+                    } else {
+                        $mediaHandle = (string) ($uploadResult['handle'] ?? '');
+                    }
                 }
             }
 
-            if ($previewUrl !== '' && $mediaHandle !== '') {
+            if ($previewUrl !== '' && $mediaHandle !== '' && !is_array($existingMedia)) {
                 ApiSupport::storeTemplateMedia(
                     $db,
                     (int) $biz_id,
@@ -83,7 +91,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $fileSize,
                     $previewUrl,
                     $mediaHandle,
-                    (string) ($s3Upload['key'] ?? '')
+                    (string) ($s3Upload['key'] ?? ''),
+                    $fileHash
                 );
             }
 

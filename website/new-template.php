@@ -95,11 +95,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $whatsapp_business_id = trim((string) ($business['whatsapp_id'] ?? ''));
     $appId = trim((string) AppSettings::getGlobal($db, 'META_APP_ID', Config::get('META_APP_ID', '')));
 
-    if (is_array($header_media_file) && (int) ($header_media_file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+    if ($header_media_handle === '' && is_array($header_media_file) && (int) ($header_media_file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
         $fileName = basename((string) $header_media_file['name']);
         $tmpPath = (string) $header_media_file['tmp_name'];
         $fileSize = (int) $header_media_file['size'];
         $fileType = mime_content_type($tmpPath) ?: (string) ($header_media_file['type'] ?? '');
+        $fileHash = is_file($tmpPath) ? (string) hash_file('sha256', $tmpPath) : '';
         $allowedTypes = [
             'image/jpeg', 'image/png',
             'video/mp4', 'video/3gpp',
@@ -111,40 +112,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!in_array($fileType, $allowedTypes, true)) {
             $mediaUploadError = 'Unsupported file type. Use JPG, PNG, MP4, 3GP, or PDF.';
         } else {
-            $s3Upload = ApiSupport::s3UploadFile($tmpPath, $fileName, $fileType);
-            if (!($s3Upload['ok'] ?? false)) {
-                $mediaUploadError = (string) ($s3Upload['error'] ?? 'Unknown S3 upload error.');
+            $existingMedia = ApiSupport::findTemplateMediaByFile($db, (int) $biz_id, $fileName, $fileType, $fileSize, $fileHash);
+            if (is_array($existingMedia)) {
+                $header_media_handle = (string) ($existingMedia['media_handle'] ?? '');
+                $header_media_url = (string) ($existingMedia['s3_url'] ?? $header_media_url);
+                $uploadedMediaPreviewUrl = $header_media_url;
             } else {
-                $uploadedMediaPreviewUrl = (string) ($s3Upload['url'] ?? '');
-
-                $uploadResult = ApiSupport::metaUploadMediaHandle(
-                    (string) $appId,
-                    (string) $access_token,
-                    $tmpPath,
-                    $fileName,
-                    $fileType,
-                    $fileSize
-                );
-
-                if (!($uploadResult['ok'] ?? false)) {
-                    $metaError = (string) ($uploadResult['error'] ?? 'Unknown error.');
-                    $mediaUploadError = $mediaUploadError !== '' ? trim($mediaUploadError . ' ' . $metaError) : $metaError;
+                $s3Upload = ApiSupport::s3UploadFile($tmpPath, $fileName, $fileType);
+                if (!($s3Upload['ok'] ?? false)) {
+                    $mediaUploadError = (string) ($s3Upload['error'] ?? 'Unknown S3 upload error.');
                 } else {
-                    $header_media_handle = (string) ($uploadResult['handle'] ?? '');
-                    if ($uploadedMediaPreviewUrl !== '') {
-                        $header_media_url = $uploadedMediaPreviewUrl;
-                        ApiSupport::storeTemplateMedia(
-                            $db,
-                            (int) $biz_id,
-                            $fileName,
-                            $fileType,
-                            $fileSize,
-                            $header_media_url,
-                            $header_media_handle,
-                            (string) ($s3Upload['key'] ?? '')
-                        );
+                    $uploadedMediaPreviewUrl = (string) ($s3Upload['url'] ?? '');
+
+                    $uploadResult = ApiSupport::metaUploadMediaHandle(
+                        (string) $appId,
+                        (string) $access_token,
+                        $tmpPath,
+                        $fileName,
+                        $fileType,
+                        $fileSize
+                    );
+
+                    if (!($uploadResult['ok'] ?? false)) {
+                        $metaError = (string) ($uploadResult['error'] ?? 'Unknown error.');
+                        $mediaUploadError = $mediaUploadError !== '' ? trim($mediaUploadError . ' ' . $metaError) : $metaError;
                     } else {
-                        $mediaUploadWarning = 'Media handle generated, but S3 preview file could not be saved.';
+                        $header_media_handle = (string) ($uploadResult['handle'] ?? '');
+                        if ($uploadedMediaPreviewUrl !== '') {
+                            $header_media_url = $uploadedMediaPreviewUrl;
+                            ApiSupport::storeTemplateMedia(
+                                $db,
+                                (int) $biz_id,
+                                $fileName,
+                                $fileType,
+                                $fileSize,
+                                $header_media_url,
+                                $header_media_handle,
+                                (string) ($s3Upload['key'] ?? ''),
+                                $fileHash
+                            );
+                        } else {
+                            $mediaUploadWarning = 'Media handle generated, but S3 preview file could not be saved.';
+                        }
                     }
                 }
             }

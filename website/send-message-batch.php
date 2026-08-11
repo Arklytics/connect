@@ -138,7 +138,7 @@ try {
     $languageCode = is_array($templateMeta) ? (string) ($templateMeta['payload']['language'] ?? 'en_US') : 'en_US';
     $languageCode = $languageCode !== '' ? $languageCode : 'en_US';
 
-    $templateSend = ApiSupport::buildTemplateSendComponents($template);
+    $templateSend = ApiSupport::buildTemplateSendComponents($template, ApiSupport::templateSendValuesFromInput($_POST));
     if (!empty($templateSend['error'])) {
         ApiSupport::jsonResponse(['ok' => false, 'error' => (string) $templateSend['error']], 422);
     }

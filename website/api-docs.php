@@ -184,7 +184,10 @@ X-API-KEY: YOUR_BUSINESS_API_KEY</code></pre>
                   <tr><td><code>message</code></td><td>string</td><td>For text</td><td>Text body for free-form WhatsApp text messages.</td></tr>
                   <tr><td><code>template_name</code></td><td>string</td><td>For templates</td><td>Approved WhatsApp template name saved in Arklytics Connect.</td></tr>
                   <tr><td><code>language</code></td><td>string</td><td>No</td><td>Template language, for example <code>en_US</code>. Defaults from the saved template.</td></tr>
-                  <tr><td><code>parameters</code></td><td>array</td><td>No</td><td>Values for template body placeholders.</td></tr>
+                  <tr><td><code>parameters</code></td><td>array</td><td>No</td><td>Shortcut values for body placeholders, in order. Example: <code>["A10045","Shipped"]</code>.</td></tr>
+                  <tr><td><code>body_values</code></td><td>object/array</td><td>For body vars</td><td>Body placeholder values keyed by number, for example <code>{"1":"A10045"}</code>.</td></tr>
+                  <tr><td><code>header_values</code></td><td>object/array</td><td>For header vars</td><td>Text header placeholder values keyed by number.</td></tr>
+                  <tr><td><code>button_values</code></td><td>object/array</td><td>For URL vars</td><td>Dynamic URL button values keyed by button index and variable number.</td></tr>
                   <tr><td><code>otp</code></td><td>string</td><td>For auth</td><td>OTP/code used by authentication templates.</td></tr>
                   <tr><td><code>components</code></td><td>array</td><td>No</td><td>Advanced WhatsApp template components.</td></tr>
                 </tbody>
@@ -197,6 +200,11 @@ X-API-KEY: YOUR_BUSINESS_API_KEY</code></pre>
   "language": "en_US",
   "subgroup_id": 18,
   "parameters": ["A10045", "Shipped"]
+}</code></pre>
+<pre><code>{
+  "kind": "utility",
+  "template_name": "plain_update",
+  "to": "+919876543210"
 }</code></pre>
           </section>
 

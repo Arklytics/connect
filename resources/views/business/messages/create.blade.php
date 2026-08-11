@@ -55,6 +55,10 @@
           </select>
           <div class="form-text">Messages can be sent only to a subgroup. Select the parent group first.</div>
         </div>
+        <div class="mb-3 d-none" id="templateVariableFields">
+          <label class="form-label fw-semibold">Template Variable Values</label>
+          <div class="row g-2" id="templateVariableInputs"></div>
+        </div>
         <button class="btn btn-success" type="submit">Send Message</button>
       </form>
         </div>
@@ -85,13 +89,57 @@
 
 @push('scripts')
 <script>
+  function addTemplateVariableInput(container, name, label) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'col-md-6';
+
+    const inputLabel = document.createElement('label');
+    inputLabel.className = 'form-label';
+    inputLabel.textContent = label;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.name = name;
+    input.className = 'form-control';
+    input.required = true;
+
+    wrapper.appendChild(inputLabel);
+    wrapper.appendChild(input);
+    container.appendChild(wrapper);
+  }
+
+  function renderTemplateVariableFields(requirements) {
+    const fields = document.getElementById('templateVariableFields');
+    const inputs = document.getElementById('templateVariableInputs');
+    inputs.innerHTML = '';
+
+    const header = Array.isArray(requirements?.header) ? requirements.header : [];
+    const body = Array.isArray(requirements?.body) ? requirements.body : [];
+    const buttons = Array.isArray(requirements?.buttons) ? requirements.buttons : [];
+
+    header.forEach((number) => addTemplateVariableInput(inputs, `header_values[${number}]`, `Header {{${number}}}`));
+    body.forEach((number) => addTemplateVariableInput(inputs, `body_values[${number}]`, `Body {{${number}}}`));
+    buttons.forEach((button) => {
+      const index = Number(button.index || 0);
+      (Array.isArray(button.numbers) ? button.numbers : []).forEach((number) => {
+        addTemplateVariableInput(inputs, `button_values[${index}][${number}]`, `${button.text || 'Button'} {{${number}}}`);
+      });
+    });
+
+    fields.classList.toggle('d-none', inputs.children.length === 0);
+  }
+
   templateDropdown.addEventListener('change', async () => {
-    if (!templateDropdown.value) return;
+    if (!templateDropdown.value) {
+      renderTemplateVariableFields({});
+      return;
+    }
     const response = await fetch(`{{ url('/business/templates/fetch') }}/${templateDropdown.value}`);
     const data = await response.json();
     previewTitle.textContent = data.message_title || '[Message Title]';
     previewBody.textContent = data.message_body || '[Message Body]';
     previewSubtitle.textContent = data.subtitle || '[Sub Title]';
+    renderTemplateVariableFields(data.variable_requirements || {});
   });
 
   document.querySelectorAll('.parent-select').forEach((parentSelect) => {

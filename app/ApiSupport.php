@@ -126,6 +126,11 @@ final class ApiSupport
                 INDEX gd_template_media_created_at_index (created_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+
+        $columnResult = $db->query("SHOW COLUMNS FROM gd_template_media LIKE 'file_hash'");
+        if ($columnResult instanceof mysqli_result && $columnResult->num_rows === 0) {
+            $db->query("ALTER TABLE gd_template_media ADD COLUMN file_hash CHAR(64) NULL AFTER file_size, ADD INDEX gd_template_media_file_hash_index (file_hash)");
+        }
     }
 
     public static function storeTemplateMedia(
@@ -136,16 +141,51 @@ final class ApiSupport
         int $fileSize,
         string $s3Url,
         string $mediaHandle = '',
-        string $s3Key = ''
+        string $s3Key = '',
+        string $fileHash = ''
     ): void {
         self::ensureTemplateMediaTable($db);
 
         $stmt = $db->prepare(
-            'INSERT INTO gd_template_media (biz_id, original_name, mime_type, file_size, s3_key, s3_url, media_handle, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())'
+            'INSERT INTO gd_template_media (biz_id, original_name, mime_type, file_size, file_hash, s3_key, s3_url, media_handle, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())'
         );
-        $stmt->bind_param('ississs', $bizId, $originalName, $mimeType, $fileSize, $s3Key, $s3Url, $mediaHandle);
+        $fileHash = strtolower(trim($fileHash));
+        $stmt->bind_param('ississss', $bizId, $originalName, $mimeType, $fileSize, $fileHash, $s3Key, $s3Url, $mediaHandle);
         $stmt->execute();
+    }
+
+    public static function findTemplateMediaByFile(
+        mysqli $db,
+        int $bizId,
+        string $originalName,
+        string $mimeType,
+        int $fileSize,
+        string $fileHash = ''
+    ): ?array {
+        self::ensureTemplateMediaTable($db);
+
+        $fileHash = strtolower(trim($fileHash));
+        if ($fileHash !== '') {
+            $stmt = $db->prepare(
+                'SELECT * FROM gd_template_media
+                 WHERE biz_id = ? AND file_hash = ? AND media_handle IS NOT NULL AND media_handle <> ""
+                 ORDER BY id DESC LIMIT 1'
+            );
+            $stmt->bind_param('is', $bizId, $fileHash);
+        } else {
+            $stmt = $db->prepare(
+                'SELECT * FROM gd_template_media
+                 WHERE biz_id = ? AND original_name = ? AND mime_type = ? AND file_size = ? AND media_handle IS NOT NULL AND media_handle <> ""
+                 ORDER BY id DESC LIMIT 1'
+            );
+            $stmt->bind_param('issi', $bizId, $originalName, $mimeType, $fileSize);
+        }
+
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+
+        return is_array($row) ? $row : null;
     }
 
     public static function businessTemplateMedia(mysqli $db, int $bizId, int $limit = 100): array
@@ -730,7 +770,7 @@ final class ApiSupport
         $whatsappBusinessId = trim((string) ($business['whatsapp_id'] ?? ''));
         $appId = trim((string) AppSettings::getGlobal($db, 'META_APP_ID', Config::get('META_APP_ID', '')));
 
-        if (is_array($mediaFile) && (int) ($mediaFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        if ($headerMediaHandle === '' && is_array($mediaFile) && (int) ($mediaFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
             if ((int) ($mediaFile['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
                 return ['ok' => false, 'status' => 422, 'error' => 'header_media_file upload failed.'];
             }
@@ -754,6 +794,27 @@ final class ApiSupport
             $filePath = (string) ($mediaFile['tmp_name'] ?? '');
             $fileName = (string) ($mediaFile['name'] ?? 'template-media');
             $fileSize = (int) ($mediaFile['size'] ?? 0);
+            $fileHash = is_file($filePath) ? (string) hash_file('sha256', $filePath) : '';
+            $existingMedia = self::findTemplateMediaByFile($db, $bizId, $fileName, $mimeType, $fileSize, $fileHash);
+            if (is_array($existingMedia)) {
+                $headerMediaHandle = (string) ($existingMedia['media_handle'] ?? '');
+                $mediaUrl = (string) ($existingMedia['s3_url'] ?? $mediaUrl);
+            }
+        }
+
+        if ($headerMediaHandle === '' && is_array($mediaFile) && (int) ($mediaFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+            $filePath = (string) ($mediaFile['tmp_name'] ?? '');
+            $fileName = (string) ($mediaFile['name'] ?? 'template-media');
+            $fileSize = (int) ($mediaFile['size'] ?? 0);
+            $mimeType = (string) ($mediaFile['type'] ?? '');
+            if (function_exists('mime_content_type')) {
+                $detected = mime_content_type($filePath);
+                if (is_string($detected) && $detected !== '') {
+                    $mimeType = $detected;
+                }
+            }
+            $fileHash = is_file($filePath) ? (string) hash_file('sha256', $filePath) : '';
+
             $s3Upload = self::s3UploadFile($filePath, $fileName, $mimeType);
             if (!($s3Upload['ok'] ?? false)) {
                 return ['ok' => false, 'status' => 422, 'error' => 'S3 upload failed: ' . (string) ($s3Upload['error'] ?? 'Unknown S3 upload error.')];
@@ -766,7 +827,7 @@ final class ApiSupport
 
             $mediaUrl = (string) ($s3Upload['url'] ?? '');
             $headerMediaHandle = (string) ($uploadResult['handle'] ?? '');
-            self::storeTemplateMedia($db, $bizId, $fileName, $mimeType, $fileSize, $mediaUrl, $headerMediaHandle, (string) ($s3Upload['key'] ?? ''));
+            self::storeTemplateMedia($db, $bizId, $fileName, $mimeType, $fileSize, $mediaUrl, $headerMediaHandle, (string) ($s3Upload['key'] ?? ''), $fileHash);
         }
 
         $validationErrors = [];
@@ -962,6 +1023,14 @@ final class ApiSupport
 
     private static function sampleValue(array $values, int $index): string
     {
+        $isList = array_keys($values) === range(0, count($values) - 1);
+        if ($isList) {
+            $zeroBasedKey = $index - 1;
+            if ($zeroBasedKey >= 0 && array_key_exists($zeroBasedKey, $values)) {
+                return trim((string) $values[$zeroBasedKey]);
+            }
+        }
+
         if (array_key_exists($index, $values)) {
             return trim((string) $values[$index]);
         }
@@ -971,7 +1040,84 @@ final class ApiSupport
             return trim((string) $values[$stringKey]);
         }
 
+        if (!$isList) {
+            $zeroBasedKey = $index - 1;
+            if ($zeroBasedKey >= 0 && array_key_exists($zeroBasedKey, $values)) {
+                return trim((string) $values[$zeroBasedKey]);
+            }
+        }
+
         return '';
+    }
+
+    public static function templateSendValuesFromInput(array $input): array
+    {
+        $values = [];
+        foreach ([
+            'parameters',
+            'params',
+            'template_values',
+            'variables',
+            'body',
+            'body_values',
+            'body_parameters',
+            'header',
+            'header_values',
+            'header_parameters',
+            'button',
+            'button_values',
+            'button_parameters',
+        ] as $key) {
+            $values[$key] = is_array($input[$key] ?? null) ? $input[$key] : [];
+        }
+
+        $values['header_media_url'] = trim((string) ($input['header_media_url'] ?? $input['media_url'] ?? ''));
+
+        return $values;
+    }
+
+    public static function templateVariableRequirements(array $templateRow): array
+    {
+        $meta = [];
+        if (!empty($templateRow['placeholders'])) {
+            $decoded = json_decode((string) $templateRow['placeholders'], true);
+            if (is_array($decoded)) {
+                $meta = $decoded;
+            }
+        }
+
+        $headerType = strtoupper(trim((string) ($meta['header_type'] ?? 'NONE')));
+        $headerText = (string) ($meta['header_text'] ?? ($templateRow['message_title'] ?? ''));
+        $requirements = [
+            'header' => $headerType === 'TEXT' ? self::templatePlaceholderNumbers($headerText) : [],
+            'body' => self::templatePlaceholderNumbers((string) ($templateRow['message_body'] ?? '')),
+            'buttons' => [],
+        ];
+
+        $buttons = [];
+        if (isset($meta['buttons']) && is_array($meta['buttons'])) {
+            $buttons = $meta['buttons'];
+        } elseif (isset($templateRow['buttons'])) {
+            $decodedButtons = json_decode((string) $templateRow['buttons'], true);
+            if (is_array($decodedButtons)) {
+                $buttons = $decodedButtons;
+            }
+        }
+
+        foreach (array_values($buttons) as $index => $button) {
+            if (is_array($button) && strtoupper(trim((string) ($button['type'] ?? ''))) === 'URL') {
+                $numbers = self::templatePlaceholderNumbers((string) ($button['url'] ?? $button['link'] ?? ''));
+                if (!empty($numbers)) {
+                    $requirements['buttons'][] = [
+                        'index' => $index,
+                        'text' => (string) ($button['text'] ?? 'Button ' . ($index + 1)),
+                        'numbers' => $numbers,
+                    ];
+                }
+            }
+        }
+
+        return $requirements;
     }
 
     private static function templateExampleValue(array $values, int $index): string
@@ -979,154 +1125,156 @@ final class ApiSupport
     return self::sampleValue($values, $index);
 }
 
-public static function buildTemplateSendComponents(array $templateRow): array
+public static function buildTemplateSendComponents(array $templateRow, array $sendValues = []): array
 {
     $meta = [];
-
     if (!empty($templateRow['placeholders'])) {
-        $decoded = json_decode((string)$templateRow['placeholders'], true);
+        $decoded = json_decode((string) $templateRow['placeholders'], true);
         if (is_array($decoded)) {
             $meta = $decoded;
         }
     }
 
     $components = [];
+    $headerType = strtoupper(trim((string) ($meta['header_type'] ?? 'NONE')));
+    $headerText = (string) ($meta['header_text'] ?? ($templateRow['message_title'] ?? ''));
+    $headerNumbers = self::templatePlaceholderNumbers($headerText);
 
-    /*
-    |--------------------------------------------------------------------------
-    | HEADER
-    |--------------------------------------------------------------------------
-    */
-
-    $headerType = strtoupper(trim((string)($meta['header_type'] ?? '')));
-
-    switch ($headerType) {
-
-        case 'TEXT':
-
-            $headerText = (string)($meta['header_text'] ?? '');
-
-            preg_match_all('/{{\s*(\d+)\s*}}/', $headerText, $matches);
-
-            if (!empty($matches[1])) {
-
-                $components[] = [
-                    'type' => 'header',
-                    'parameters' => [[
-                        'type' => 'text',
-                        'text' => trim((string)($meta['header_sample'] ?? ''))
-                    ]]
-                ];
-            }
-
-            break;
-
-        case 'IMAGE':
-        case 'VIDEO':
-        case 'DOCUMENT':
-
-            $type = strtolower($headerType);
-
-            $mediaUrl = trim(
-                (string)(
-                    $meta['header_media_url']
-                    ?? $templateRow['media_url']
-                    ?? ''
-                )
-            );
-
-            if ($mediaUrl !== '') {
-
-                $parameter = [
-                    'type' => $type,
-                    $type => [
-                        'link' => $mediaUrl
-                    ]
-                ];
-
-                if ($type === 'document') {
-                    $parameter['document']['filename'] =
-                        basename(parse_url($mediaUrl, PHP_URL_PATH));
-                }
-
-                $components[] = [
-                    'type' => 'header',
-                    'parameters' => [$parameter]
-                ];
-            }
-
-            break;
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | BODY
-    |--------------------------------------------------------------------------
-    */
-
-    $body = (string)($templateRow['message_body'] ?? '');
-
-    preg_match_all('/{{\s*(\d+)\s*}}/', $body, $matches);
-
-    if (!empty($matches[1])) {
-
+    if ($headerType === 'TEXT' && !empty($headerNumbers)) {
         $parameters = [];
-
-        foreach ($matches[1] as $number) {
-
-            $value = self::templateExampleValue(
-                $meta['body_samples'] ?? [],
-                (int)$number
-            );
-
+        foreach ($headerNumbers as $number) {
+            $value = self::templateSendValue($sendValues, 'header', $number);
             if ($value === '') {
-                $value = 'Sample';
+                return [
+                    'components' => [],
+                    'error' => 'This template needs a header value for {{' . $number . '}}.',
+                ];
             }
 
-            $parameters[] = [
-                'type' => 'text',
-                'text' => $value
+            $parameters[] = ['type' => 'text', 'text' => $value];
+        }
+
+        $components[] = ['type' => 'header', 'parameters' => $parameters];
+    } elseif (in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
+        $mediaUrl = trim((string) ($sendValues['header_media_url'] ?? $meta['header_media_url'] ?? $templateRow['media_url'] ?? ''));
+        if ($mediaUrl === '') {
+            return [
+                'components' => [],
+                'error' => 'This template needs a media URL for the header before it can be sent.',
             ];
         }
 
-        $components[] = [
-            'type' => 'body',
-            'parameters' => $parameters
-        ];
+        $components[] = self::buildMediaHeaderComponent($headerType, $mediaUrl);
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | BUTTONS
-    |--------------------------------------------------------------------------
-    */
-
-    if (!empty($meta['buttons']) && is_array($meta['buttons'])) {
-
-        foreach ($meta['buttons'] as $index => $button) {
-
-            $buttonType = strtoupper($button['type'] ?? '');
-
-            if ($buttonType === 'URL') {
-
-                $components[] = [
-                    'type' => 'button',
-                    'sub_type' => 'url',
-                    'index' => (string)$index,
-                    'parameters' => [[
-                        'type' => 'text',
-                        'text' => $button['sample'] ?? ''
-                    ]]
+    $bodyNumbers = self::templatePlaceholderNumbers((string) ($templateRow['message_body'] ?? ''));
+    if (!empty($bodyNumbers)) {
+        $parameters = [];
+        foreach ($bodyNumbers as $number) {
+            $value = self::templateSendValue($sendValues, 'body', $number);
+            if ($value === '') {
+                return [
+                    'components' => [],
+                    'error' => 'This template needs a body value for {{' . $number . '}}.',
                 ];
             }
+
+            $parameters[] = ['type' => 'text', 'text' => $value];
         }
+
+        $components[] = ['type' => 'body', 'parameters' => $parameters];
+    }
+
+    $buttons = [];
+    if (isset($meta['buttons']) && is_array($meta['buttons'])) {
+        $buttons = $meta['buttons'];
+    } elseif (isset($templateRow['buttons'])) {
+        $decodedButtons = json_decode((string) $templateRow['buttons'], true);
+        if (is_array($decodedButtons)) {
+            $buttons = $decodedButtons;
+        }
+    }
+
+    foreach (array_values($buttons) as $index => $button) {
+        if (!is_array($button) || strtoupper(trim((string) ($button['type'] ?? ''))) !== 'URL') {
+            continue;
+        }
+
+        $url = trim((string) ($button['url'] ?? $button['link'] ?? ''));
+        $numbers = self::templatePlaceholderNumbers($url);
+        if (empty($numbers)) {
+            continue;
+        }
+
+        $buttonParameters = [];
+        foreach ($numbers as $number) {
+            $value = self::templateSendValue($sendValues, 'button', $number, (string) $index);
+            if ($value === '') {
+                $value = self::templateSendValue($sendValues, 'body', $number);
+            }
+            if ($value === '') {
+                return [
+                    'components' => [],
+                    'error' => 'This template needs a dynamic URL button value for button ' . ($index + 1) . '.',
+                ];
+            }
+
+            $buttonParameters[] = ['type' => 'text', 'text' => $value];
+        }
+
+        $components[] = [
+            'type' => 'button',
+            'sub_type' => 'url',
+            'index' => (string) $index,
+            'parameters' => $buttonParameters,
+        ];
     }
 
     return [
         'components' => $components,
-        'error' => null
+        'error' => null,
     ];
 }
+
+    private static function templateSendValue(array $values, string $section, int $number, ?string $buttonIndex = null): string
+    {
+        $sectionKeys = [
+            $section,
+            $section . '_values',
+            $section . '_parameters',
+        ];
+
+        foreach ($sectionKeys as $key) {
+            if (!isset($values[$key]) || !is_array($values[$key])) {
+                continue;
+            }
+
+            if ($buttonIndex !== null && isset($values[$key][$buttonIndex]) && is_array($values[$key][$buttonIndex])) {
+                $value = self::sampleValue($values[$key][$buttonIndex], $number);
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+
+            $value = self::sampleValue($values[$key], $number);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        if ($section === 'body') {
+            foreach (['parameters', 'params', 'template_values', 'variables'] as $key) {
+                if (isset($values[$key]) && is_array($values[$key])) {
+                    $value = self::sampleValue($values[$key], $number);
+                    if ($value !== '') {
+                        return $value;
+                    }
+                }
+            }
+        }
+
+        return '';
+    }
     private static function buildComponentsFromPayload(array $templateRow, array $meta, array $payloadComponents): array
     {
         $components = [];

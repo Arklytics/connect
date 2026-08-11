@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
 
 class TemplateController extends Controller
 {
@@ -78,7 +79,7 @@ class TemplateController extends Controller
         $buttons = [];
         $mediaUrl = $headerMediaUrl;
 
-        if ($request->hasFile('header_media_file')) {
+        if ($headerMediaHandle === '' && $request->hasFile('header_media_file')) {
             $mediaFile = $request->file('header_media_file');
             $mediaType = (string) ($mediaFile?->getMimeType() ?? '');
             $allowedTypes = [
@@ -98,42 +99,53 @@ class TemplateController extends Controller
             }
 
             $tempPath = (string) $mediaFile->getPathname();
-            $s3Upload = \ApiSupport::s3UploadFile(
-                $tempPath,
-                (string) $mediaFile->getClientOriginalName(),
-                $mediaType
-            );
+            $originalName = (string) $mediaFile->getClientOriginalName();
+            $fileSize = (int) $mediaFile->getSize();
+            $fileHash = is_file($tempPath) ? (string) hash_file('sha256', $tempPath) : '';
+            $existingMedia = $this->findTemplateMediaByFile($bizId, $originalName, $mediaType, $fileSize, $fileHash);
 
-            if (!($s3Upload['ok'] ?? false)) {
-                return back()->withInput()->with('error', 'S3 upload failed: ' . (string) ($s3Upload['error'] ?? 'Unknown S3 upload error.'));
+            if (is_array($existingMedia)) {
+                $headerMediaHandle = (string) ($existingMedia['media_handle'] ?? '');
+                $mediaUrl = (string) ($existingMedia['s3_url'] ?? $mediaUrl);
+            } else {
+                $s3Upload = \ApiSupport::s3UploadFile(
+                    $tempPath,
+                    $originalName,
+                    $mediaType
+                );
+
+                if (!($s3Upload['ok'] ?? false)) {
+                    return back()->withInput()->with('error', 'S3 upload failed: ' . (string) ($s3Upload['error'] ?? 'Unknown S3 upload error.'));
+                }
+
+                $mediaUrl = (string) ($s3Upload['url'] ?? '');
+                $uploadResult = \ApiSupport::metaUploadMediaHandle(
+                    $appId,
+                    $accessToken,
+                    $tempPath,
+                    $originalName,
+                    $mediaType,
+                    $fileSize
+                );
+
+                if (!($uploadResult['ok'] ?? false)) {
+                    $error = (string) ($uploadResult['error'] ?? 'Unknown error.');
+
+                    return back()->withInput()->with('error', 'Media handle generation failed: ' . $error);
+                }
+
+                $headerMediaHandle = (string) ($uploadResult['handle'] ?? '');
+                $this->storeTemplateMedia(
+                    $bizId,
+                    $originalName,
+                    $mediaType,
+                    $fileSize,
+                    $mediaUrl,
+                    $headerMediaHandle,
+                    (string) ($s3Upload['key'] ?? ''),
+                    $fileHash
+                );
             }
-
-            $mediaUrl = (string) ($s3Upload['url'] ?? '');
-            $uploadResult = \ApiSupport::metaUploadMediaHandle(
-                $appId,
-                $accessToken,
-                $tempPath,
-                (string) $mediaFile->getClientOriginalName(),
-                $mediaType,
-                (int) $mediaFile->getSize()
-            );
-
-            if (!($uploadResult['ok'] ?? false)) {
-                $error = (string) ($uploadResult['error'] ?? 'Unknown error.');
-
-                return back()->withInput()->with('error', 'Media handle generation failed: ' . $error);
-            }
-
-            $headerMediaHandle = (string) ($uploadResult['handle'] ?? '');
-            $this->storeTemplateMedia(
-                $bizId,
-                (string) $mediaFile->getClientOriginalName(),
-                $mediaType,
-                (int) $mediaFile->getSize(),
-                $mediaUrl,
-                $headerMediaHandle,
-                (string) ($s3Upload['key'] ?? '')
-            );
         }
 
         $validationErrors = [];
@@ -361,6 +373,7 @@ class TemplateController extends Controller
             'subtitle' => $template->subtitle,
             'media_url' => $template->media_url,
             'buttons' => json_decode($template->buttons ?: '[]', true),
+            'variable_requirements' => \ApiSupport::templateVariableRequirements((array) $template),
         ]);
     }
 
@@ -378,6 +391,7 @@ class TemplateController extends Controller
         if (!Schema::hasTable('gd_template_media')) {
             return [];
         }
+        $this->ensureTemplateMediaHashColumn();
 
         return DB::table('gd_template_media')
             ->where('biz_id', $bizId)
@@ -395,13 +409,15 @@ class TemplateController extends Controller
         int $fileSize,
         string $s3Url,
         string $mediaHandle,
-        string $s3Key
+        string $s3Key,
+        string $fileHash = ''
     ): void {
         if (!Schema::hasTable('gd_template_media')) {
             return;
         }
+        $this->ensureTemplateMediaHashColumn();
 
-        DB::table('gd_template_media')->insert([
+        $row = [
             'biz_id' => $bizId,
             'original_name' => $originalName,
             'mime_type' => $mimeType,
@@ -411,7 +427,51 @@ class TemplateController extends Controller
             'media_handle' => $mediaHandle,
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ];
+        if (Schema::hasColumn('gd_template_media', 'file_hash')) {
+            $row['file_hash'] = strtolower(trim($fileHash));
+        }
+
+        DB::table('gd_template_media')->insert($row);
+    }
+
+    private function findTemplateMediaByFile(
+        int $bizId,
+        string $originalName,
+        string $mimeType,
+        int $fileSize,
+        string $fileHash = ''
+    ): ?array {
+        if (!Schema::hasTable('gd_template_media')) {
+            return null;
+        }
+        $this->ensureTemplateMediaHashColumn();
+
+        $query = DB::table('gd_template_media')
+            ->where('biz_id', $bizId)
+            ->whereNotNull('media_handle')
+            ->where('media_handle', '<>', '');
+
+        if (Schema::hasColumn('gd_template_media', 'file_hash') && trim($fileHash) !== '') {
+            $query->where('file_hash', strtolower(trim($fileHash)));
+        } else {
+            $query->where('original_name', $originalName)
+                ->where('mime_type', $mimeType)
+                ->where('file_size', $fileSize);
+        }
+
+        $row = $query->orderByDesc('id')->first();
+
+        return $row ? (array) $row : null;
+    }
+
+    private function ensureTemplateMediaHashColumn(): void
+    {
+        if (Schema::hasTable('gd_template_media') && !Schema::hasColumn('gd_template_media', 'file_hash')) {
+            Schema::table('gd_template_media', static function (Blueprint $table): void {
+                $table->char('file_hash', 64)->nullable()->after('file_size')->index();
+            });
+        }
     }
 
     private function templatePlaceholderNumbers(string $text): array

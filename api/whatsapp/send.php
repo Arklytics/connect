@@ -197,6 +197,7 @@ $messageBody = trim((string) ($payload['message'] ?? $payload['message_body'] ??
 $templateName = trim((string) ($payload['template_name'] ?? ''));
 $components = $payload['components'] ?? [];
 $parameters = $payload['parameters'] ?? $payload['params'] ?? [];
+$templateSendValues = ApiSupport::templateSendValuesFromInput($payload);
 $otp = trim((string) ($payload['otp'] ?? $payload['code'] ?? ''));
 $templateRow = [];
 
@@ -313,7 +314,7 @@ if ($isAuthenticationSend && empty($components)) {
 }
 
 if ($isTemplateSend && empty($components) && !empty($templateRow ?? [])) {
-    $builtComponents = ApiSupport::buildTemplateSendComponents($templateRow);
+    $builtComponents = ApiSupport::buildTemplateSendComponents($templateRow, $templateSendValues);
     if (!empty($builtComponents['error'])) {
         ApiSupport::jsonResponse(['ok' => false, 'error' => (string) $builtComponents['error']], 422);
     }
