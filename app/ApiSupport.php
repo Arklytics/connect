@@ -1252,13 +1252,13 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
             if ($buttonIndex !== null && isset($values[$key][$buttonIndex]) && is_array($values[$key][$buttonIndex])) {
                 $value = self::sampleValue($values[$key][$buttonIndex], $number);
                 if ($value !== '') {
-                    return $value;
+                    return self::applyTemplateSendTokens($value, $values);
                 }
             }
 
             $value = self::sampleValue($values[$key], $number);
             if ($value !== '') {
-                return $value;
+                return self::applyTemplateSendTokens($value, $values);
             }
         }
 
@@ -1267,7 +1267,7 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
                 if (isset($values[$key]) && is_array($values[$key])) {
                     $value = self::sampleValue($values[$key], $number);
                     if ($value !== '') {
-                        return $value;
+                        return self::applyTemplateSendTokens($value, $values);
                     }
                 }
             }
@@ -1275,6 +1275,42 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
 
         return '';
     }
+
+    private static function applyTemplateSendTokens(string $value, array $values): string
+    {
+        $recipient = is_array($values['_recipient'] ?? null) ? $values['_recipient'] : [];
+        if (empty($recipient)) {
+            return $value;
+        }
+
+        $tokens = [];
+        foreach ($recipient as $key => $tokenValue) {
+            if (is_scalar($tokenValue) || $tokenValue === null) {
+                $normalizedKey = strtolower(preg_replace('/[^a-z0-9_]+/', '_', (string) $key) ?? (string) $key);
+                $tokens[$normalizedKey] = trim((string) $tokenValue);
+            }
+        }
+
+        if (!isset($tokens['name']) && isset($tokens['full_name'])) {
+            $tokens['name'] = $tokens['full_name'];
+        }
+        if (!isset($tokens['full_name']) && isset($tokens['name'])) {
+            $tokens['full_name'] = $tokens['name'];
+        }
+        if (!isset($tokens['phone']) && isset($tokens['phone_number'])) {
+            $tokens['phone'] = $tokens['phone_number'];
+        }
+        if (!isset($tokens['phone_number']) && isset($tokens['phone'])) {
+            $tokens['phone_number'] = $tokens['phone'];
+        }
+
+        foreach ($tokens as $key => $tokenValue) {
+            $value = str_replace(['{{' . $key . '}}', '{' . $key . '}', '[' . $key . ']'], $tokenValue, $value);
+        }
+
+        return $value;
+    }
+
     private static function buildComponentsFromPayload(array $templateRow, array $meta, array $payloadComponents): array
     {
         $components = [];

@@ -57,6 +57,7 @@
         </div>
         <div class="mb-3 d-none" id="templateVariableFields">
           <label class="form-label fw-semibold">Template Variable Values</label>
+          <div class="form-text mb-2">Use @{{name}}, @{{phone}}, or @{{email}} to personalize each contact.</div>
           <div class="row g-2" id="templateVariableInputs"></div>
         </div>
         <button class="btn btn-success" type="submit">Send Message</button>

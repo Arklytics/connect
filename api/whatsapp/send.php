@@ -27,6 +27,7 @@ function apiResolveRecipients(mysqli $db, int $bizId, array $payload): array
                     'phone_number' => $phone,
                     'contact_id' => null,
                     'full_name' => null,
+                    'send_values' => [],
                 ];
             }
         }
@@ -60,6 +61,7 @@ function apiResolveRecipients(mysqli $db, int $bizId, array $payload): array
             'phone_number' => $phone,
             'contact_id' => $contactId,
             'full_name' => (string) ($contact['full_name'] ?? ''),
+            'send_values' => [],
         ];
     }
 
@@ -115,6 +117,7 @@ function apiResolveRecipients(mysqli $db, int $bizId, array $payload): array
                     'phone_number' => $phone,
                     'contact_id' => (int) ($contact['id'] ?? 0),
                     'full_name' => (string) ($contact['full_name'] ?? ''),
+                    'send_values' => [],
                 ];
             }
         }
@@ -133,6 +136,7 @@ function apiResolveRecipients(mysqli $db, int $bizId, array $payload): array
                     'phone_number' => $phone,
                     'contact_id' => null,
                     'full_name' => null,
+                    'send_values' => [],
                 ];
             }
             continue;
@@ -156,6 +160,7 @@ function apiResolveRecipients(mysqli $db, int $bizId, array $payload): array
                             'phone_number' => $phone,
                             'contact_id' => $contactId,
                             'full_name' => (string) ($contact['full_name'] ?? ''),
+                            'send_values' => ApiSupport::templateSendValuesFromInput($recipient),
                         ];
                     }
                 }
@@ -172,6 +177,7 @@ function apiResolveRecipients(mysqli $db, int $bizId, array $payload): array
             'phone_number' => $phone,
             'contact_id' => null,
             'full_name' => trim((string) ($recipient['full_name'] ?? $recipient['name'] ?? '')) ?: null,
+            'send_values' => ApiSupport::templateSendValuesFromInput($recipient),
         ];
     }
 
@@ -181,6 +187,22 @@ function apiResolveRecipients(mysqli $db, int $bizId, array $payload): array
     }
 
     return array_values($unique);
+}
+
+function apiMergeTemplateSendValues(array $globalValues, array $recipientValues): array
+{
+    foreach ($recipientValues as $key => $value) {
+        if (is_array($value)) {
+            $globalValues[$key] = array_replace_recursive(
+                is_array($globalValues[$key] ?? null) ? $globalValues[$key] : [],
+                $value
+            );
+        } elseif (trim((string) $value) !== '') {
+            $globalValues[$key] = $value;
+        }
+    }
+
+    return $globalValues;
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -279,7 +301,6 @@ if ($language === '') {
     $language = $isTemplateSend ? 'en_US' : 'en';
 }
 
-$templateSendComponents = [];
 if ($isAuthenticationSend && empty($components)) {
     $authCode = $templateBodyValues[0] ?? '';
     if ($authCode === '') {
@@ -313,20 +334,7 @@ if ($isAuthenticationSend && empty($components)) {
     ];
 }
 
-if ($isTemplateSend && empty($components) && !empty($templateRow ?? [])) {
-    $builtComponents = ApiSupport::buildTemplateSendComponents($templateRow, $templateSendValues);
-    if (!empty($builtComponents['error'])) {
-        ApiSupport::jsonResponse(['ok' => false, 'error' => (string) $builtComponents['error']], 422);
-    }
-
-    $templateSendComponents = is_array($builtComponents['components'] ?? null) ? $builtComponents['components'] : [];
-}
-
-if ($isTemplateSend && empty($components) && !empty($templateSendComponents)) {
-    $components = $templateSendComponents;
-}
-
-if ($isTemplateSend && empty($components) && !empty($templateBodyValues)) {
+if ($isTemplateSend && empty($components) && empty($templateRow ?? []) && !empty($templateBodyValues)) {
     $components = [
         [
             'type' => 'body',
@@ -399,8 +407,36 @@ foreach ($recipients as $recipient) {
     }
 
     $to = (string) $recipient['phone_number'];
+    $recipientComponents = is_array($components) ? $components : [];
+    if ($isTemplateSend && empty($recipientComponents) && !empty($templateRow ?? [])) {
+        $recipientContext = [
+            'contact_id' => $recipient['contact_id'] ?? null,
+            'full_name' => $recipient['full_name'] ?? '',
+            'name' => $recipient['full_name'] ?? '',
+            'phone_number' => $to,
+            'phone' => $to,
+        ];
+        $recipientSendValues = apiMergeTemplateSendValues(
+            $templateSendValues + ['_recipient' => $recipientContext],
+            is_array($recipient['send_values'] ?? null) ? $recipient['send_values'] : []
+        );
+        $builtComponents = ApiSupport::buildTemplateSendComponents($templateRow, $recipientSendValues);
+        if (!empty($builtComponents['error'])) {
+            $failed++;
+            $details[] = [
+                'to' => $to,
+                'status' => 'failed',
+                'message_id' => null,
+                'error' => (string) $builtComponents['error'],
+            ];
+            continue;
+        }
+
+        $recipientComponents = is_array($builtComponents['components'] ?? null) ? $builtComponents['components'] : [];
+    }
+
     $sendPayload = $isTemplateSend
-        ? ApiSupport::whatsappTemplatePayload($to, $templateName, $language, is_array($components) ? $components : [])
+        ? ApiSupport::whatsappTemplatePayload($to, $templateName, $language, $recipientComponents)
         : ApiSupport::whatsappTextPayload($to, $messageBody);
 
     $result = ApiSupport::whatsappSendRequest($phoneNumberId, $accessToken, $sendPayload);
@@ -420,7 +456,7 @@ foreach ($recipients as $recipient) {
             : (string) json_encode([
                 'template_name' => $templateName,
                 'language' => $language,
-                'components' => $components,
+                'components' => $recipientComponents,
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     } else {
         $messageBodyForLog = $messageBody;

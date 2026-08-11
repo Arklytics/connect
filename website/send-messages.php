@@ -44,7 +44,6 @@ if (isset($_POST['send'])) {
     if (is_array($templateSend) && !empty($templateSend['error'])) {
         die("<script>alert('" . addslashes((string) $templateSend['error']) . "');</script>");
     }
-    $templateComponents = is_array($templateSend) ? ($templateSend['components'] ?? []) : [];
 
     // Fetch group members. Main groups include contacts in their subgroups.
     $targetGroupIds = ApiSupport::groupTargetIds($db, (int) $biz_id, (int) $group_id, true);
@@ -102,6 +101,21 @@ if (isset($_POST['send'])) {
             $errorMessages[] = "Skipping empty phone number.";
             continue;
         }
+
+        $memberSendValues = ApiSupport::templateSendValuesFromInput($_POST);
+        $memberSendValues['_recipient'] = [
+            'contact_id' => $member['id'] ?? null,
+            'full_name' => $member['full_name'] ?? '',
+            'name' => $member['full_name'] ?? '',
+            'phone_number' => $phone,
+            'phone' => $phone,
+        ];
+        $memberTemplateSend = ApiSupport::buildTemplateSendComponents($templateData, $memberSendValues);
+        if (!empty($memberTemplateSend['error'])) {
+            $errorMessages[] = "Failed to send to $phone - Error: " . (string) $memberTemplateSend['error'];
+            continue;
+        }
+        $memberTemplateComponents = is_array($memberTemplateSend['components'] ?? null) ? $memberTemplateSend['components'] : [];
     
         // WhatsApp API URL
         $url = "https://graph.facebook.com/" . ApiSupport::GRAPH_VERSION . "/$phoneNumberId/messages";
@@ -118,8 +132,8 @@ if (isset($_POST['send'])) {
         ]
     ];
 
-    if (!empty($templateComponents)) {
-        $data['template']['components'] = $templateComponents;
+    if (!empty($memberTemplateComponents)) {
+        $data['template']['components'] = $memberTemplateComponents;
     }
     
     // Send request using cURL
@@ -250,6 +264,7 @@ if (isset($_POST['send'])) {
                 <div class="row d-none" id="templateVariableFields">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Template Variable Values</label>
+                        <div class="form-text mb-2">Use {{name}}, {{phone}}, or {{email}} to personalize each contact.</div>
                         <div id="templateVariableInputs" class="row g-2"></div>
                     </div>
                 </div>

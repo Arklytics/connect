@@ -247,7 +247,6 @@ class MessageController extends Controller
         if (!empty($templateComponents['error'])) {
             return back()->with('warning', (string) $templateComponents['error']);
         }
-        $templateSendComponents = is_array($templateComponents['components'] ?? null) ? $templateComponents['components'] : [];
 
         $group = DB::table('gd_groups')
             ->where('id', $subgroupId)
@@ -316,7 +315,22 @@ class MessageController extends Controller
                 continue;
             }
 
-            $payload = \ApiSupport::whatsappTemplatePayload($phone, (string) $template->template_name, $languageCode, $templateSendComponents);
+            $recipientSendValues = \ApiSupport::templateSendValuesFromInput($request->all());
+            $recipientSendValues['_recipient'] = [
+                'contact_id' => $contact->id ?? null,
+                'full_name' => $contact->full_name ?? '',
+                'name' => $contact->full_name ?? '',
+                'phone_number' => $phone,
+                'phone' => $phone,
+            ];
+            $recipientTemplateComponents = \ApiSupport::buildTemplateSendComponents((array) $template, $recipientSendValues);
+            if (!empty($recipientTemplateComponents['error'])) {
+                $errorMessages[] = 'Failed to send to ' . $phone . ': ' . (string) $recipientTemplateComponents['error'];
+                continue;
+            }
+            $recipientSendComponents = is_array($recipientTemplateComponents['components'] ?? null) ? $recipientTemplateComponents['components'] : [];
+
+            $payload = \ApiSupport::whatsappTemplatePayload($phone, (string) $template->template_name, $languageCode, $recipientSendComponents);
             $response = \ApiSupport::whatsappSendRequest((string) $business->phone_number_id, $whatsappToken, $payload);
 
             $status = $response['ok'] ? 'success' : 'failed';

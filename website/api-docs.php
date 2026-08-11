@@ -194,6 +194,7 @@ X-API-KEY: YOUR_BUSINESS_API_KEY</code></pre>
               </table>
             </div>
             <p class="small text-muted">*Provide at least one recipient source: phone numbers, contact IDs, group IDs, or subgroup IDs.</p>
+            <p class="small text-muted">For contact or subgroup sends, values may include <code>{{name}}</code>, <code>{{phone}}</code>, or <code>{{email}}</code>; Arklytics resolves them per recipient.</p>
 <pre><code>{
   "kind": "utility",
   "template_name": "order_update",
@@ -205,6 +206,28 @@ X-API-KEY: YOUR_BUSINESS_API_KEY</code></pre>
   "kind": "utility",
   "template_name": "plain_update",
   "to": "+919876543210"
+}</code></pre>
+<pre><code>{
+  "kind": "utility",
+  "template_name": "order_update",
+  "recipients": [
+    {
+      "to": "+919876543210",
+      "body_values": {
+        "1": "Ravi",
+        "2": "ORD-1001",
+        "3": "TXN-5001"
+      }
+    },
+    {
+      "to": "+919812345678",
+      "body_values": {
+        "1": "Priya",
+        "2": "ORD-1002",
+        "3": "TXN-5002"
+      }
+    }
+  ]
 }</code></pre>
           </section>
 

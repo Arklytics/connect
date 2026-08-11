@@ -142,7 +142,6 @@ try {
     if (!empty($templateSend['error'])) {
         ApiSupport::jsonResponse(['ok' => false, 'error' => (string) $templateSend['error']], 422);
     }
-    $templateComponents = is_array($templateSend['components'] ?? null) ? $templateSend['components'] : [];
 
     $groupTotal = batchRecipientCount($db, (int) $biz_id, $groupId);
     if ($groupTotal <= 0) {
@@ -187,11 +186,27 @@ try {
             continue;
         }
 
+        $recipientSendValues = ApiSupport::templateSendValuesFromInput($_POST);
+        $recipientSendValues['_recipient'] = [
+            'contact_id' => $recipient['id'] ?? null,
+            'full_name' => $recipient['full_name'] ?? '',
+            'name' => $recipient['full_name'] ?? '',
+            'phone_number' => $phone,
+            'phone' => $phone,
+        ];
+        $recipientTemplateSend = ApiSupport::buildTemplateSendComponents($template, $recipientSendValues);
+        if (!empty($recipientTemplateSend['error'])) {
+            $failed++;
+            $errors[] = 'Failed to send to ' . $phone . ': ' . (string) $recipientTemplateSend['error'];
+            continue;
+        }
+        $recipientTemplateComponents = is_array($recipientTemplateSend['components'] ?? null) ? $recipientTemplateSend['components'] : [];
+
         $payload = ApiSupport::whatsappTemplatePayload(
             $phone,
             (string) $template['template_name'],
             $languageCode,
-            $templateComponents
+            $recipientTemplateComponents
         );
         $response = ApiSupport::whatsappSendRequest($phoneNumberId, $whatsappToken, $payload);
         $status = $response['ok'] ? 'success' : 'failed';
