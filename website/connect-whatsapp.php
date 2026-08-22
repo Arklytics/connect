@@ -78,6 +78,16 @@ function findSignupValue(array $payload, array $keys): string
             return trim((string) $value);
         }
 
+        if (is_string($value) && str_starts_with(trim($value), '{')) {
+            $decoded = json_decode($value, true);
+            if (is_array($decoded)) {
+                $nested = findSignupValue($decoded, $keys);
+                if ($nested !== '') {
+                    return $nested;
+                }
+            }
+        }
+
         if (is_array($value)) {
             $nested = findSignupValue($value, $keys);
             if ($nested !== '') {
@@ -150,6 +160,36 @@ function fetchMetaWhatsAppDetails(string $accessToken, string $knownWabaId = '')
     }
 
     return $results;
+}
+
+function firstMetaWhatsAppDetails(array $accessTokens, string $knownWabaId = ''): array
+{
+    $lastResult = [
+        'whatsapp_id' => '',
+        'phone_number_id' => '',
+        'phone_number_status' => '',
+        'error' => '',
+        'access_token' => '',
+        'token_source' => '',
+    ];
+
+    foreach ($accessTokens as $tokenSource => $accessToken) {
+        $accessToken = trim((string) $accessToken);
+        if ($accessToken === '') {
+            continue;
+        }
+
+        $result = fetchMetaWhatsAppDetails($accessToken, $knownWabaId);
+        $result['access_token'] = $accessToken;
+        $result['token_source'] = (string) $tokenSource;
+        $lastResult = $result;
+
+        if ($result['whatsapp_id'] !== '' && $result['phone_number_id'] !== '') {
+            return $result;
+        }
+    }
+
+    return $lastResult;
 }
 
 function exchangeEmbeddedSignupCode(string $code, string $appId, string $appSecret): array
@@ -339,10 +379,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $signupPayload = json_decode($signupPayloadRaw, true);
         if (is_array($signupPayload)) {
             if ($wabaId === '') {
-                $wabaId = findSignupValue($signupPayload, ['waba_id', 'wabaId', 'whatsapp_business_account_id', 'whatsappBusinessAccountId']);
+                $wabaId = findSignupValue($signupPayload, ['waba_id', 'wabaId', 'wabaID', 'whatsapp_business_account_id', 'whatsappBusinessAccountId', 'whatsapp_business_id']);
             }
             if ($phoneNumberId === '') {
-                $phoneNumberId = findSignupValue($signupPayload, ['phone_number_id', 'phoneNumberId']);
+                $phoneNumberId = findSignupValue($signupPayload, ['phone_number_id', 'phoneNumberId', 'phoneNumberID']);
             }
         }
     }
@@ -353,15 +393,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accessToken = '';
     $tokenSource = '';
 
-    if ($globalAccessToken !== '') {
-        $accessToken = $globalAccessToken;
-        $tokenSource = 'long-lived settings token';
-    } elseif ($exchangedAccessToken !== '') {
+    if ($exchangedAccessToken !== '') {
         $accessToken = $exchangedAccessToken;
         $tokenSource = 'embedded signup token';
     } elseif ($accessTokenInput !== '') {
         $accessToken = $accessTokenInput;
         $tokenSource = 'browser signup token';
+    } elseif ($globalAccessToken !== '') {
+        $accessToken = $globalAccessToken;
+        $tokenSource = 'long-lived settings token';
     }
 
     if (($tokenExchange['error'] ?? '') !== '' && $globalAccessToken === '') {
@@ -369,13 +409,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message_type = 'warning';
     }
 
+    $tokenCandidates = [
+        'embedded signup token' => $exchangedAccessToken,
+        'browser signup token' => $accessTokenInput,
+        'long-lived settings token' => $globalAccessToken,
+    ];
+
     if ($accessToken !== '') {
-        $metaDetails = fetchMetaWhatsAppDetails($accessToken, $wabaId);
+        $metaDetails = firstMetaWhatsAppDetails($tokenCandidates, $wabaId);
         if ($wabaId === '') {
             $wabaId = $metaDetails['whatsapp_id'];
         }
         if ($phoneNumberId === '') {
             $phoneNumberId = $metaDetails['phone_number_id'];
+        }
+        if (($metaDetails['access_token'] ?? '') !== '') {
+            $accessToken = (string) $metaDetails['access_token'];
+            $tokenSource = (string) ($metaDetails['token_source'] ?? $tokenSource);
         }
 
         if ($metaDetails['error'] !== '' && ($wabaId === '' || $phoneNumberId === '')) {
@@ -435,11 +485,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         if ($accessToken !== '') {
             $stmt = $db->prepare("UPDATE gd_orders SET auth_token = ?, whatsapp_id = COALESCE(NULLIF(?, ''), whatsapp_id), phone_number_id = COALESCE(NULLIF(?, ''), phone_number_id), webhook_url = COALESCE(NULLIF(webhook_url, ''), ?), status = ? WHERE id = ?");
-            $status = $isRegistered ? '1' : '0';
+            $status = $hasIds ? '1' : '0';
             $stmt->bind_param('sssssi', $accessToken, $wabaId, $phoneNumberId, $defaultWebhookUrl, $status, $biz_id);
         } else {
             $stmt = $db->prepare("UPDATE gd_orders SET whatsapp_id = COALESCE(NULLIF(?, ''), whatsapp_id), phone_number_id = COALESCE(NULLIF(?, ''), phone_number_id), webhook_url = COALESCE(NULLIF(webhook_url, ''), ?), status = ? WHERE id = ?");
-            $status = $isRegistered ? '1' : '0';
+            $status = $hasIds ? '1' : '0';
             $stmt->bind_param('ssssi', $wabaId, $phoneNumberId, $defaultWebhookUrl, $status, $biz_id);
         }
 
@@ -669,6 +719,16 @@ function findSignupValue(payload, keys) {
       return String(value).trim();
     }
 
+    if (typeof value === "string" && value.trim().startsWith("{")) {
+      try {
+        const decoded = JSON.parse(value);
+        const nested = findSignupValue(decoded, keys);
+        if (nested) {
+          return nested;
+        }
+      } catch (error) {}
+    }
+
     if (value && typeof value === "object") {
       const nested = findSignupValue(value, keys);
       if (nested) {
@@ -724,8 +784,8 @@ window.addEventListener("message", function (event) {
   const payload = data.data || data.payload || data.response || data;
   document.getElementById("signupPayload").value = serialized;
 
-  const wabaId = findSignupValue(payload, ["waba_id", "wabaId", "whatsapp_business_account_id", "whatsappBusinessAccountId"]);
-  const phoneNumberId = findSignupValue(payload, ["phone_number_id", "phoneNumberId"]);
+  const wabaId = findSignupValue(payload, ["waba_id", "wabaId", "wabaID", "whatsapp_business_account_id", "whatsappBusinessAccountId", "whatsapp_business_id"]);
+  const phoneNumberId = findSignupValue(payload, ["phone_number_id", "phoneNumberId", "phoneNumberID"]);
 
   if (wabaId) {
     document.getElementById("wabaId").value = wabaId;

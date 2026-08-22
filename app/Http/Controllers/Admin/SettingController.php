@@ -31,6 +31,7 @@ class SettingController extends Controller
         return view('admin.settings.tokens', [
             'pendingOrders' => DB::table('gd_orders')->where('admin_id', $masterId)->where('status', '0')->orderByDesc('id')->get(),
             'activeOrders' => DB::table('gd_orders')->where('admin_id', $masterId)->where('status', '1')->orderByDesc('id')->get(),
+            'allOrders' => DB::table('gd_orders')->where('admin_id', $masterId)->orderByDesc('id')->get(),
             'packageRequests' => $packageRequests,
             'defaultWebhookUrl' => $defaultWebhookUrl,
             'packages' => self::PACKAGES,

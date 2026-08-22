@@ -132,7 +132,7 @@
               <label class="form-label">Business</label>
               <select class="form-control" name="business_id" required>
                 <option value="">--Select Business--</option>
-                @foreach ($pendingOrders ?? [] as $order)
+                @foreach (($allOrders ?? collect()) as $order)
                   <option value="{{ $order->id }}">{{ $order->business_name }}</option>
                 @endforeach
               </select>
@@ -165,7 +165,7 @@
     </div>
   </div>
 
-  <h4 class="mt-4">Activated Businesses</h4>
+  <h4 class="mt-4">WhatsApp Connections</h4>
   <div class="table-responsive">
     <table class="table table-striped align-middle">
       <thead class="table-dark">
@@ -178,10 +178,11 @@
           <th>WhatsApp ID</th>
           <th>Phone Number ID</th>
           <th>Webhook URL</th>
+          <th>Status</th>
         </tr>
       </thead>
       <tbody>
-        @forelse ($activeOrders ?? [] as $order)
+        @forelse (($allOrders ?? $activeOrders ?? collect()) as $order)
           <tr>
             <td>{{ $loop->iteration }}</td>
             <td>{{ $order->business_name }}</td>
@@ -191,9 +192,18 @@
             <td>{{ $order->whatsapp_id ?: 'Not connected' }}</td>
             <td>{{ $order->phone_number_id ?: 'Not connected' }}</td>
             <td>{{ $order->webhook_url ?: ($defaultWebhookUrl ?? url('/incoming.php')) }}</td>
+            <td>
+              @if ((string) ($order->status ?? '0') === '1')
+                <span class="badge bg-success">Connected</span>
+              @elseif ($order->whatsapp_id || $order->phone_number_id || $order->auth_token)
+                <span class="badge bg-warning text-dark">Incomplete</span>
+              @else
+                <span class="badge bg-secondary">Waiting</span>
+              @endif
+            </td>
           </tr>
         @empty
-          <tr><td colspan="8" class="text-center">No activated businesses found</td></tr>
+          <tr><td colspan="9" class="text-center">No businesses found</td></tr>
         @endforelse
       </tbody>
     </table>
