@@ -163,6 +163,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_business_id'])
                                             ?>
                                         </td>
                                         <td>
+                                            <div class="d-flex gap-2">
+                                            <a class="btn btn-sm btn-primary" href="<?php echo h(app_url('master/edit-order?id=' . (int) $get3['id'])); ?>">
+                                                <i class="bi bi-pencil-square me-1"></i> Edit
+                                            </a>
                                             <form method="post" onsubmit="return confirm('Delete this business and all related data?');">
                                                 <?php echo Security::csrfField(); ?>
                                                 <input type="hidden" name="delete_business_id" value="<?php echo h((string) $get3['id']); ?>">
@@ -170,6 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_business_id'])
                                                     <i class="bi bi-trash me-1"></i> Delete
                                                 </button>
                                             </form>
+                                            </div>
                                         </td>
                                 </tr>
 
