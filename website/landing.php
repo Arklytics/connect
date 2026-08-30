@@ -5,7 +5,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/../app/bootstrap.php';
 
 $logoUrl = app_url('website/uploads/connect-logo.png');
-$heroImageUrl = app_url('master/uploads/slider1.jpg');
 $loginUrl = app_url('business/login');
 $signupUrl = app_url('business/signup');
 $apiDocsUrl = app_url('api-docs');
@@ -118,15 +117,15 @@ $packages = PaymentSupport::packages(Database::connectOrNull());
         display: flex;
         align-items: stretch;
         background:
-          linear-gradient(90deg, rgba(251, 253, 251, 0.96) 0%, rgba(251, 253, 251, 0.9) 47%, rgba(14, 36, 48, 0.42) 100%),
-          url("<?php echo h($heroImageUrl); ?>") center right / cover no-repeat;
+          linear-gradient(135deg, #fbfdfb 0%, #f0f8f5 42%, #eaf3f7 100%);
         border-bottom: 1px solid var(--ac-line);
+        overflow: hidden;
       }
 
       .ac-hero-inner {
         width: 100%;
         display: grid;
-        grid-template-columns: minmax(0, 1.03fr) minmax(320px, 0.72fr);
+        grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
         align-items: center;
         gap: 36px;
         padding: 68px 0 42px;
@@ -201,13 +200,209 @@ $packages = PaymentSupport::packages(Database::connectOrNull());
       }
 
       .ac-live-panel {
-        align-self: end;
-        background: rgba(14, 36, 48, 0.92);
+        background: #0f2530;
         color: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.16);
+        border: 1px solid rgba(20, 33, 38, 0.12);
         border-radius: 8px;
-        box-shadow: 0 24px 70px rgba(14, 36, 48, 0.28);
+        box-shadow: 0 24px 70px rgba(14, 36, 48, 0.22);
         overflow: hidden;
+      }
+
+      .ac-hero-visual {
+        position: relative;
+        min-height: 590px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .ac-product-window {
+        position: relative;
+        z-index: 2;
+        width: min(100%, 690px);
+        border: 1px solid rgba(20, 33, 38, 0.1);
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 32px 80px rgba(14, 36, 48, 0.2);
+        overflow: hidden;
+      }
+
+      .ac-window-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 18px;
+        color: #fff;
+        background: #102832;
+      }
+
+      .ac-window-dots {
+        display: flex;
+        gap: 7px;
+      }
+
+      .ac-window-dots span {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #f2c266;
+      }
+
+      .ac-window-dots span:nth-child(2) {
+        background: #e77b67;
+      }
+
+      .ac-window-dots span:nth-child(3) {
+        background: #4fe7a0;
+      }
+
+      .ac-window-body {
+        display: grid;
+        grid-template-columns: 170px minmax(0, 1fr);
+        min-height: 410px;
+      }
+
+      .ac-window-side {
+        padding: 18px;
+        background: #f6faf9;
+        border-right: 1px solid var(--ac-line);
+      }
+
+      .ac-window-nav {
+        display: grid;
+        gap: 10px;
+      }
+
+      .ac-window-nav span {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 34px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        color: var(--ac-muted);
+        font-size: 0.82rem;
+        font-weight: 800;
+      }
+
+      .ac-window-nav span:first-child {
+        color: var(--ac-green-dark);
+        background: var(--ac-mint);
+      }
+
+      .ac-window-main {
+        padding: 20px;
+      }
+
+      .ac-window-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .ac-window-stat {
+        min-height: 92px;
+        padding: 14px;
+        border-radius: 8px;
+        border: 1px solid var(--ac-line);
+        background: #fff;
+      }
+
+      .ac-window-stat strong {
+        display: block;
+        font-size: 1.42rem;
+      }
+
+      .ac-window-stat span {
+        color: var(--ac-muted);
+        font-size: 0.78rem;
+        font-weight: 800;
+      }
+
+      .ac-pipeline {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .ac-pipeline-col {
+        min-height: 210px;
+        padding: 12px;
+        border-radius: 8px;
+        background: #f7faf8;
+        border: 1px solid var(--ac-line);
+      }
+
+      .ac-pipeline-col h4 {
+        margin: 0 0 10px;
+        font-size: 0.78rem;
+        color: var(--ac-muted);
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .ac-lead-card {
+        padding: 11px;
+        margin-bottom: 9px;
+        border-radius: 8px;
+        background: #fff;
+        border: 1px solid rgba(20, 33, 38, 0.08);
+        box-shadow: 0 8px 18px rgba(14, 36, 48, 0.05);
+      }
+
+      .ac-lead-card strong {
+        display: block;
+        font-size: 0.86rem;
+      }
+
+      .ac-lead-card span {
+        color: var(--ac-muted);
+        font-size: 0.74rem;
+        font-weight: 700;
+      }
+
+      .ac-floating-chat,
+      .ac-floating-api {
+        position: absolute;
+        z-index: 3;
+        border-radius: 8px;
+        background: #fff;
+        border: 1px solid rgba(20, 33, 38, 0.1);
+        box-shadow: 0 18px 48px rgba(14, 36, 48, 0.18);
+      }
+
+      .ac-floating-chat {
+        right: 0;
+        bottom: 22px;
+        width: min(280px, 48%);
+        padding: 14px;
+      }
+
+      .ac-floating-api {
+        left: 0;
+        top: 34px;
+        width: min(250px, 45%);
+        padding: 13px;
+      }
+
+      .ac-floating-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ac-green-dark);
+        font-size: 0.78rem;
+        font-weight: 800;
+      }
+
+      .ac-floating-chat p,
+      .ac-floating-api p {
+        margin: 8px 0 0;
+        color: var(--ac-muted);
+        font-size: 0.82rem;
+        line-height: 1.45;
+        font-weight: 700;
       }
 
       .ac-live-head,
@@ -327,8 +522,7 @@ $packages = PaymentSupport::packages(Database::connectOrNull());
         position: relative;
         min-height: 360px;
         background:
-          linear-gradient(135deg, rgba(18, 130, 92, 0.8), rgba(14, 36, 48, 0.82)),
-          url("<?php echo h($heroImageUrl); ?>") center / cover no-repeat;
+          linear-gradient(135deg, #12825c, #0e2430);
       }
 
       .ac-phone {
@@ -690,8 +884,7 @@ $packages = PaymentSupport::packages(Database::connectOrNull());
       .ac-cta {
         color: #fff;
         background:
-          linear-gradient(135deg, rgba(14, 36, 48, 0.96), rgba(18, 130, 92, 0.9)),
-          url("<?php echo h($heroImageUrl); ?>") center / cover no-repeat;
+          linear-gradient(135deg, #0e2430 0%, #12825c 100%);
       }
 
       .ac-cta-inner {
@@ -731,9 +924,7 @@ $packages = PaymentSupport::packages(Database::connectOrNull());
       @media (max-width: 991px) {
         .ac-hero {
           min-height: auto;
-          background:
-            linear-gradient(180deg, rgba(251, 253, 251, 0.96), rgba(251, 253, 251, 0.91)),
-            url("<?php echo h($heroImageUrl); ?>") center / cover no-repeat;
+          background: linear-gradient(180deg, #fbfdfb 0%, #edf7f4 100%);
         }
 
         .ac-hero-inner,
@@ -788,6 +979,39 @@ $packages = PaymentSupport::packages(Database::connectOrNull());
         .ac-slide-visual {
           min-height: 320px;
         }
+
+        .ac-hero-visual {
+          min-height: 520px;
+        }
+
+        .ac-floating-api,
+        .ac-floating-chat {
+          position: relative;
+          left: auto;
+          right: auto;
+          top: auto;
+          bottom: auto;
+          width: 100%;
+          margin-top: 12px;
+        }
+      }
+
+      @media (max-width: 575px) {
+        .ac-window-body,
+        .ac-window-stats,
+        .ac-pipeline {
+          grid-template-columns: 1fr;
+        }
+
+        .ac-window-side {
+          border-right: 0;
+          border-bottom: 1px solid var(--ac-line);
+        }
+
+        .ac-hero-visual {
+          min-height: 0;
+          display: block;
+        }
       }
     </style>
   </head>
@@ -840,33 +1064,91 @@ $packages = PaymentSupport::packages(Database::connectOrNull());
             </div>
           </div>
 
-          <aside class="ac-live-panel" aria-label="Live CRM preview">
-            <div class="ac-live-head">
-              <strong>Today in Connect CRM</strong>
-              <span class="ac-pulse" aria-hidden="true"></span>
+          <aside class="ac-hero-visual" aria-label="Professional CRM dashboard preview">
+            <div class="ac-product-window">
+              <div class="ac-window-bar">
+                <div>
+                  <strong>Connect CRM</strong><br>
+                  <small class="text-white-50">Business command center</small>
+                </div>
+                <div class="ac-window-dots" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+              <div class="ac-window-body">
+                <div class="ac-window-side">
+                  <div class="ac-window-nav">
+                    <span><i class="bi bi-kanban"></i> Pipeline</span>
+                    <span><i class="bi bi-people"></i> Contacts</span>
+                    <span><i class="bi bi-whatsapp"></i> Campaigns</span>
+                    <span><i class="bi bi-code-slash"></i> API</span>
+                    <span><i class="bi bi-graph-up"></i> Reports</span>
+                  </div>
+                </div>
+                <div class="ac-window-main">
+                  <div class="ac-window-stats">
+                    <div class="ac-window-stat">
+                      <strong>1,284</strong>
+                      <span>Total messages</span>
+                    </div>
+                    <div class="ac-window-stat">
+                      <strong>326</strong>
+                      <span>Active leads</span>
+                    </div>
+                    <div class="ac-window-stat">
+                      <strong>94%</strong>
+                      <span>Follow-up rate</span>
+                    </div>
+                  </div>
+                  <div class="ac-pipeline">
+                    <div class="ac-pipeline-col">
+                      <h4>New</h4>
+                      <div class="ac-lead-card">
+                        <strong>Website inquiry</strong>
+                        <span>API imported lead</span>
+                      </div>
+                      <div class="ac-lead-card">
+                        <strong>Retail customer</strong>
+                        <span>WhatsApp campaign</span>
+                      </div>
+                    </div>
+                    <div class="ac-pipeline-col">
+                      <h4>Qualified</h4>
+                      <div class="ac-lead-card">
+                        <strong>Demo requested</strong>
+                        <span>Sales follow-up due</span>
+                      </div>
+                      <div class="ac-lead-card">
+                        <strong>Service quote</strong>
+                        <span>Utility template sent</span>
+                      </div>
+                    </div>
+                    <div class="ac-pipeline-col">
+                      <h4>Won</h4>
+                      <div class="ac-lead-card">
+                        <strong>Plan activated</strong>
+                        <span>Payment confirmed</span>
+                      </div>
+                      <div class="ac-lead-card">
+                        <strong>Renewal booked</strong>
+                        <span>Reminder scheduled</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="ac-live-body">
-              <div class="ac-live-row">
-                <div>
-                  <strong>New WhatsApp lead</strong><br>
-                  <small>Store inquiry assigned to sales</small>
-                </div>
-                <span class="ac-status">Live</span>
-              </div>
-              <div class="ac-live-row">
-                <div>
-                  <strong>Follow-up due</strong><br>
-                  <small>Hospital appointment reminder</small>
-                </div>
-                <span class="ac-status">Now</span>
-              </div>
-              <div class="ac-live-row">
-                <div>
-                  <strong>Template sent</strong><br>
-                  <small>SaaS onboarding checklist</small>
-                </div>
-                <span class="ac-status">Sent</span>
-              </div>
+
+            <div class="ac-floating-api">
+              <div class="ac-floating-label"><i class="bi bi-plug-fill"></i> CRM API available</div>
+              <p>Sync leads, contacts, templates, webhooks, and WhatsApp messages from your app.</p>
+            </div>
+
+            <div class="ac-floating-chat">
+              <div class="ac-floating-label"><i class="bi bi-whatsapp"></i> WhatsApp automation</div>
+              <p>Marketing and utility messages tracked with separate package limits.</p>
             </div>
           </aside>
         </div>
