@@ -26,13 +26,18 @@
         <label class="form-label">Package</label>
         <select class="form-control shadow" name="package_key">
           @foreach ($packages ?? [] as $key => $package)
-            <option value="{{ $key }}">{{ $package['label'] }} ({{ number_format($package['limit']) }} messages)</option>
+            @php $totalLimit = (int) ($package['marketing_limit'] ?? 0) + (int) ($package['utility_limit'] ?? 0); @endphp
+            <option value="{{ $key }}">{{ $package['label'] }} ({{ number_format($totalLimit) }} all messages)</option>
           @endforeach
         </select>
       </div>
       <div class="col-md-4">
-        <label class="form-label">Custom Limit</label>
-        <input type="number" class="form-control p-2 shadow" name="custom_message_limit" min="1" placeholder="Optional custom limit">
+        <label class="form-label">Marketing Messages</label>
+        <input type="number" class="form-control p-2 shadow" name="marketing_message_limit" min="0" placeholder="Marketing limit">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Utility Messages</label>
+        <input type="number" class="form-control p-2 shadow" name="utility_message_limit" min="0" placeholder="Utility limit">
       </div>
     </div>
     <div class="row bg-light mt-2">

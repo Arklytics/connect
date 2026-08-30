@@ -1853,14 +1853,42 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
         $stmt->execute();
     }
 
-    public static function consumeMessageCredit(mysqli $db, int $bizId, int $count = 1): void
+    public static function packageMessageCategory(?string $category): ?string
+    {
+        $category = strtoupper(trim((string) $category));
+        if ($category === 'MARKETING') {
+            return 'marketing';
+        }
+
+        if (in_array($category, ['UTILITY', 'AUTHENTICATION'], true)) {
+            return 'utility';
+        }
+
+        return null;
+    }
+
+    public static function consumeMessageCredit(mysqli $db, int $bizId, int $count = 1, ?string $category = null): void
     {
         if ($count <= 0 || !self::hasColumn($db, 'gd_orders', 'messages_used')) {
             return;
         }
 
-        $stmt = $db->prepare('UPDATE gd_orders SET messages_used = COALESCE(messages_used, 0) + ? WHERE id = ?');
-        $stmt->bind_param('ii', $count, $bizId);
+        $categoryKey = self::packageMessageCategory($category);
+        $setParts = ['messages_used = COALESCE(messages_used, 0) + ?'];
+        if ($categoryKey !== null) {
+            $categoryUsedColumn = $categoryKey . '_messages_used';
+            if (self::hasColumn($db, 'gd_orders', $categoryUsedColumn)) {
+                $setParts[] = $categoryUsedColumn . ' = COALESCE(' . $categoryUsedColumn . ', 0) + ?';
+            }
+        }
+
+        $sql = 'UPDATE gd_orders SET ' . implode(', ', $setParts) . ' WHERE id = ?';
+        $stmt = $db->prepare($sql);
+        if (count($setParts) > 1) {
+            $stmt->bind_param('iii', $count, $count, $bizId);
+        } else {
+            $stmt->bind_param('ii', $count, $bizId);
+        }
         $stmt->execute();
     }
 
@@ -2051,7 +2079,7 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
         return $stmt->get_result()->fetch_assoc() ?: [];
     }
 
-    public static function businessPackageStatus(mysqli $db, int $bizId): array
+    public static function businessPackageStatus(mysqli $db, int $bizId, ?string $category = null): array
     {
         try {
             $columns = [];
@@ -2066,18 +2094,38 @@ public static function whatsappTextPayload(string $to, string $messageBody): arr
                 return ['enabled' => false, 'limit' => null, 'used' => null, 'remaining' => null];
             }
 
-            $stmt = $db->prepare('SELECT COALESCE(message_limit, 0) AS message_limit, COALESCE(messages_used, 0) AS messages_used FROM gd_orders WHERE id = ? LIMIT 1');
+            $select = [
+                'COALESCE(message_limit, 0) AS message_limit',
+                'COALESCE(messages_used, 0) AS messages_used',
+            ];
+            $categoryKey = self::packageMessageCategory($category);
+            $categoryLimitColumn = $categoryKey !== null ? $categoryKey . '_message_limit' : null;
+            $categoryUsedColumn = $categoryKey !== null ? $categoryKey . '_messages_used' : null;
+            if ($categoryLimitColumn !== null && $categoryUsedColumn !== null
+                && in_array($categoryLimitColumn, $columns, true)
+                && in_array($categoryUsedColumn, $columns, true)) {
+                $select[] = 'COALESCE(' . $categoryLimitColumn . ', 0) AS category_message_limit';
+                $select[] = 'COALESCE(' . $categoryUsedColumn . ', 0) AS category_messages_used';
+                if (in_array('marketing_message_limit', $columns, true) && in_array('utility_message_limit', $columns, true)) {
+                    $select[] = '(COALESCE(marketing_message_limit, 0) + COALESCE(utility_message_limit, 0)) AS category_total_limit';
+                }
+            }
+
+            $stmt = $db->prepare('SELECT ' . implode(', ', $select) . ' FROM gd_orders WHERE id = ? LIMIT 1');
             $stmt->bind_param('i', $bizId);
             $stmt->execute();
             $row = $stmt->get_result()->fetch_assoc() ?: [];
-            $limit = (int) ($row['message_limit'] ?? 0);
-            $used = (int) ($row['messages_used'] ?? 0);
+            $hasActiveCategorySplit = array_key_exists('category_message_limit', $row)
+                && (int) ($row['category_total_limit'] ?? 0) > 0;
+            $limit = $hasActiveCategorySplit ? (int) $row['category_message_limit'] : (int) ($row['message_limit'] ?? 0);
+            $used = $hasActiveCategorySplit ? (int) $row['category_messages_used'] : (int) ($row['messages_used'] ?? 0);
 
             return [
                 'enabled' => true,
                 'limit' => $limit,
                 'used' => $used,
                 'remaining' => max(0, $limit - $used),
+                'category' => $categoryKey,
             ];
         } catch (Throwable $exception) {
             return ['enabled' => false, 'limit' => null, 'used' => null, 'remaining' => null];

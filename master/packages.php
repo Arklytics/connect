@@ -7,9 +7,9 @@ $db = Database::connectOrNull();
 $message = '';
 $message_type = 'success';
 $packages = [
-    'starter' => ['label' => 'Starter', 'limit' => 1000, 'price' => '0'],
-    'growth' => ['label' => 'Growth', 'limit' => 5000, 'price' => '0'],
-    'pro' => ['label' => 'Pro', 'limit' => 15000, 'price' => '0'],
+    'starter' => ['label' => 'Starter', 'marketing_limit' => 500, 'utility_limit' => 500, 'price' => '0'],
+    'growth' => ['label' => 'Growth', 'marketing_limit' => 2500, 'utility_limit' => 2500, 'price' => '0'],
+    'pro' => ['label' => 'Pro', 'marketing_limit' => 7500, 'utility_limit' => 7500, 'price' => '0'],
 ];
 $businesses = [];
 $packageRequests = [];
@@ -49,11 +49,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $businessId = Security::intFrom($_POST['business_id'] ?? null);
         $packageKey = strtolower(trim((string) ($_POST['package_key'] ?? 'starter')));
         $customLimit = Security::intFrom($_POST['custom_message_limit'] ?? null);
-        $packagePrice = trim((string) ($_POST['package_price'] ?? ''));
+        $marketingLimit = max(0, Security::intFrom($_POST['marketing_message_limit'] ?? null));
+        $utilityLimit = max(0, Security::intFrom($_POST['utility_message_limit'] ?? null));
+        $marketingPrice = trim((string) ($_POST['marketing_package_price'] ?? ''));
+        $utilityPrice = trim((string) ($_POST['utility_package_price'] ?? ''));
         $packageDays = max(1, Security::intFrom($_POST['package_days'] ?? 30));
         $reason = trim((string) ($_POST['reason'] ?? ''));
         $package = $packages[$packageKey] ?? $packages['starter'];
-        $limit = $customLimit > 0 ? $customLimit : (int) $package['limit'];
+        if ($marketingLimit <= 0 && $utilityLimit <= 0) {
+            $marketingLimit = (int) ($package['marketing_limit'] ?? 0);
+            $utilityLimit = (int) ($package['utility_limit'] ?? 0);
+        }
+        $limit = $marketingLimit + $utilityLimit;
+        if ($limit <= 0 && $customLimit > 0) {
+            $limit = $customLimit;
+        }
 
         $columns = gdMasterColumns($db, 'gd_orders');
         if (!in_array('package_name', $columns, true)) {
@@ -74,8 +84,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'limit_request_at' => date('Y-m-d H:i:s'),
             ];
 
-            if ($packagePrice !== '' && in_array('package_price', $columns, true)) {
-                $updates['package_price'] = $packagePrice;
+            if (in_array('marketing_message_limit', $columns, true)) {
+                $updates['marketing_message_limit'] = $marketingLimit;
+            }
+            if (in_array('utility_message_limit', $columns, true)) {
+                $updates['utility_message_limit'] = $utilityLimit;
+            }
+            if (in_array('marketing_messages_used', $columns, true)) {
+                $updates['marketing_messages_used'] = 0;
+            }
+            if (in_array('utility_messages_used', $columns, true)) {
+                $updates['utility_messages_used'] = 0;
+            }
+            if ($marketingPrice !== '' && in_array('marketing_package_price', $columns, true)) {
+                $updates['marketing_package_price'] = $marketingPrice;
+            }
+            if ($utilityPrice !== '' && in_array('utility_package_price', $columns, true)) {
+                $updates['utility_package_price'] = $utilityPrice;
+            }
+            if (in_array('package_price', $columns, true)) {
+                $updates['package_price'] = (string) ((float) ($marketingPrice !== '' ? $marketingPrice : 0) + (float) ($utilityPrice !== '' ? $utilityPrice : 0));
             }
 
             $setParts = [];
@@ -110,7 +138,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 if ($db) {
     try {
-        $stmt = $db->prepare('SELECT id, business_name, package_name, message_limit, messages_used, package_ends_at FROM gd_orders WHERE admin_id = ? ORDER BY id DESC');
+        $orderColumns = gdMasterColumns($db, 'gd_orders');
+        $selectColumns = ['id', 'business_name', 'package_name', 'message_limit', 'messages_used', 'package_ends_at'];
+        foreach (['marketing_message_limit', 'utility_message_limit', 'marketing_messages_used', 'utility_messages_used'] as $column) {
+            if (in_array($column, $orderColumns, true)) {
+                $selectColumns[] = $column;
+            }
+        }
+        $stmt = $db->prepare('SELECT `' . implode('`, `', $selectColumns) . '` FROM gd_orders WHERE admin_id = ? ORDER BY id DESC');
         $stmt->bind_param('i', $master_id);
         $stmt->execute();
         $businesses = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -172,7 +207,8 @@ if ($db) {
                             <label class="form-label">Package</label>
                             <select name="package_key" class="form-control" required>
                                 <?php foreach ($packages as $key => $package): ?>
-                                    <option value="<?php echo h($key); ?>"><?php echo h($package['label']); ?> (<?php echo h(number_format((int) $package['limit'])); ?> messages)</option>
+                                    <?php $totalLimit = (int) ($package['marketing_limit'] ?? 0) + (int) ($package['utility_limit'] ?? 0); ?>
+                                    <option value="<?php echo h($key); ?>"><?php echo h($package['label']); ?> (<?php echo h(number_format($totalLimit)); ?> all messages)</option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -181,12 +217,20 @@ if ($db) {
                             <input type="number" name="package_days" class="form-control" min="1" value="30">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Custom Limit</label>
-                            <input type="number" name="custom_message_limit" class="form-control" min="1" placeholder="Optional custom limit">
+                            <label class="form-label">Marketing Messages</label>
+                            <input type="number" name="marketing_message_limit" class="form-control" min="0" placeholder="Marketing limit">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Package Price</label>
-                            <input type="text" name="package_price" class="form-control" placeholder="Optional price">
+                            <label class="form-label">Utility Messages</label>
+                            <input type="number" name="utility_message_limit" class="form-control" min="0" placeholder="Utility limit">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Marketing Price</label>
+                            <input type="number" name="marketing_package_price" class="form-control" min="0" step="0.01" placeholder="Marketing price">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Utility Price</label>
+                            <input type="number" name="utility_package_price" class="form-control" min="0" step="0.01" placeholder="Utility price">
                         </div>
                         <div class="col-md-12">
                             <label class="form-label">Reason</label>
@@ -208,13 +252,15 @@ if ($db) {
                                 <th>#</th>
                                 <th>Business</th>
                                 <th>Package</th>
-                                <th>Usage</th>
+                                <th>All Messages</th>
+                                <th>Marketing</th>
+                                <th>Utility</th>
                                 <th>Ends</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (empty($businesses)): ?>
-                                <tr><td colspan="5" class="text-center">No businesses found.</td></tr>
+                                <tr><td colspan="7" class="text-center">No businesses found.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($businesses as $i => $business): ?>
                                     <tr>
@@ -222,6 +268,8 @@ if ($db) {
                                         <td><?php echo h($business['business_name']); ?></td>
                                         <td><?php echo h($business['package_name'] ?? 'Not set'); ?></td>
                                         <td><?php echo h(number_format((int) ($business['messages_used'] ?? 0))); ?> / <?php echo h(number_format((int) ($business['message_limit'] ?? 0))); ?></td>
+                                        <td><?php echo h(number_format((int) ($business['marketing_messages_used'] ?? 0))); ?> / <?php echo h(number_format((int) ($business['marketing_message_limit'] ?? 0))); ?></td>
+                                        <td><?php echo h(number_format((int) ($business['utility_messages_used'] ?? 0))); ?> / <?php echo h(number_format((int) ($business['utility_message_limit'] ?? 0))); ?></td>
                                         <td><?php echo h($business['package_ends_at'] ?? '-'); ?></td>
                                     </tr>
                                 <?php endforeach; ?>

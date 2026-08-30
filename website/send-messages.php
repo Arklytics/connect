@@ -34,6 +34,7 @@ if (isset($_POST['send'])) {
     $messageTitle = $templateData['message_title'];
     $messageBody = $templateData['message_body'];
     $subtitle = $templateData['subtitle'];
+    $packageCategory = ApiSupport::packageMessageCategory((string) ($templateData['category'] ?? ''));
     $placeholderData = json_decode((string) ($templateData['placeholders'] ?? ''), true);
     $templateSend = ApiSupport::buildTemplateSendComponents($templateData, ApiSupport::templateSendValuesFromInput($_POST));
     $languageCode = is_array($placeholderData) ? (string) ($placeholderData['payload']['language'] ?? 'en_US') : 'en_US';
@@ -89,7 +90,7 @@ if (isset($_POST['send'])) {
     $packageStatus = ApiSupport::businessPackageStatus($db, $biz_id);
 
     while ($member = mysqli_fetch_assoc($groupQuery)) {
-        $packageStatus = ApiSupport::businessPackageStatus($db, $biz_id);
+        $packageStatus = ApiSupport::businessPackageStatus($db, $biz_id, $packageCategory);
         if (($packageStatus['enabled'] ?? false) && (int) ($packageStatus['remaining'] ?? 0) <= 0) {
             $errorMessages[] = 'Message limit exhausted. Please request a package upgrade.';
             break;
@@ -169,7 +170,7 @@ if (isset($_POST['send'])) {
             $deliveryStatus = 'sent';
             $successCount++;
             $errorMsg = NULL;
-            ApiSupport::consumeMessageCredit($db, $biz_id);
+            ApiSupport::consumeMessageCredit($db, $biz_id, 1, $packageCategory);
         } else {
             $status = 'failed';
             $deliveryStatus = 'failed';

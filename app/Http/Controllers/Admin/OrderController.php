@@ -13,9 +13,9 @@ use Illuminate\Support\Str;
 class OrderController extends Controller
 {
     private const PACKAGES = [
-        'starter' => ['label' => 'Starter', 'limit' => 1000, 'price' => 0],
-        'growth' => ['label' => 'Growth', 'limit' => 5000, 'price' => 0],
-        'pro' => ['label' => 'Pro', 'limit' => 15000, 'price' => 0],
+        'starter' => ['label' => 'Starter', 'marketing_limit' => 500, 'utility_limit' => 500, 'price' => 0],
+        'growth' => ['label' => 'Growth', 'marketing_limit' => 2500, 'utility_limit' => 2500, 'price' => 0],
+        'pro' => ['label' => 'Pro', 'marketing_limit' => 7500, 'utility_limit' => 7500, 'price' => 0],
     ];
 
     public function index(Request $request)
@@ -50,6 +50,8 @@ class OrderController extends Controller
             'business_logo' => ['nullable', 'image', 'max:2048'],
             'package_key' => ['nullable', 'string', 'max:50'],
             'custom_message_limit' => ['nullable', 'integer', 'min:1', 'max:1000000'],
+            'marketing_message_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'utility_message_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
         ]);
 
         $logoPath = null;
@@ -59,7 +61,12 @@ class OrderController extends Controller
 
         $packageKey = (string) ($data['package_key'] ?? 'starter');
         $package = self::PACKAGES[$packageKey] ?? self::PACKAGES['starter'];
-        $messageLimit = (int) ($data['custom_message_limit'] ?? $package['limit']);
+        $marketingLimit = (int) ($data['marketing_message_limit'] ?? $package['marketing_limit']);
+        $utilityLimit = (int) ($data['utility_message_limit'] ?? $package['utility_limit']);
+        $messageLimit = $marketingLimit + $utilityLimit;
+        if ($messageLimit <= 0) {
+            $messageLimit = (int) ($data['custom_message_limit'] ?? ($package['marketing_limit'] + $package['utility_limit']));
+        }
 
         $orderData = [
             'admin_id' => $request->session()->get('master_id'),
@@ -83,6 +90,19 @@ class OrderController extends Controller
             $orderData['package_started_at'] = now();
             $orderData['package_ends_at'] = null;
             $orderData['limit_request_status'] = 'none';
+
+            foreach ([
+                'marketing_message_limit' => $marketingLimit,
+                'utility_message_limit' => $utilityLimit,
+                'marketing_messages_used' => 0,
+                'utility_messages_used' => 0,
+                'marketing_package_price' => 0,
+                'utility_package_price' => 0,
+            ] as $column => $value) {
+                if (Schema::hasColumn('gd_orders', $column)) {
+                    $orderData[$column] = $value;
+                }
+            }
         }
 
         DB::table('gd_orders')->insert($orderData);
@@ -96,33 +116,62 @@ class OrderController extends Controller
             'business_id' => ['required', 'integer'],
             'package_key' => ['required', 'string', 'max:50'],
             'custom_message_limit' => ['nullable', 'integer', 'min:1', 'max:1000000'],
+            'marketing_message_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'utility_message_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'package_price' => ['nullable', 'numeric', 'min:0'],
+            'marketing_package_price' => ['nullable', 'numeric', 'min:0'],
+            'utility_package_price' => ['nullable', 'numeric', 'min:0'],
             'package_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
         ]);
 
         $package = self::PACKAGES[$data['package_key']] ?? self::PACKAGES['starter'];
-        $limit = (int) ($data['custom_message_limit'] ?? $package['limit']);
+        $marketingLimit = (int) ($data['marketing_message_limit'] ?? $package['marketing_limit']);
+        $utilityLimit = (int) ($data['utility_message_limit'] ?? $package['utility_limit']);
+        $limit = $marketingLimit + $utilityLimit;
+        if ($limit <= 0) {
+            $limit = (int) ($data['custom_message_limit'] ?? ($package['marketing_limit'] + $package['utility_limit']));
+        }
         $days = (int) ($data['package_days'] ?? 30);
-        $price = (float) ($data['package_price'] ?? $package['price']);
+        $marketingPrice = (float) ($data['marketing_package_price'] ?? 0);
+        $utilityPrice = (float) ($data['utility_package_price'] ?? 0);
+        $price = $marketingPrice + $utilityPrice;
+        if ($price <= 0) {
+            $price = (float) ($data['package_price'] ?? $package['price']);
+        }
 
         if (!Schema::hasColumn('gd_orders', 'package_name')) {
             return back()->with('warning', 'Run the package migration before assigning packages.');
         }
 
+        $updates = [
+            'package_name' => $package['label'],
+            'message_limit' => $limit,
+            'messages_used' => 0,
+            'package_price' => $price,
+            'package_started_at' => now(),
+            'package_ends_at' => now()->addDays($days),
+            'limit_request_status' => 'approved',
+            'limit_request_note' => null,
+            'limit_request_at' => now(),
+        ];
+
+        foreach ([
+            'marketing_message_limit' => $marketingLimit,
+            'utility_message_limit' => $utilityLimit,
+            'marketing_messages_used' => 0,
+            'utility_messages_used' => 0,
+            'marketing_package_price' => $marketingPrice,
+            'utility_package_price' => $utilityPrice,
+        ] as $column => $value) {
+            if (Schema::hasColumn('gd_orders', $column)) {
+                $updates[$column] = $value;
+            }
+        }
+
         DB::table('gd_orders')
             ->where('id', $data['business_id'])
             ->where('admin_id', $request->session()->get('master_id'))
-            ->update([
-                'package_name' => $package['label'],
-                'message_limit' => $limit,
-                'messages_used' => 0,
-                'package_price' => $price,
-                'package_started_at' => now(),
-                'package_ends_at' => now()->addDays($days),
-                'limit_request_status' => 'approved',
-                'limit_request_note' => null,
-                'limit_request_at' => now(),
-            ]);
+            ->update($updates);
 
         return back()->with('success', 'Package updated for the business.');
     }

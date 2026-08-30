@@ -60,17 +60,26 @@
               <label class="form-label">Package</label>
               <select class="form-control" name="package_key" required>
                 @foreach ($packages ?? [] as $key => $package)
-                  <option value="{{ $key }}">{{ $package['label'] }} ({{ number_format($package['limit']) }} messages)</option>
+                  @php $totalLimit = (int) ($package['marketing_limit'] ?? 0) + (int) ($package['utility_limit'] ?? 0); @endphp
+                  <option value="{{ $key }}">{{ $package['label'] }} ({{ number_format($totalLimit) }} all messages)</option>
                 @endforeach
               </select>
             </div>
             <div class="col-md-4">
-              <label class="form-label">Custom Limit</label>
-              <input type="number" name="custom_message_limit" class="form-control" min="1" placeholder="Optional custom limit">
+              <label class="form-label">Marketing Messages</label>
+              <input type="number" name="marketing_message_limit" class="form-control" min="0" placeholder="Marketing limit">
             </div>
             <div class="col-md-4">
-              <label class="form-label">Package Price</label>
-              <input type="number" name="package_price" class="form-control" min="0" step="0.01" placeholder="Optional price">
+              <label class="form-label">Utility Messages</label>
+              <input type="number" name="utility_message_limit" class="form-control" min="0" placeholder="Utility limit">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Marketing Price</label>
+              <input type="number" name="marketing_package_price" class="form-control" min="0" step="0.01" placeholder="Marketing price">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Utility Price</label>
+              <input type="number" name="utility_package_price" class="form-control" min="0" step="0.01" placeholder="Utility price">
             </div>
             <div class="col-md-4">
               <label class="form-label">Duration Days</label>
@@ -173,7 +182,9 @@
           <th>Sno</th>
           <th>Business Name</th>
           <th>Package</th>
-          <th>Usage</th>
+          <th>All Messages</th>
+          <th>Marketing</th>
+          <th>Utility</th>
           <th>Auth Token</th>
           <th>WhatsApp ID</th>
           <th>Phone Number ID</th>
@@ -188,6 +199,8 @@
             <td>{{ $order->business_name }}</td>
             <td>{{ $order->package_name ?? 'Not set' }}</td>
             <td>{{ number_format((int) ($order->messages_used ?? 0)) }} / {{ number_format((int) ($order->message_limit ?? 0)) }}</td>
+            <td>{{ number_format((int) ($order->marketing_messages_used ?? 0)) }} / {{ number_format((int) ($order->marketing_message_limit ?? 0)) }}</td>
+            <td>{{ number_format((int) ($order->utility_messages_used ?? 0)) }} / {{ number_format((int) ($order->utility_message_limit ?? 0)) }}</td>
             <td>{{ $order->auth_token ? 'Saved' : 'Missing' }}</td>
             <td>{{ $order->whatsapp_id ?: 'Not connected' }}</td>
             <td>{{ $order->phone_number_id ?: 'Not connected' }}</td>
@@ -203,7 +216,7 @@
             </td>
           </tr>
         @empty
-          <tr><td colspan="9" class="text-center">No businesses found</td></tr>
+          <tr><td colspan="11" class="text-center">No businesses found</td></tr>
         @endforelse
       </tbody>
     </table>

@@ -238,6 +238,7 @@ class MessageController extends Controller
         }
 
         $templateMeta = json_decode((string) ($template->placeholders ?? ''), true);
+        $packageCategory = \ApiSupport::packageMessageCategory((string) ($template->category ?? ''));
         $languageCode = is_array($templateMeta) ? (string) ($templateMeta['payload']['language'] ?? 'en_US') : 'en_US';
         if ($languageCode === '') {
             $languageCode = 'en_US';
@@ -300,6 +301,15 @@ class MessageController extends Controller
         $hasPackageColumns = Schema::hasColumn('gd_orders', 'message_limit') && Schema::hasColumn('gd_orders', 'messages_used');
         $messageLimit = (int) ($business->message_limit ?? 0);
         $messagesUsed = (int) ($business->messages_used ?? 0);
+        if ($packageCategory !== null
+            && Schema::hasColumn('gd_orders', $packageCategory . '_message_limit')
+            && Schema::hasColumn('gd_orders', $packageCategory . '_messages_used')) {
+            $categoryTotalLimit = (int) ($business->marketing_message_limit ?? 0) + (int) ($business->utility_message_limit ?? 0);
+            if ($categoryTotalLimit > 0) {
+                $messageLimit = (int) ($business->{$packageCategory . '_message_limit'} ?? 0);
+                $messagesUsed = (int) ($business->{$packageCategory . '_messages_used'} ?? 0);
+            }
+        }
         $successCount = 0;
         $errorMessages = [];
 
@@ -358,9 +368,14 @@ class MessageController extends Controller
             if ($response['ok']) {
                 $successCount++;
                 if ($hasPackageColumns) {
+                    $increments = ['messages_used' => DB::raw('COALESCE(messages_used, 0) + 1')];
+                    if ($packageCategory !== null && Schema::hasColumn('gd_orders', $packageCategory . '_messages_used')) {
+                        $column = $packageCategory . '_messages_used';
+                        $increments[$column] = DB::raw('COALESCE(' . $column . ', 0) + 1');
+                    }
                     DB::table('gd_orders')
                         ->where('id', $bizId)
-                        ->increment('messages_used');
+                        ->update($increments);
                     $messagesUsed++;
                 }
             } else {

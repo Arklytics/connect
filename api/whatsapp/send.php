@@ -282,6 +282,10 @@ if ($templateName !== '') {
     $templateBody = (string) ($templateRow['message_body'] ?? '');
 }
 
+$packageCategory = ApiSupport::packageMessageCategory(
+    (string) ($templateRow['category'] ?? ($kind === 'marketing' || $kind === 'utility' || $kind === 'authentication' ? $kind : ''))
+);
+
 $isAuthenticationSend = $kind === 'authentication'
     || strtoupper(trim((string) ($templateRow['category'] ?? ''))) === 'AUTHENTICATION';
 
@@ -394,7 +398,7 @@ $failed = 0;
 $details = [];
 
 foreach ($recipients as $recipient) {
-    $packageStatus = ApiSupport::businessPackageStatus($db, $bizId);
+    $packageStatus = ApiSupport::businessPackageStatus($db, $bizId, $packageCategory);
     if (($packageStatus['enabled'] ?? false) && (int) ($packageStatus['remaining'] ?? 0) <= 0) {
         $failed += count($recipients) - ($sent + $failed);
         $details[] = [
@@ -489,7 +493,7 @@ foreach ($recipients as $recipient) {
 
     if ($result['ok']) {
         $sent++;
-        ApiSupport::consumeMessageCredit($db, $bizId);
+        ApiSupport::consumeMessageCredit($db, $bizId, 1, $packageCategory);
     } else {
         $failed++;
     }

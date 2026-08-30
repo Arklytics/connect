@@ -134,6 +134,7 @@ try {
     }
 
     $template = batchTemplate($db, (int) $biz_id, $templateId);
+    $packageCategory = ApiSupport::packageMessageCategory((string) ($template['category'] ?? ''));
     $templateMeta = json_decode((string) ($template['placeholders'] ?? ''), true);
     $languageCode = is_array($templateMeta) ? (string) ($templateMeta['payload']['language'] ?? 'en_US') : 'en_US';
     $languageCode = $languageCode !== '' ? $languageCode : 'en_US';
@@ -173,7 +174,7 @@ try {
     $errors = [];
 
     foreach ($recipients as $recipient) {
-        $packageStatus = ApiSupport::businessPackageStatus($db, (int) $biz_id);
+        $packageStatus = ApiSupport::businessPackageStatus($db, (int) $biz_id, $packageCategory);
         if (($packageStatus['enabled'] ?? false) && (int) ($packageStatus['remaining'] ?? 0) <= 0) {
             $errors[] = 'Message limit exhausted. Please request a package upgrade.';
             break;
@@ -233,7 +234,7 @@ try {
 
         if ($response['ok']) {
             $sent++;
-            ApiSupport::consumeMessageCredit($db, (int) $biz_id);
+            ApiSupport::consumeMessageCredit($db, (int) $biz_id, 1, $packageCategory);
         } else {
             $failed++;
             $errors[] = 'Failed to send to ' . $phone . ': ' . $errorMessage;
