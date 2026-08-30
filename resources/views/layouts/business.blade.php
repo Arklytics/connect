@@ -40,12 +40,12 @@
           @include('partials.business-sidebar')
         </aside>
         <main class="col-md-10 wg-business-main">
-          @include('partials.flash')
           @yield('content')
         </main>
       </div>
     </div>
 
+    @include('partials.flash')
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     @stack('scripts')
   </body>

@@ -645,9 +645,13 @@ textarea.form-control {
 }
 
 .wg-footer-toast-container {
+    position: fixed !important;
     top: auto !important;
+    right: 18px !important;
     bottom: 18px !important;
-    z-index: 1080;
+    left: auto !important;
+    z-index: 2147483000 !important;
+    pointer-events: none;
 }
 
 .toast.text-bg-success,
@@ -689,6 +693,25 @@ textarea.form-control {
 .wg-flash-toast {
     min-width: min(360px, calc(100vw - 32px));
     border: 0;
+    pointer-events: auto;
+}
+
+.wg-footer-toast-container .toast {
+    display: block;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+@media (max-width: 575.98px) {
+    .wg-footer-toast-container {
+        right: 10px !important;
+        bottom: 10px !important;
+        left: 10px !important;
+    }
+
+    .wg-footer-toast-container .toast {
+        width: 100%;
+    }
 }
 
 .wg-login-body {
