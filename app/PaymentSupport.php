@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 final class PaymentSupport
 {
-    public const PACKAGES = [
+    public const DEFAULT_PACKAGES = [
         'starter' => [
+            'key' => 'starter',
             'label' => 'Starter',
             'marketing_limit' => 500,
             'utility_limit' => 500,
@@ -15,6 +16,7 @@ final class PaymentSupport
             'utility_price' => 400,
         ],
         'growth' => [
+            'key' => 'growth',
             'label' => 'Growth',
             'marketing_limit' => 2500,
             'utility_limit' => 2500,
@@ -24,6 +26,7 @@ final class PaymentSupport
             'utility_price' => 1000,
         ],
         'pro' => [
+            'key' => 'pro',
             'label' => 'Pro',
             'marketing_limit' => 7500,
             'utility_limit' => 7500,
@@ -34,11 +37,52 @@ final class PaymentSupport
         ],
     ];
 
-    public static function package(string $key): array
+    public static function packages(?mysqli $db = null, bool $activeOnly = true): array
+    {
+        if ($db instanceof mysqli) {
+            try {
+                self::ensureTables($db);
+                $sql = 'SELECT * FROM gd_packages';
+                if ($activeOnly) {
+                    $sql .= ' WHERE is_active = 1';
+                }
+                $sql .= ' ORDER BY sort_order ASC, id ASC';
+                $result = $db->query($sql);
+                $packages = [];
+                while ($row = $result?->fetch_assoc()) {
+                    $key = strtolower(trim((string) ($row['package_key'] ?? '')));
+                    if ($key === '') {
+                        continue;
+                    }
+                    $packages[$key] = [
+                        'key' => $key,
+                        'label' => (string) ($row['package_name'] ?? $key),
+                        'marketing_limit' => (int) ($row['marketing_message_limit'] ?? 0),
+                        'utility_limit' => (int) ($row['utility_message_limit'] ?? 0),
+                        'days' => (int) ($row['duration_days'] ?? 30),
+                        'price' => (float) ($row['total_price'] ?? 0),
+                        'marketing_price' => (float) ($row['marketing_price'] ?? 0),
+                        'utility_price' => (float) ($row['utility_price'] ?? 0),
+                    ];
+                }
+
+                if ($packages !== []) {
+                    return $packages;
+                }
+            } catch (Throwable $exception) {
+                error_log('Dynamic packages unavailable: ' . $exception->getMessage());
+            }
+        }
+
+        return self::DEFAULT_PACKAGES;
+    }
+
+    public static function package(string $key, ?mysqli $db = null): array
     {
         $key = strtolower(trim($key));
+        $packages = self::packages($db);
 
-        return self::PACKAGES[$key] ?? self::PACKAGES['starter'];
+        return $packages[$key] ?? reset($packages);
     }
 
     public static function packageTotalMessages(array $package): int
@@ -48,6 +92,42 @@ final class PaymentSupport
 
     public static function ensureTables(mysqli $db): void
     {
+        $db->query(
+            'CREATE TABLE IF NOT EXISTS gd_packages (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                package_key VARCHAR(50) NOT NULL UNIQUE,
+                package_name VARCHAR(120) NOT NULL,
+                marketing_message_limit INT UNSIGNED NOT NULL DEFAULT 0,
+                utility_message_limit INT UNSIGNED NOT NULL DEFAULT 0,
+                duration_days INT UNSIGNED NOT NULL DEFAULT 30,
+                marketing_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+                utility_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+                total_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+                created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )'
+        );
+
+        foreach (self::DEFAULT_PACKAGES as $key => $package) {
+            $stmt = $db->prepare(
+                'INSERT IGNORE INTO gd_packages
+                    (package_key, package_name, marketing_message_limit, utility_message_limit, duration_days, marketing_price, utility_price, total_price, is_active, sort_order, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NOW(), NOW())'
+            );
+            $label = (string) $package['label'];
+            $marketingLimit = (int) $package['marketing_limit'];
+            $utilityLimit = (int) $package['utility_limit'];
+            $days = (int) $package['days'];
+            $marketingPrice = (float) $package['marketing_price'];
+            $utilityPrice = (float) $package['utility_price'];
+            $totalPrice = (float) $package['price'];
+            $sortOrder = array_search($key, array_keys(self::DEFAULT_PACKAGES), true) + 1;
+            $stmt->bind_param('ssiiidddi', $key, $label, $marketingLimit, $utilityLimit, $days, $marketingPrice, $utilityPrice, $totalPrice, $sortOrder);
+            $stmt->execute();
+        }
+
         $db->query(
             'CREATE TABLE IF NOT EXISTS gd_package_payments (
                 id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -148,7 +228,7 @@ final class PaymentSupport
             return ['ok' => false, 'error' => 'Razorpay keys are not configured.'];
         }
 
-        $package = self::package($packageKey);
+        $package = self::package($packageKey, $db);
         $amount = (float) ($package['price'] ?? 0);
         if ($amount <= 0) {
             return ['ok' => false, 'error' => 'Selected package price is invalid.'];
@@ -222,7 +302,7 @@ final class PaymentSupport
         $stmt->execute();
         $payment = $stmt->get_result()->fetch_assoc() ?: [];
         $packageKey = (string) ($payment['package_key'] ?? 'starter');
-        $package = self::package($packageKey);
+        $package = self::package($packageKey, $db);
         $marketingLimit = (int) $package['marketing_limit'];
         $utilityLimit = (int) $package['utility_limit'];
         $totalLimit = $marketingLimit + $utilityLimit;

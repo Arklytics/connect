@@ -9,12 +9,6 @@ use Illuminate\Support\Facades\Schema;
 
 class SettingController extends Controller
 {
-    private const PACKAGES = [
-        'starter' => ['label' => 'Starter', 'marketing_limit' => 500, 'utility_limit' => 500, 'price' => 0],
-        'growth' => ['label' => 'Growth', 'marketing_limit' => 2500, 'utility_limit' => 2500, 'price' => 0],
-        'pro' => ['label' => 'Pro', 'marketing_limit' => 7500, 'utility_limit' => 7500, 'price' => 0],
-    ];
-
     public function tokens(Request $request)
     {
         $masterId = $request->session()->get('master_id');
@@ -34,7 +28,7 @@ class SettingController extends Controller
             'allOrders' => DB::table('gd_orders')->where('admin_id', $masterId)->orderByDesc('id')->get(),
             'packageRequests' => $packageRequests,
             'defaultWebhookUrl' => $defaultWebhookUrl,
-            'packages' => self::PACKAGES,
+            'packages' => \PaymentSupport::packages(\Database::connectOrNull()),
             'appSettings' => [
                 'connect_app_id' => (string) ($storedSettings['META_APP_ID'] ?? ''),
                 'connect_app_secret' => (string) ($storedSettings['META_APP_SECRET'] ?? ''),
@@ -60,7 +54,7 @@ class SettingController extends Controller
                 ->orderByDesc('id')
                 ->get(),
             'packageRequests' => $packageRequests,
-            'packages' => self::PACKAGES,
+            'packages' => \PaymentSupport::packages(\Database::connectOrNull()),
         ]);
     }
 
@@ -134,7 +128,7 @@ class SettingController extends Controller
             'package_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
         ]);
 
-        $package = self::PACKAGES[$data['package_key']] ?? self::PACKAGES['starter'];
+        $package = \PaymentSupport::package((string) $data['package_key'], \Database::connectOrNull());
         $defaultMarketingLimit = (int) ($package['marketing_limit'] ?? 0);
         $defaultUtilityLimit = (int) ($package['utility_limit'] ?? 0);
         $marketingLimit = (int) ($data['marketing_message_limit'] ?? $defaultMarketingLimit);

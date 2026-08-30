@@ -21,7 +21,7 @@ namespace Illuminate\Database\Schema {
         public function __construct(
             public string $name,
             public string $type,
-            public ?int $length = null,
+            public int|string|null $length = null,
         ) {
         }
 
@@ -154,6 +154,11 @@ namespace Illuminate\Database\Schema {
             return $this->addColumn($column, 'tinyint');
         }
 
+        public function decimal(string $column, int $total = 8, int $places = 2): ColumnDefinition
+        {
+            return $this->addColumn($column, 'decimal', $total . ',' . $places);
+        }
+
         public function json(string $column): ColumnDefinition
         {
             return $this->addColumn($column, 'json');
@@ -189,7 +194,7 @@ namespace Illuminate\Database\Schema {
             return $this->dropColumns;
         }
 
-        private function addColumn(string $column, string $type, ?int $length = null): ColumnDefinition
+        private function addColumn(string $column, string $type, int|string|null $length = null): ColumnDefinition
         {
             $definition = new ColumnDefinition($column, $type, $length);
             $this->columns[] = $definition;
@@ -331,6 +336,7 @@ namespace Illuminate\Database\Schema {
                 'int' => 'INT UNSIGNED',
                 'smallint' => 'SMALLINT UNSIGNED',
                 'varchar' => sprintf('VARCHAR(%d)', $column->length ?? 255),
+                'decimal' => sprintf('DECIMAL(%s)', $column->length ?? '8,2'),
                 'text' => 'TEXT',
                 'mediumtext' => 'MEDIUMTEXT',
                 'longtext' => 'LONGTEXT',

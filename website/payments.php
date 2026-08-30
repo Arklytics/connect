@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $status = PaymentSupport::businessPackageStatus($db, (int) $biz_id);
-$packages = PaymentSupport::PACKAGES;
+$packages = PaymentSupport::packages($db);
 $razorpayKeyId = PaymentSupport::razorpayKeyId();
 
 include 'header.php';

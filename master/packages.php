@@ -6,11 +6,7 @@ $master_id = Auth::requireMaster();
 $db = Database::connectOrNull();
 $message = '';
 $message_type = 'success';
-$packages = [
-    'starter' => ['label' => 'Starter', 'marketing_limit' => 500, 'utility_limit' => 500, 'price' => '0'],
-    'growth' => ['label' => 'Growth', 'marketing_limit' => 2500, 'utility_limit' => 2500, 'price' => '0'],
-    'pro' => ['label' => 'Pro', 'marketing_limit' => 7500, 'utility_limit' => 7500, 'price' => '0'],
-];
+$packages = PaymentSupport::DEFAULT_PACKAGES;
 $businesses = [];
 $packageRequests = [];
 $loadError = '';
@@ -46,6 +42,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message = 'Database is not responding. Restart MySQL, then try again.';
         $message_type = 'danger';
     } else {
+        $action = strtolower(trim((string) ($_POST['action'] ?? 'assign_package')));
+        if ($action === 'create_package') {
+            PaymentSupport::ensureTables($db);
+            $packageName = trim((string) ($_POST['new_package_name'] ?? ''));
+            $packageKey = strtolower(preg_replace('/[^a-z0-9]+/', '-', $packageName));
+            $packageKey = trim((string) $packageKey, '-');
+            $marketingLimit = max(0, Security::intFrom($_POST['new_marketing_message_limit'] ?? 0));
+            $utilityLimit = max(0, Security::intFrom($_POST['new_utility_message_limit'] ?? 0));
+            $durationDays = max(1, Security::intFrom($_POST['new_duration_days'] ?? 30));
+            $marketingPrice = max(0, (float) ($_POST['new_marketing_price'] ?? 0));
+            $utilityPrice = max(0, (float) ($_POST['new_utility_price'] ?? 0));
+            $totalPrice = $marketingPrice + $utilityPrice;
+
+            if ($packageName === '' || $packageKey === '') {
+                $message = 'Enter a package name.';
+                $message_type = 'warning';
+            } elseif ($marketingLimit + $utilityLimit <= 0) {
+                $message = 'Enter marketing or utility message limit.';
+                $message_type = 'warning';
+            } else {
+                $stmt = $db->prepare(
+                    'INSERT INTO gd_packages
+                        (package_key, package_name, marketing_message_limit, utility_message_limit, duration_days, marketing_price, utility_price, total_price, is_active, sort_order, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, NOW(), NOW())
+                     ON DUPLICATE KEY UPDATE
+                        package_name = VALUES(package_name),
+                        marketing_message_limit = VALUES(marketing_message_limit),
+                        utility_message_limit = VALUES(utility_message_limit),
+                        duration_days = VALUES(duration_days),
+                        marketing_price = VALUES(marketing_price),
+                        utility_price = VALUES(utility_price),
+                        total_price = VALUES(total_price),
+                        is_active = 1,
+                        updated_at = NOW()'
+                );
+                $stmt->bind_param('ssiiiddd', $packageKey, $packageName, $marketingLimit, $utilityLimit, $durationDays, $marketingPrice, $utilityPrice, $totalPrice);
+                $stmt->execute();
+                $message = 'Package saved successfully.';
+                $message_type = 'success';
+            }
+        } else {
         $businessId = Security::intFrom($_POST['business_id'] ?? null);
         $packageKey = strtolower(trim((string) ($_POST['package_key'] ?? 'starter')));
         $customLimit = Security::intFrom($_POST['custom_message_limit'] ?? null);
@@ -96,10 +133,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (in_array('utility_messages_used', $columns, true)) {
                 $updates['utility_messages_used'] = 0;
             }
-            if ($marketingPrice !== '' && in_array('marketing_package_price', $columns, true)) {
+            if ($marketingPrice === '') {
+                $marketingPrice = (string) ($package['marketing_price'] ?? 0);
+            }
+            if ($utilityPrice === '') {
+                $utilityPrice = (string) ($package['utility_price'] ?? 0);
+            }
+
+            if (in_array('marketing_package_price', $columns, true)) {
                 $updates['marketing_package_price'] = $marketingPrice;
             }
-            if ($utilityPrice !== '' && in_array('utility_package_price', $columns, true)) {
+            if (in_array('utility_package_price', $columns, true)) {
                 $updates['utility_package_price'] = $utilityPrice;
             }
             if (in_array('package_price', $columns, true)) {
@@ -133,11 +177,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message_type = 'danger';
             }
         }
+        }
     }
 }
 
 if ($db) {
     try {
+        PaymentSupport::ensureTables($db);
+        $packages = PaymentSupport::packages($db, false);
+
         $orderColumns = gdMasterColumns($db, 'gd_orders');
         $selectColumns = ['id', 'business_name', 'package_name', 'message_limit', 'messages_used', 'package_ends_at'];
         foreach (['marketing_message_limit', 'utility_message_limit', 'marketing_messages_used', 'utility_messages_used'] as $column) {
@@ -183,7 +231,7 @@ if ($db) {
         <div class="col-lg-10 col-md-9 wg-main">
             <div class="wg-page-title">
                 <h1>Packages</h1>
-                <p>Assign Starter, Growth, or Pro plans to businesses.</p>
+                <p>Create packages dynamically, then assign them to businesses.</p>
             </div>
 
             <?php if ($loadError !== ''): ?>
@@ -191,8 +239,47 @@ if ($db) {
             <?php endif; ?>
 
             <div class="wg-card p-4 mb-4">
+                <h5 class="mb-3">Add Package</h5>
                 <form method="post">
                     <?php echo Security::csrfField(); ?>
+                    <input type="hidden" name="action" value="create_package">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Package Name</label>
+                            <input type="text" name="new_package_name" class="form-control" placeholder="Example: Premium" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Marketing Messages</label>
+                            <input type="number" name="new_marketing_message_limit" class="form-control" min="0" placeholder="Marketing limit">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Utility Messages</label>
+                            <input type="number" name="new_utility_message_limit" class="form-control" min="0" placeholder="Utility limit">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Marketing Price</label>
+                            <input type="number" name="new_marketing_price" class="form-control" min="0" step="0.01" placeholder="Marketing price">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Utility Price</label>
+                            <input type="number" name="new_utility_price" class="form-control" min="0" step="0.01" placeholder="Utility price">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Duration Days</label>
+                            <input type="number" name="new_duration_days" class="form-control" min="1" value="30">
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i> Add Package</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="wg-card p-4 mb-4">
+                <h5 class="mb-3">Assign Package</h5>
+                <form method="post">
+                    <?php echo Security::csrfField(); ?>
+                    <input type="hidden" name="action" value="assign_package">
                     <div class="row g-3">
                         <div class="col-md-4">
                             <label class="form-label">Business</label>
@@ -241,6 +328,39 @@ if ($db) {
                         <button type="submit" class="btn btn-success"><i class="bi bi-box-seam me-1"></i> Assign Package</button>
                     </div>
                 </form>
+            </div>
+
+            <div class="wg-card p-4 mb-4">
+                <h5 class="mb-3">Available Packages</h5>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>#</th>
+                                <th>Package</th>
+                                <th>All Messages</th>
+                                <th>Marketing</th>
+                                <th>Utility</th>
+                                <th>Price</th>
+                                <th>Days</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach (array_values($packages) as $i => $package): ?>
+                                <?php $totalLimit = PaymentSupport::packageTotalMessages($package); ?>
+                                <tr>
+                                    <td><?php echo $i + 1; ?></td>
+                                    <td><?php echo h((string) $package['label']); ?></td>
+                                    <td><?php echo h(number_format($totalLimit)); ?></td>
+                                    <td><?php echo h(number_format((int) ($package['marketing_limit'] ?? 0))); ?></td>
+                                    <td><?php echo h(number_format((int) ($package['utility_limit'] ?? 0))); ?></td>
+                                    <td><?php echo h(number_format((float) ($package['price'] ?? 0), 2)); ?></td>
+                                    <td><?php echo h((string) ($package['days'] ?? 30)); ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <div class="wg-card p-4 mb-4">

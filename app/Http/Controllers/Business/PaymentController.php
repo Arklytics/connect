@@ -14,7 +14,7 @@ class PaymentController extends Controller
         \PaymentSupport::ensureTables($db);
 
         return view('business.payments.index', [
-            'packages' => \PaymentSupport::PACKAGES,
+            'packages' => \PaymentSupport::packages($db),
             'packageStatus' => \PaymentSupport::businessPackageStatus($db, $bizId),
             'razorpayKeyId' => \PaymentSupport::razorpayKeyId(),
         ]);

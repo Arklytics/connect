@@ -12,12 +12,6 @@ use Illuminate\Support\Str;
 
 class OrderController extends Controller
 {
-    private const PACKAGES = [
-        'starter' => ['label' => 'Starter', 'marketing_limit' => 500, 'utility_limit' => 500, 'price' => 0],
-        'growth' => ['label' => 'Growth', 'marketing_limit' => 2500, 'utility_limit' => 2500, 'price' => 0],
-        'pro' => ['label' => 'Pro', 'marketing_limit' => 7500, 'utility_limit' => 7500, 'price' => 0],
-    ];
-
     public function index(Request $request)
     {
         $orders = DB::table('gd_orders')
@@ -31,7 +25,7 @@ class OrderController extends Controller
     public function create()
     {
         return view('admin.orders.create', [
-            'packages' => self::PACKAGES,
+            'packages' => \PaymentSupport::packages(\Database::connectOrNull()),
         ]);
     }
 
@@ -60,7 +54,7 @@ class OrderController extends Controller
         }
 
         $packageKey = (string) ($data['package_key'] ?? 'starter');
-        $package = self::PACKAGES[$packageKey] ?? self::PACKAGES['starter'];
+        $package = \PaymentSupport::package($packageKey, \Database::connectOrNull());
         $marketingLimit = (int) ($data['marketing_message_limit'] ?? $package['marketing_limit']);
         $utilityLimit = (int) ($data['utility_message_limit'] ?? $package['utility_limit']);
         $messageLimit = $marketingLimit + $utilityLimit;
@@ -124,7 +118,7 @@ class OrderController extends Controller
             'package_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
         ]);
 
-        $package = self::PACKAGES[$data['package_key']] ?? self::PACKAGES['starter'];
+        $package = \PaymentSupport::package((string) $data['package_key'], \Database::connectOrNull());
         $marketingLimit = (int) ($data['marketing_message_limit'] ?? $package['marketing_limit']);
         $utilityLimit = (int) ($data['utility_message_limit'] ?? $package['utility_limit']);
         $limit = $marketingLimit + $utilityLimit;
