@@ -322,7 +322,7 @@ if (isset($_POST['import'])) {
 }
 ?>
 
-<div class="position-fixed top-0 end-0 p-3" style="z-index: 5;">
+<div class="position-fixed bottom-0 end-0 p-3 wg-footer-toast-container">
     <?php if (!empty($message)): ?>
         <div class="toast align-items-center text-bg-<?php echo h($message_type); ?> border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
             <div class="d-flex">

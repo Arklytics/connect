@@ -198,7 +198,7 @@ if (in_array('scheduled_at', $followupColumns, true)) {
                 <p>Build the structure first, then queue it to a contact when you are ready. Sending templates stays on the Send Messages page.</p>
             </div>
 
-            <div class="position-fixed top-0 end-0 p-3" style="z-index: 5;">
+                    <div class="position-fixed bottom-0 end-0 p-3 wg-footer-toast-container">
                 <?php if (!empty($message)): ?>
                     <div class="toast align-items-center text-bg-<?php echo h($messageType); ?> border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
                         <div class="d-flex">

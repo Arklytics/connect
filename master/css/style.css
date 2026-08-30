@@ -641,6 +641,54 @@ textarea.form-control {
 .toast {
     border-radius: var(--wg-radius);
     box-shadow: var(--wg-shadow);
+    overflow: hidden;
+}
+
+.wg-footer-toast-container {
+    top: auto !important;
+    bottom: 18px !important;
+    z-index: 1080;
+}
+
+.toast.text-bg-success,
+.toast.bg-success {
+    background: #15803d !important;
+    color: #ffffff !important;
+}
+
+.toast.text-bg-danger,
+.toast.bg-danger {
+    background: #b91c1c !important;
+    color: #ffffff !important;
+}
+
+.toast.text-bg-warning,
+.toast.bg-warning {
+    background: #f59e0b !important;
+    color: #111827 !important;
+}
+
+.toast.text-bg-info,
+.toast.bg-info {
+    background: #0ea5e9 !important;
+    color: #ffffff !important;
+}
+
+.toast.text-bg-primary,
+.toast.bg-primary {
+    background: #2563eb !important;
+    color: #ffffff !important;
+}
+
+.toast.text-bg-secondary,
+.toast.bg-secondary {
+    background: #475569 !important;
+    color: #ffffff !important;
+}
+
+.wg-flash-toast {
+    min-width: min(360px, calc(100vw - 32px));
+    border: 0;
 }
 
 .wg-login-body {
