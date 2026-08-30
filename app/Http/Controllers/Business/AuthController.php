@@ -30,6 +30,11 @@ class AuthController extends Controller
         $request->session()->regenerate();
         $request->session()->put('biz_id', $business->id);
 
+        $db = \Database::connectOrNull();
+        if ($db && \PaymentSupport::requiresPayment($db, (int) $business->id)) {
+            return redirect()->route('business.payments.index');
+        }
+
         return redirect()->route('business.dashboard');
     }
 

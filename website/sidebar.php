@@ -50,7 +50,7 @@ try {
 <?php if ($sidebarAiKnowledgeEnabled): ?>
  <a href="<?php echo h(app_url('business/ai-knowledge')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-robot"></i> AI Knowledge</li></a>
 <?php endif; ?>
-      <li class="list-group-item text-muted"><i class="bi bi-credit-card"></i> Payment Settings <span class="badge bg-secondary ms-2">Soon</span></li>
+ <a href="<?php echo h(app_url('business/payments')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-credit-card"></i> Payments</li></a>
     </ul>
 
     <li class="list-group-item dropdown-toggle" id="messageDropdown" style="cursor: pointer;">

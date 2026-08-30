@@ -18,6 +18,11 @@ final class Auth
             exit();
         }
 
+        $db = Database::connectOrNull();
+        if ($db instanceof mysqli) {
+            PaymentSupport::redirectIfPaymentRequired($db, $id);
+        }
+
         return $id;
     }
 

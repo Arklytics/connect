@@ -14,6 +14,13 @@ class EnsureBusinessAuthenticated
             return redirect()->route('business.login');
         }
 
+        if (!$request->routeIs('business.payments.*') && !$request->routeIs('business.logout')) {
+            $db = \Database::connectOrNull();
+            if ($db && \PaymentSupport::requiresPayment($db, (int) $request->session()->get('biz_id'))) {
+                return redirect()->route('business.payments.index');
+            }
+        }
+
         return $next($request);
     }
 }

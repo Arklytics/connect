@@ -10,6 +10,7 @@ use App\Http\Controllers\Business\ContactController;
 use App\Http\Controllers\Business\DashboardController as BusinessDashboardController;
 use App\Http\Controllers\Business\GroupController;
 use App\Http\Controllers\Business\MessageController;
+use App\Http\Controllers\Business\PaymentController;
 use App\Http\Controllers\Business\SequenceController;
 use App\Http\Controllers\Business\TemplateController as BusinessTemplateController;
 use Illuminate\Support\Facades\Route;
@@ -42,6 +43,10 @@ Route::prefix('business')->name('business.')->group(function () {
     Route::post('/logout', [BusinessAuthController::class, 'logout'])->name('logout');
 
     Route::middleware('business.auth')->group(function () {
+        Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
+        Route::post('payments/order', [PaymentController::class, 'createOrder'])->name('payments.order');
+        Route::post('payments/verify', [PaymentController::class, 'verify'])->name('payments.verify');
+
         Route::get('/', [BusinessDashboardController::class, 'index'])->name('dashboard');
 
         Route::get('contacts', [ContactController::class, 'create'])->name('contacts.index');
