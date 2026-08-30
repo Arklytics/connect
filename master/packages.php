@@ -42,9 +42,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message = 'Database is not responding. Restart MySQL, then try again.';
         $message_type = 'danger';
     } else {
+        PaymentSupport::ensureTables($db);
+        $packages = PaymentSupport::packages($db, false);
+
         $action = strtolower(trim((string) ($_POST['action'] ?? 'assign_package')));
         if ($action === 'create_package') {
-            PaymentSupport::ensureTables($db);
             $packageName = trim((string) ($_POST['new_package_name'] ?? ''));
             $packageKey = strtolower(preg_replace('/[^a-z0-9]+/', '-', $packageName));
             $packageKey = trim((string) $packageKey, '-');
@@ -83,43 +85,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message_type = 'success';
             }
         } else {
-        $businessId = Security::intFrom($_POST['business_id'] ?? null);
-        $packageKey = strtolower(trim((string) ($_POST['package_key'] ?? 'starter')));
-        $customLimit = Security::intFrom($_POST['custom_message_limit'] ?? null);
-        $marketingLimit = max(0, Security::intFrom($_POST['marketing_message_limit'] ?? null));
-        $utilityLimit = max(0, Security::intFrom($_POST['utility_message_limit'] ?? null));
-        $marketingPrice = trim((string) ($_POST['marketing_package_price'] ?? ''));
-        $utilityPrice = trim((string) ($_POST['utility_package_price'] ?? ''));
-        $packageDays = max(1, Security::intFrom($_POST['package_days'] ?? 30));
-        $reason = trim((string) ($_POST['reason'] ?? ''));
-        $package = $packages[$packageKey] ?? $packages['starter'];
-        if ($marketingLimit <= 0 && $utilityLimit <= 0) {
-            $marketingLimit = (int) ($package['marketing_limit'] ?? 0);
-            $utilityLimit = (int) ($package['utility_limit'] ?? 0);
-        }
-        $limit = $marketingLimit + $utilityLimit;
-        if ($limit <= 0 && $customLimit > 0) {
-            $limit = $customLimit;
-        }
+            $businessId = Security::intFrom($_POST['business_id'] ?? null);
+            $packageKey = strtolower(trim((string) ($_POST['package_key'] ?? 'starter')));
+            $customLimit = Security::intFrom($_POST['custom_message_limit'] ?? null);
+            $marketingLimit = max(0, Security::intFrom($_POST['marketing_message_limit'] ?? null));
+            $utilityLimit = max(0, Security::intFrom($_POST['utility_message_limit'] ?? null));
+            $marketingPrice = trim((string) ($_POST['marketing_package_price'] ?? ''));
+            $utilityPrice = trim((string) ($_POST['utility_package_price'] ?? ''));
+            $packageDays = max(1, Security::intFrom($_POST['package_days'] ?? 30));
+            $reason = trim((string) ($_POST['reason'] ?? ''));
+            $package = $packages[$packageKey] ?? reset($packages);
+            if ($marketingLimit <= 0 && $utilityLimit <= 0) {
+                $marketingLimit = (int) ($package['marketing_limit'] ?? 0);
+                $utilityLimit = (int) ($package['utility_limit'] ?? 0);
+            }
+            $limit = $marketingLimit + $utilityLimit;
+            if ($limit <= 0 && $customLimit > 0) {
+                $limit = $customLimit;
+            }
 
-        $columns = gdMasterColumns($db, 'gd_orders');
-        if (!in_array('package_name', $columns, true)) {
-            $message = 'Run the package migration first, then refresh this page.';
-            $message_type = 'warning';
-        } elseif ($businessId <= 0) {
-            $message = 'Please select a business.';
-            $message_type = 'warning';
-        } else {
-            $updates = [
-                'package_name' => $package['label'],
-                'message_limit' => $limit,
-                'messages_used' => 0,
-                'package_started_at' => date('Y-m-d H:i:s'),
-                'package_ends_at' => date('Y-m-d H:i:s', strtotime('+' . $packageDays . ' days')),
-                'limit_request_status' => 'approved',
-                'limit_request_note' => '',
-                'limit_request_at' => date('Y-m-d H:i:s'),
-            ];
+            $columns = gdMasterColumns($db, 'gd_orders');
+            if (!in_array('package_name', $columns, true)) {
+                $message = 'Run the package migration first, then refresh this page.';
+                $message_type = 'warning';
+            } elseif ($businessId <= 0) {
+                $message = 'Please select a business.';
+                $message_type = 'warning';
+            } else {
+                $updates = [
+                    'package_name' => $package['label'],
+                    'message_limit' => $limit,
+                    'messages_used' => 0,
+                    'package_started_at' => date('Y-m-d H:i:s'),
+                    'package_ends_at' => date('Y-m-d H:i:s', strtotime('+' . $packageDays . ' days')),
+                    'limit_request_status' => 'approved',
+                    'limit_request_note' => '',
+                    'limit_request_at' => date('Y-m-d H:i:s'),
+                ];
 
             if (in_array('marketing_message_limit', $columns, true)) {
                 $updates['marketing_message_limit'] = $marketingLimit;
@@ -249,24 +251,28 @@ if ($db) {
                             <input type="text" name="new_package_name" class="form-control" placeholder="Example: Premium" required>
                         </div>
                         <div class="col-md-4">
+                            <label class="form-label">Duration Days</label>
+                            <input type="number" name="new_duration_days" class="form-control" min="1" value="30">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Total Price</label>
+                            <input type="text" class="form-control" value="Marketing + Utility" disabled>
+                        </div>
+                        <div class="col-md-6">
                             <label class="form-label">Marketing Messages</label>
                             <input type="number" name="new_marketing_message_limit" class="form-control" min="0" placeholder="Marketing limit">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="form-label">Utility Messages</label>
                             <input type="number" name="new_utility_message_limit" class="form-control" min="0" placeholder="Utility limit">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="form-label">Marketing Price</label>
                             <input type="number" name="new_marketing_price" class="form-control" min="0" step="0.01" placeholder="Marketing price">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="form-label">Utility Price</label>
                             <input type="number" name="new_utility_price" class="form-control" min="0" step="0.01" placeholder="Utility price">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Duration Days</label>
-                            <input type="number" name="new_duration_days" class="form-control" min="1" value="30">
                         </div>
                     </div>
                     <div class="mt-3">
@@ -303,19 +309,19 @@ if ($db) {
                             <label class="form-label">Duration Days</label>
                             <input type="number" name="package_days" class="form-control" min="1" value="30">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="form-label">Marketing Messages</label>
                             <input type="number" name="marketing_message_limit" class="form-control" min="0" placeholder="Marketing limit">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="form-label">Utility Messages</label>
                             <input type="number" name="utility_message_limit" class="form-control" min="0" placeholder="Utility limit">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="form-label">Marketing Price</label>
                             <input type="number" name="marketing_package_price" class="form-control" min="0" step="0.01" placeholder="Marketing price">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="form-label">Utility Price</label>
                             <input type="number" name="utility_package_price" class="form-control" min="0" step="0.01" placeholder="Utility price">
                         </div>

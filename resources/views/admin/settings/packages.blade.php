@@ -15,6 +15,51 @@
 
   <div class="card shadow-sm border-0 mt-3">
     <div class="card-body">
+      <h5 class="mb-3">Add Package</h5>
+      <form action="{{ route('admin.packages.store') }}" method="post">
+        @csrf
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Package Name</label>
+            <input type="text" name="package_name" class="form-control" value="{{ old('package_name') }}" placeholder="Example: Premium" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Duration Days</label>
+            <input type="number" name="duration_days" class="form-control" min="1" max="3650" value="{{ old('duration_days', 30) }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Total Price</label>
+            <input type="text" class="form-control" value="Marketing + Utility" disabled>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Marketing Messages</label>
+            <input type="number" name="marketing_message_limit" class="form-control" min="0" value="{{ old('marketing_message_limit') }}" placeholder="Marketing limit">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Utility Messages</label>
+            <input type="number" name="utility_message_limit" class="form-control" min="0" value="{{ old('utility_message_limit') }}" placeholder="Utility limit">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Marketing Price</label>
+            <input type="number" name="marketing_price" class="form-control" min="0" step="0.01" value="{{ old('marketing_price') }}" placeholder="Marketing price">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Utility Price</label>
+            <input type="number" name="utility_price" class="form-control" min="0" step="0.01" value="{{ old('utility_price') }}" placeholder="Utility price">
+          </div>
+        </div>
+        <div class="mt-3">
+          <button class="btn btn-primary" type="submit">
+            <i class="bi bi-plus-circle me-1"></i> Add Package
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0 mt-4">
+    <div class="card-body">
+      <h5 class="mb-3">Assign Package</h5>
       <form action="{{ route('admin.settings.package.store') }}" method="post">
         @csrf
         <div class="row g-3">
@@ -40,19 +85,19 @@
             <label class="form-label">Duration Days</label>
             <input type="number" name="package_days" class="form-control" min="1" value="30">
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <label class="form-label">Marketing Messages</label>
             <input type="number" name="marketing_message_limit" class="form-control" min="0" placeholder="Marketing limit">
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <label class="form-label">Utility Messages</label>
             <input type="number" name="utility_message_limit" class="form-control" min="0" placeholder="Utility limit">
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <label class="form-label">Marketing Price</label>
             <input type="number" name="marketing_package_price" class="form-control" min="0" step="0.01" placeholder="Marketing price">
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <label class="form-label">Utility Price</label>
             <input type="number" name="utility_package_price" class="form-control" min="0" step="0.01" placeholder="Utility price">
           </div>
@@ -63,6 +108,43 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0 mt-4">
+    <div class="card-body">
+      <h5 class="mb-3">Available Packages</h5>
+      <div class="table-responsive">
+        <table class="table table-striped align-middle">
+          <thead class="table-dark">
+            <tr>
+              <th>#</th>
+              <th>Package</th>
+              <th>All Messages</th>
+              <th>Marketing</th>
+              <th>Utility</th>
+              <th>Price</th>
+              <th>Days</th>
+            </tr>
+          </thead>
+          <tbody>
+            @forelse (array_values($packages ?? []) as $package)
+              @php $totalLimit = (int) ($package['marketing_limit'] ?? 0) + (int) ($package['utility_limit'] ?? 0); @endphp
+              <tr>
+                <td>{{ $loop->iteration }}</td>
+                <td>{{ $package['label'] }}</td>
+                <td>{{ number_format($totalLimit) }}</td>
+                <td>{{ number_format((int) ($package['marketing_limit'] ?? 0)) }}</td>
+                <td>{{ number_format((int) ($package['utility_limit'] ?? 0)) }}</td>
+                <td>{{ number_format((float) ($package['price'] ?? 0), 2) }}</td>
+                <td>{{ $package['days'] ?? 30 }}</td>
+              </tr>
+            @empty
+              <tr><td colspan="7" class="text-center">No packages found</td></tr>
+            @endforelse
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 

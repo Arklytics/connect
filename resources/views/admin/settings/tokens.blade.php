@@ -65,19 +65,19 @@
                 @endforeach
               </select>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label class="form-label">Marketing Messages</label>
               <input type="number" name="marketing_message_limit" class="form-control" min="0" placeholder="Marketing limit">
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label class="form-label">Utility Messages</label>
               <input type="number" name="utility_message_limit" class="form-control" min="0" placeholder="Utility limit">
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label class="form-label">Marketing Price</label>
               <input type="number" name="marketing_package_price" class="form-control" min="0" step="0.01" placeholder="Marketing price">
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label class="form-label">Utility Price</label>
               <input type="number" name="utility_package_price" class="form-control" min="0" step="0.01" placeholder="Utility price">
             </div>

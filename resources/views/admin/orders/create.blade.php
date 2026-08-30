@@ -31,11 +31,11 @@
           @endforeach
         </select>
       </div>
-      <div class="col-md-4">
+      <div class="col-md-6">
         <label class="form-label">Marketing Messages</label>
         <input type="number" class="form-control p-2 shadow" name="marketing_message_limit" min="0" placeholder="Marketing limit">
       </div>
-      <div class="col-md-4">
+      <div class="col-md-6">
         <label class="form-label">Utility Messages</label>
         <input type="number" class="form-control p-2 shadow" name="utility_message_limit" min="0" placeholder="Utility limit">
       </div>

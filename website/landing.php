@@ -8,17 +8,18 @@ $logoUrl = app_url('website/uploads/connect-logo.png');
 $heroImageUrl = app_url('master/uploads/slider1.jpg');
 $loginUrl = app_url('business/login');
 $signupUrl = app_url('business/signup');
-$businessUrl = app_url('business');
+$apiDocsUrl = app_url('api-docs');
 $privacyUrl = app_url('privacy-policy');
 $termsUrl = app_url('terms-conditions');
 $crmPrivacyUrl = app_url('crm-privacy');
+$packages = PaymentSupport::packages(Database::connectOrNull());
 ?>
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Arklytics Connect brings WhatsApp messaging, CRM, follow-ups, and business workflows into one fast workspace.">
+    <meta name="description" content="Arklytics Connect provides CRM solutions for businesses with WhatsApp messaging, lead management, follow-ups, reporting, package billing, and CRM API access.">
     <title>Arklytics Connect | WhatsApp CRM for Growing Businesses</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -557,6 +558,135 @@ $crmPrivacyUrl = app_url('crm-privacy');
         font-weight: 700;
       }
 
+      .ac-api-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 0.92fr) minmax(320px, 1.08fr);
+        gap: 24px;
+        align-items: stretch;
+      }
+
+      .ac-api-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .ac-api-item {
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr);
+        gap: 14px;
+        padding: 18px;
+        border: 1px solid rgba(20, 33, 38, 0.08);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .ac-api-item i {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 8px;
+        color: #7a4418;
+        background: #fff2cf;
+        font-size: 1.25rem;
+      }
+
+      .ac-api-item h3 {
+        margin: 0 0 4px;
+        font-size: 1rem;
+        font-weight: 800;
+      }
+
+      .ac-api-item p {
+        margin: 0;
+        color: var(--ac-muted);
+        line-height: 1.58;
+      }
+
+      .ac-code-card {
+        padding: 24px;
+        border-radius: 8px;
+        background: #101820;
+        color: #e8f3f1;
+        box-shadow: 0 20px 58px rgba(14, 36, 48, 0.18);
+      }
+
+      .ac-code-card pre {
+        margin: 16px 0 0;
+        white-space: pre-wrap;
+        color: #d7efe8;
+        font-size: 0.92rem;
+        line-height: 1.7;
+      }
+
+      .ac-package-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+      }
+
+      .ac-package {
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+        padding: 26px;
+        border: 1px solid var(--ac-line);
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 14px 36px rgba(20, 33, 38, 0.06);
+      }
+
+      .ac-package:nth-child(2n) {
+        border-color: rgba(18, 130, 92, 0.24);
+        background: linear-gradient(180deg, #ffffff 0%, #f2fbf6 100%);
+      }
+
+      .ac-package-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .ac-package h3 {
+        margin: 0;
+        font-family: "Space Grotesk", Manrope, sans-serif;
+        font-size: 1.55rem;
+        font-weight: 700;
+      }
+
+      .ac-price {
+        margin: 16px 0 14px;
+        font-family: "Space Grotesk", Manrope, sans-serif;
+        font-size: 2rem;
+        font-weight: 700;
+      }
+
+      .ac-package-list {
+        display: grid;
+        gap: 10px;
+        margin: 0 0 22px;
+        padding: 0;
+        list-style: none;
+      }
+
+      .ac-package-list li {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        color: var(--ac-muted);
+        font-weight: 700;
+      }
+
+      .ac-package-list i {
+        color: var(--ac-green);
+      }
+
+      .ac-package .ac-btn {
+        margin-top: auto;
+      }
+
       .ac-cta {
         color: #fff;
         background:
@@ -609,6 +739,7 @@ $crmPrivacyUrl = app_url('crm-privacy');
         .ac-hero-inner,
         .ac-slide,
         .ac-workflow,
+        .ac-api-grid,
         .ac-cta-inner {
           grid-template-columns: 1fr;
         }
@@ -640,6 +771,7 @@ $crmPrivacyUrl = app_url('crm-privacy');
 
         .ac-trust-row,
         .ac-feature-grid,
+        .ac-package-grid,
         .ac-industry-grid,
         .ac-dashboard-grid {
           grid-template-columns: 1fr;
@@ -667,9 +799,11 @@ $crmPrivacyUrl = app_url('crm-privacy');
             <img src="<?php echo h($logoUrl); ?>" alt="Arklytics Connect">
           </a>
           <div class="d-none d-lg-flex align-items-center gap-4">
-            <a class="ac-nav-link" href="#platform">Platform</a>
+            <a class="ac-nav-link" href="#solutions">Solutions</a>
+            <a class="ac-nav-link" href="#platform">CRM</a>
+            <a class="ac-nav-link" href="#api">API</a>
+            <a class="ac-nav-link" href="#packages">Packages</a>
             <a class="ac-nav-link" href="#industries">Industries</a>
-            <a class="ac-nav-link" href="#workflow">Workflow</a>
           </div>
           <div class="ac-nav-actions d-flex flex-wrap gap-2">
             <a class="ac-btn ac-btn-light" href="<?php echo h($loginUrl); ?>"><i class="bi bi-box-arrow-in-right"></i> Login to CRM</a>
@@ -683,25 +817,25 @@ $crmPrivacyUrl = app_url('crm-privacy');
       <section class="ac-hero">
         <div class="container ac-hero-inner">
           <div>
-            <span class="ac-kicker"><i class="bi bi-lightning-charge-fill"></i> WhatsApp CRM for fast-moving teams</span>
+            <span class="ac-kicker"><i class="bi bi-lightning-charge-fill"></i> CRM solutions for growing businesses</span>
             <h1>Arklytics Connect</h1>
-            <p class="ac-hero-text">Bring customer conversations, leads, follow-ups, templates, campaigns, and reporting into one clean CRM built around WhatsApp. Built for SaaS teams, stores, service businesses, hospitals, and local operators who need quick user interactions without losing context.</p>
+            <p class="ac-hero-text">A professional CRM for businesses that need WhatsApp messaging, lead management, campaigns, follow-ups, reports, package billing, and CRM API access in one practical workspace.</p>
             <div class="ac-action-row">
               <a class="ac-btn ac-btn-primary" href="<?php echo h($signupUrl); ?>"><i class="bi bi-building-add"></i> Connect Business</a>
-              <a class="ac-btn ac-btn-light" href="<?php echo h($loginUrl); ?>"><i class="bi bi-kanban"></i> Login to CRM</a>
+              <a class="ac-btn ac-btn-light" href="<?php echo h($apiDocsUrl); ?>"><i class="bi bi-code-slash"></i> View CRM API</a>
             </div>
             <div class="ac-trust-row">
               <div class="ac-trust-item">
-                <strong>1 inbox</strong>
-                <span>CRM, contacts, templates</span>
+                <strong>CRM</strong>
+                <span>Contacts, stages, reports</span>
               </div>
               <div class="ac-trust-item">
-                <strong>Fast</strong>
-                <span>Lead updates in seconds</span>
+                <strong>API</strong>
+                <span>Contacts and messaging</span>
               </div>
               <div class="ac-trust-item">
-                <strong>Ready</strong>
-                <span>For campaigns and follow-ups</span>
+                <strong>Plans</strong>
+                <span>Marketing and utility limits</span>
               </div>
             </div>
           </div>
@@ -735,6 +869,37 @@ $crmPrivacyUrl = app_url('crm-privacy');
               </div>
             </div>
           </aside>
+        </div>
+      </section>
+
+      <section class="ac-section alt" id="solutions">
+        <div class="container">
+          <div class="ac-section-title">
+            <h2>CRM solutions built for business operations</h2>
+            <p>Use Arklytics Connect as a customer workspace for sales teams, support teams, appointment teams, agencies, stores, and service providers.</p>
+          </div>
+          <div class="ac-feature-grid">
+            <article class="ac-feature">
+              <i class="bi bi-kanban"></i>
+              <h3>Sales CRM</h3>
+              <p>Track every lead from new inquiry to qualified, won, lost, and follow-up due.</p>
+            </article>
+            <article class="ac-feature">
+              <i class="bi bi-megaphone"></i>
+              <h3>WhatsApp marketing</h3>
+              <p>Send approved campaign templates to grouped audiences with clear message usage.</p>
+            </article>
+            <article class="ac-feature">
+              <i class="bi bi-bell"></i>
+              <h3>Utility messages</h3>
+              <p>Handle reminders, updates, invoices, appointments, confirmations, and service alerts.</p>
+            </article>
+            <article class="ac-feature">
+              <i class="bi bi-plug"></i>
+              <h3>CRM API</h3>
+              <p>Connect your website, apps, forms, and backend tools to CRM contacts and messages.</p>
+            </article>
+          </div>
         </div>
       </section>
 
@@ -847,6 +1012,95 @@ $crmPrivacyUrl = app_url('crm-privacy');
               <h3>Reports</h3>
               <p>See sent messages, delivery outcomes, due work, won leads, lost leads, and package usage.</p>
             </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="ac-section" id="api">
+        <div class="container">
+          <div class="ac-api-grid">
+            <div>
+              <div class="ac-section-title">
+                <h2>CRM API available for your integrations</h2>
+                <p>Build custom workflows on top of Arklytics Connect. Import contacts, organize groups, create templates, send WhatsApp messages, and receive webhooks from your own systems.</p>
+              </div>
+              <div class="ac-api-list">
+                <div class="ac-api-item">
+                  <i class="bi bi-person-plus"></i>
+                  <div>
+                    <h3>Contacts API</h3>
+                    <p>Create or import leads from forms, landing pages, ecommerce stores, and internal tools.</p>
+                  </div>
+                </div>
+                <div class="ac-api-item">
+                  <i class="bi bi-send"></i>
+                  <div>
+                    <h3>WhatsApp send API</h3>
+                    <p>Send text and template messages for authentication, utility, and marketing use cases.</p>
+                  </div>
+                </div>
+                <div class="ac-api-item">
+                  <i class="bi bi-broadcast"></i>
+                  <div>
+                    <h3>Webhooks</h3>
+                    <p>Receive inbound messages and delivery status updates inside your own application.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="ac-code-card">
+              <span class="ac-kicker"><i class="bi bi-code-slash"></i> Developer ready</span>
+              <pre>POST /api/contacts/import
+POST /api/templates/create
+POST /api/whatsapp/send
+POST /api/webhooks/config
+
+Headers:
+Authorization: Bearer YOUR_API_KEY
+
+Use one CRM API for contacts, templates,
+WhatsApp messages, reports, and webhooks.</pre>
+              <div class="ac-action-row">
+                <a class="ac-btn ac-btn-primary" href="<?php echo h($apiDocsUrl); ?>"><i class="bi bi-file-earmark-code"></i> Read API Docs</a>
+                <a class="ac-btn ac-btn-light" href="<?php echo h($loginUrl); ?>"><i class="bi bi-key"></i> Login for API Key</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="ac-section alt" id="packages">
+        <div class="container">
+          <div class="ac-section-title">
+            <h2>Packages for marketing and utility messages</h2>
+            <p>Choose a business package with separate WhatsApp marketing and utility message limits. Master Admin can add more packages dynamically.</p>
+          </div>
+          <div class="ac-package-grid">
+            <?php foreach ($packages as $key => $package): ?>
+              <?php
+                $marketingLimit = (int) ($package['marketing_limit'] ?? 0);
+                $utilityLimit = (int) ($package['utility_limit'] ?? 0);
+                $totalLimit = $marketingLimit + $utilityLimit;
+                $price = (float) ($package['price'] ?? 0);
+              ?>
+              <article class="ac-package">
+                <div class="ac-package-top">
+                  <div>
+                    <span class="ac-kicker">Business package</span>
+                    <h3><?php echo h((string) ($package['label'] ?? ucfirst((string) $key))); ?></h3>
+                  </div>
+                  <span class="ac-status"><?php echo h((string) ($package['days'] ?? 30)); ?> days</span>
+                </div>
+                <div class="ac-price">INR <?php echo h(number_format($price, 2)); ?></div>
+                <ul class="ac-package-list">
+                  <li><i class="bi bi-check-circle-fill"></i> <?php echo h(number_format($totalLimit)); ?> all messages</li>
+                  <li><i class="bi bi-megaphone-fill"></i> <?php echo h(number_format($marketingLimit)); ?> marketing messages</li>
+                  <li><i class="bi bi-bell-fill"></i> <?php echo h(number_format($utilityLimit)); ?> utility messages</li>
+                  <li><i class="bi bi-bar-chart-fill"></i> CRM reports and usage tracking</li>
+                </ul>
+                <a class="ac-btn ac-btn-primary" href="<?php echo h($signupUrl); ?>"><i class="bi bi-credit-card"></i> Start with this package</a>
+              </article>
+            <?php endforeach; ?>
           </div>
         </div>
       </section>
@@ -975,12 +1229,12 @@ $crmPrivacyUrl = app_url('crm-privacy');
       <section class="ac-section ac-cta">
         <div class="container ac-cta-inner">
           <div>
-            <h2>Open the workspace your team will actually use.</h2>
-            <p>Connect WhatsApp, organize contacts, send templates, and manage customer follow-ups from a CRM built for daily business work.</p>
+            <h2>Open the CRM your business will actually use.</h2>
+            <p>Connect WhatsApp, organize contacts, sell with follow-ups, use CRM APIs, and manage package-based messaging from one professional workspace.</p>
           </div>
           <div class="ac-action-row m-0">
             <a class="ac-btn ac-btn-primary" href="<?php echo h($signupUrl); ?>"><i class="bi bi-building-add"></i> Connect Business</a>
-            <a class="ac-btn ac-btn-light" href="<?php echo h($businessUrl); ?>"><i class="bi bi-kanban"></i> Open CRM</a>
+            <a class="ac-btn ac-btn-light" href="<?php echo h($apiDocsUrl); ?>"><i class="bi bi-code-slash"></i> CRM API</a>
           </div>
         </div>
       </section>

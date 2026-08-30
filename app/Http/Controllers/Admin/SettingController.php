@@ -43,6 +43,7 @@ class SettingController extends Controller
     public function packages(Request $request)
     {
         $masterId = $request->session()->get('master_id');
+        $db = \Database::connectOrNull();
 
         $packageRequests = Schema::hasTable('gd_package_requests')
             ? DB::table('gd_package_requests')->orderByDesc('id')->get()
@@ -54,8 +55,56 @@ class SettingController extends Controller
                 ->orderByDesc('id')
                 ->get(),
             'packageRequests' => $packageRequests,
-            'packages' => \PaymentSupport::packages(\Database::connectOrNull()),
+            'packages' => \PaymentSupport::packages($db, false),
         ]);
+    }
+
+    public function storeDynamicPackage(Request $request)
+    {
+        $data = $request->validate([
+            'package_name' => ['required', 'string', 'max:120'],
+            'marketing_message_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'utility_message_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'marketing_price' => ['nullable', 'numeric', 'min:0'],
+            'utility_price' => ['nullable', 'numeric', 'min:0'],
+            'duration_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
+        ]);
+
+        $marketingLimit = (int) ($data['marketing_message_limit'] ?? 0);
+        $utilityLimit = (int) ($data['utility_message_limit'] ?? 0);
+        if ($marketingLimit + $utilityLimit <= 0) {
+            return back()->with('warning', 'Enter marketing or utility message limit.')->withInput();
+        }
+
+        $db = \Database::connect();
+        \PaymentSupport::ensureTables($db);
+
+        $packageName = trim((string) $data['package_name']);
+        $packageKey = strtolower(trim((string) preg_replace('/[^a-z0-9]+/', '-', $packageName), '-'));
+        $durationDays = (int) ($data['duration_days'] ?? 30);
+        $marketingPrice = (float) ($data['marketing_price'] ?? 0);
+        $utilityPrice = (float) ($data['utility_price'] ?? 0);
+        $totalPrice = $marketingPrice + $utilityPrice;
+
+        $stmt = $db->prepare(
+            'INSERT INTO gd_packages
+                (package_key, package_name, marketing_message_limit, utility_message_limit, duration_days, marketing_price, utility_price, total_price, is_active, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE
+                package_name = VALUES(package_name),
+                marketing_message_limit = VALUES(marketing_message_limit),
+                utility_message_limit = VALUES(utility_message_limit),
+                duration_days = VALUES(duration_days),
+                marketing_price = VALUES(marketing_price),
+                utility_price = VALUES(utility_price),
+                total_price = VALUES(total_price),
+                is_active = 1,
+                updated_at = NOW()'
+        );
+        $stmt->bind_param('ssiiiddd', $packageKey, $packageName, $marketingLimit, $utilityLimit, $durationDays, $marketingPrice, $utilityPrice, $totalPrice);
+        $stmt->execute();
+
+        return back()->with('success', 'Package saved successfully.');
     }
 
     public function storeAppSettings(Request $request)
