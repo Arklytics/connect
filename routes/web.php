@@ -30,6 +30,8 @@ Route::prefix('master')->name('admin.')->group(function () {
         Route::delete('orders/{order}', [AdminOrderController::class, 'destroy'])->name('orders.destroy');
         Route::get('packages', [AdminSettingController::class, 'packages'])->name('packages.index');
         Route::post('packages', [AdminSettingController::class, 'storeDynamicPackage'])->name('packages.store');
+        Route::put('packages/{packageKey}', [AdminSettingController::class, 'updateDynamicPackage'])->name('packages.update');
+        Route::delete('packages/{packageKey}', [AdminSettingController::class, 'destroyDynamicPackage'])->name('packages.destroy');
         Route::get('settings/tokens', [AdminSettingController::class, 'tokens'])->name('settings.tokens');
         Route::post('settings/app', [AdminSettingController::class, 'storeAppSettings'])->name('settings.app.store');
         Route::post('settings/tokens', [AdminSettingController::class, 'storeToken'])->name('settings.tokens.store');

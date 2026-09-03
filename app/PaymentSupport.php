@@ -63,12 +63,11 @@ final class PaymentSupport
                         'price' => (float) ($row['total_price'] ?? 0),
                         'marketing_price' => (float) ($row['marketing_price'] ?? 0),
                         'utility_price' => (float) ($row['utility_price'] ?? 0),
+                        'active' => (bool) ($row['is_active'] ?? true),
                     ];
                 }
 
-                if ($packages !== []) {
-                    return $packages;
-                }
+                return $packages;
             } catch (Throwable $exception) {
                 error_log('Dynamic packages unavailable: ' . $exception->getMessage());
             }

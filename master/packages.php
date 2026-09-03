@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message_type = 'danger';
     } else {
         PaymentSupport::ensureTables($db);
-        $packages = PaymentSupport::packages($db, false);
+        $packages = PaymentSupport::packages($db);
 
         $action = strtolower(trim((string) ($_POST['action'] ?? 'assign_package')));
         if ($action === 'create_package') {
@@ -83,6 +83,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute();
                 $message = 'Package saved successfully.';
                 $message_type = 'success';
+            }
+        } elseif ($action === 'update_package') {
+            $packageKey = strtolower(trim((string) ($_POST['package_key'] ?? '')));
+            $packageName = trim((string) ($_POST['edit_package_name'] ?? ''));
+            $marketingLimit = max(0, Security::intFrom($_POST['edit_marketing_message_limit'] ?? 0));
+            $utilityLimit = max(0, Security::intFrom($_POST['edit_utility_message_limit'] ?? 0));
+            $durationDays = max(1, Security::intFrom($_POST['edit_duration_days'] ?? 30));
+            $marketingPrice = max(0, (float) ($_POST['edit_marketing_price'] ?? 0));
+            $utilityPrice = max(0, (float) ($_POST['edit_utility_price'] ?? 0));
+            $totalPrice = $marketingPrice + $utilityPrice;
+
+            if ($packageKey === '' || $packageName === '') {
+                $message = 'Select a package and enter a package name.';
+                $message_type = 'warning';
+            } elseif ($marketingLimit + $utilityLimit <= 0) {
+                $message = 'Enter marketing or utility message limit.';
+                $message_type = 'warning';
+            } else {
+                $stmt = $db->prepare(
+                    'UPDATE gd_packages
+                     SET package_name = ?,
+                         marketing_message_limit = ?,
+                         utility_message_limit = ?,
+                         duration_days = ?,
+                         marketing_price = ?,
+                         utility_price = ?,
+                         total_price = ?,
+                         updated_at = NOW()
+                     WHERE package_key = ?'
+                );
+                $stmt->bind_param('siiiddds', $packageName, $marketingLimit, $utilityLimit, $durationDays, $marketingPrice, $utilityPrice, $totalPrice, $packageKey);
+                $stmt->execute();
+                if ($stmt->affected_rows >= 1) {
+                    $message = 'Package updated successfully.';
+                    $message_type = 'success';
+                } else {
+                    $message = 'Package not found or no changes were made.';
+                    $message_type = 'warning';
+                }
+            }
+        } elseif ($action === 'delete_package') {
+            $packageKey = strtolower(trim((string) ($_POST['package_key'] ?? '')));
+
+            if ($packageKey === '') {
+                $message = 'Select a package to delete.';
+                $message_type = 'warning';
+            } else {
+                $stmt = $db->prepare('UPDATE gd_packages SET is_active = 0, updated_at = NOW() WHERE package_key = ?');
+                $stmt->bind_param('s', $packageKey);
+                $stmt->execute();
+                if ($stmt->affected_rows >= 1) {
+                    $message = 'Package deleted successfully.';
+                    $message_type = 'success';
+                } else {
+                    $message = 'Package not found.';
+                    $message_type = 'warning';
+                }
             }
         } else {
             $businessId = Security::intFrom($_POST['business_id'] ?? null);
@@ -186,7 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($db) {
     try {
         PaymentSupport::ensureTables($db);
-        $packages = PaymentSupport::packages($db, false);
+        $packages = PaymentSupport::packages($db);
 
         $orderColumns = gdMasterColumns($db, 'gd_orders');
         $selectColumns = ['id', 'business_name', 'package_name', 'message_limit', 'messages_used', 'package_ends_at'];
@@ -349,25 +406,95 @@ if ($db) {
                                 <th>Utility</th>
                                 <th>Price</th>
                                 <th>Days</th>
+                                <th class="text-end">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach (array_values($packages) as $i => $package): ?>
+                            <?php $packageIndex = 0; ?>
+                            <?php foreach ($packages as $key => $package): ?>
+                                <?php $packageIndex++; ?>
                                 <?php $totalLimit = PaymentSupport::packageTotalMessages($package); ?>
+                                <?php $modalId = 'editPackageModal' . md5((string) $key); ?>
                                 <tr>
-                                    <td><?php echo $i + 1; ?></td>
+                                    <td><?php echo h((string) $packageIndex); ?></td>
                                     <td><?php echo h((string) $package['label']); ?></td>
                                     <td><?php echo h(number_format($totalLimit)); ?></td>
                                     <td><?php echo h(number_format((int) ($package['marketing_limit'] ?? 0))); ?></td>
                                     <td><?php echo h(number_format((int) ($package['utility_limit'] ?? 0))); ?></td>
                                     <td><?php echo h(number_format((float) ($package['price'] ?? 0), 2)); ?></td>
                                     <td><?php echo h((string) ($package['days'] ?? 30)); ?></td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#<?php echo h($modalId); ?>">
+                                            <i class="bi bi-pencil-square me-1"></i> Edit
+                                        </button>
+                                        <form method="post" class="d-inline" onsubmit="return confirm('Delete this package? Businesses already assigned to it will keep their current package details.');">
+                                            <?php echo Security::csrfField(); ?>
+                                            <input type="hidden" name="action" value="delete_package">
+                                            <input type="hidden" name="package_key" value="<?php echo h((string) $key); ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="bi bi-trash me-1"></i> Delete
+                                            </button>
+                                        </form>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>
             </div>
+
+            <?php foreach ($packages as $key => $package): ?>
+                <?php $modalId = 'editPackageModal' . md5((string) $key); ?>
+                <div class="modal fade" id="<?php echo h($modalId); ?>" tabindex="-1" aria-labelledby="<?php echo h($modalId); ?>Label" aria-hidden="true">
+                    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                        <div class="modal-content">
+                            <form method="post">
+                                <?php echo Security::csrfField(); ?>
+                                <input type="hidden" name="action" value="update_package">
+                                <input type="hidden" name="package_key" value="<?php echo h((string) $key); ?>">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="<?php echo h($modalId); ?>Label">Edit Package</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Package Name</label>
+                                            <input type="text" name="edit_package_name" class="form-control" value="<?php echo h((string) ($package['label'] ?? '')); ?>" required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Duration Days</label>
+                                            <input type="number" name="edit_duration_days" class="form-control" min="1" max="3650" value="<?php echo h((string) ($package['days'] ?? 30)); ?>">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Marketing Messages</label>
+                                            <input type="number" name="edit_marketing_message_limit" class="form-control" min="0" max="1000000" value="<?php echo h((string) ((int) ($package['marketing_limit'] ?? 0))); ?>">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Utility Messages</label>
+                                            <input type="number" name="edit_utility_message_limit" class="form-control" min="0" max="1000000" value="<?php echo h((string) ((int) ($package['utility_limit'] ?? 0))); ?>">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Marketing Price</label>
+                                            <input type="number" name="edit_marketing_price" class="form-control" min="0" step="0.01" value="<?php echo h((string) ((float) ($package['marketing_price'] ?? 0))); ?>">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Utility Price</label>
+                                            <input type="number" name="edit_utility_price" class="form-control" min="0" step="0.01" value="<?php echo h((string) ((float) ($package['utility_price'] ?? 0))); ?>">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-check2 me-1"></i> Save Changes
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
 
             <div class="wg-card p-4 mb-4">
                 <h5 class="mb-3">Businesses</h5>

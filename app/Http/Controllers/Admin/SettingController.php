@@ -55,7 +55,7 @@ class SettingController extends Controller
                 ->orderByDesc('id')
                 ->get(),
             'packageRequests' => $packageRequests,
-            'packages' => \PaymentSupport::packages($db, false),
+            'packages' => \PaymentSupport::packages($db),
         ]);
     }
 
@@ -105,6 +105,72 @@ class SettingController extends Controller
         $stmt->execute();
 
         return back()->with('success', 'Package saved successfully.');
+    }
+
+    public function updateDynamicPackage(Request $request, string $packageKey)
+    {
+        $data = $request->validate([
+            'package_name' => ['required', 'string', 'max:120'],
+            'marketing_message_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'utility_message_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'marketing_price' => ['nullable', 'numeric', 'min:0'],
+            'utility_price' => ['nullable', 'numeric', 'min:0'],
+            'duration_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
+        ]);
+
+        $marketingLimit = (int) ($data['marketing_message_limit'] ?? 0);
+        $utilityLimit = (int) ($data['utility_message_limit'] ?? 0);
+        if ($marketingLimit + $utilityLimit <= 0) {
+            return back()->with('warning', 'Enter marketing or utility message limit.')->withInput();
+        }
+
+        $db = \Database::connect();
+        \PaymentSupport::ensureTables($db);
+
+        $packageKey = strtolower(trim($packageKey));
+        $packageName = trim((string) $data['package_name']);
+        $durationDays = (int) ($data['duration_days'] ?? 30);
+        $marketingPrice = (float) ($data['marketing_price'] ?? 0);
+        $utilityPrice = (float) ($data['utility_price'] ?? 0);
+        $totalPrice = $marketingPrice + $utilityPrice;
+
+        $stmt = $db->prepare(
+            'UPDATE gd_packages
+             SET package_name = ?,
+                 marketing_message_limit = ?,
+                 utility_message_limit = ?,
+                 duration_days = ?,
+                 marketing_price = ?,
+                 utility_price = ?,
+                 total_price = ?,
+                 updated_at = NOW()
+             WHERE package_key = ?'
+        );
+        $stmt->bind_param('siiiddds', $packageName, $marketingLimit, $utilityLimit, $durationDays, $marketingPrice, $utilityPrice, $totalPrice, $packageKey);
+        $stmt->execute();
+
+        if ($stmt->affected_rows < 1) {
+            return back()->with('warning', 'Package not found or no changes were made.');
+        }
+
+        return back()->with('success', 'Package updated successfully.');
+    }
+
+    public function destroyDynamicPackage(string $packageKey)
+    {
+        $db = \Database::connect();
+        \PaymentSupport::ensureTables($db);
+
+        $packageKey = strtolower(trim($packageKey));
+        $stmt = $db->prepare('UPDATE gd_packages SET is_active = 0, updated_at = NOW() WHERE package_key = ?');
+        $stmt->bind_param('s', $packageKey);
+        $stmt->execute();
+
+        if ($stmt->affected_rows < 1) {
+            return back()->with('warning', 'Package not found.');
+        }
+
+        return back()->with('success', 'Package deleted successfully.');
     }
 
     public function storeAppSettings(Request $request)
