@@ -75,7 +75,10 @@ function wgHydrateTemplateMediaUrl(mysqli $db, int $bizId, array $template): arr
         return $template;
     }
 
-    $mediaUrl = trim((string) ($meta['header_media_url'] ?? $template['media_url'] ?? ''));
+    $mediaUrl = trim((string) ($meta['header_media_url'] ?? ''));
+    if ($mediaUrl === '') {
+        $mediaUrl = trim((string) ($template['media_url'] ?? ''));
+    }
     if ($mediaUrl !== '') {
         return $template;
     }
@@ -677,7 +680,7 @@ if (isset($_POST['send'])) {
         const fields = document.getElementById('templateMediaUrlFields');
         const input = document.getElementById('headerMediaUrlInput');
         const savedMediaSelect = document.getElementById('savedHeaderMediaSelect');
-        const required = Boolean(data?.needs_media_url);
+        const required = ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(String(data?.header_type || '').toUpperCase());
         const mediaOptions = Array.isArray(data?.media_options) ? data.media_options : [];
 
         savedMediaSelect.innerHTML = '<option value="">Choose uploaded media</option>';
@@ -691,11 +694,11 @@ if (isset($_POST['send'])) {
         savedMediaSelect.classList.toggle('d-none', mediaOptions.length === 0);
         fields.classList.toggle('d-none', !required);
         input.required = required;
-        if (required && mediaOptions.length === 1) {
+        input.value = required ? String(data?.media_url || '') : '';
+        savedMediaSelect.value = input.value;
+        if (required && !input.value && mediaOptions.length === 1) {
             savedMediaSelect.value = mediaOptions[0].url || '';
             input.value = mediaOptions[0].url || '';
-        } else if (!required) {
-            input.value = '';
         }
     }
 

@@ -195,7 +195,10 @@ function batchHydrateTemplateMediaUrl(mysqli $db, int $bizId, array $template): 
         return $template;
     }
 
-    $mediaUrl = trim((string) ($meta['header_media_url'] ?? $template['media_url'] ?? ''));
+    $mediaUrl = trim((string) ($meta['header_media_url'] ?? ''));
+    if ($mediaUrl === '') {
+        $mediaUrl = trim((string) ($template['media_url'] ?? ''));
+    }
     if ($mediaUrl !== '') {
         return $template;
     }

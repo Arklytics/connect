@@ -1180,7 +1180,13 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
 
         $components[] = ['type' => 'header', 'parameters' => $parameters];
     } elseif (in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
-        $mediaUrl = trim((string) ($sendValues['header_media_url'] ?? $meta['header_media_url'] ?? $templateRow['media_url'] ?? ''));
+        $mediaUrl = trim((string) ($sendValues['header_media_url'] ?? ''));
+        if ($mediaUrl === '') {
+            $mediaUrl = trim((string) ($meta['header_media_url'] ?? ''));
+        }
+        if ($mediaUrl === '') {
+            $mediaUrl = trim((string) ($templateRow['media_url'] ?? ''));
+        }
         if ($mediaUrl === '') {
             return [
                 'components' => [],
