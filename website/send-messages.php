@@ -23,7 +23,6 @@ while ($row = $templateResult->fetch_assoc()) {
 
 $parentGroups = [];
 $subgroupsByParent = [];
-$subgroupOptionsByParent = [];
 $stmt = $db->prepare('
     SELECT g.id, g.parent_id, g.group_name, parent.group_name AS parent_name
     FROM gd_groups g
@@ -39,10 +38,6 @@ while ($row = $groupResult->fetch_assoc()) {
         $parentGroups[] = $row;
     } else {
         $subgroupsByParent[(int) $row['parent_id']][] = $row;
-        $subgroupOptionsByParent[(string) ((int) $row['parent_id'])][] = [
-            'id' => (int) ($row['id'] ?? 0),
-            'name' => (string) ($row['group_name'] ?? ''),
-        ];
     }
 }
 ?>
@@ -269,7 +264,7 @@ if (isset($_POST['send'])) {
             <form action="" method="post" id="sendMessageForm">
                 <?php echo Security::csrfField(); ?>
                 <input type="hidden" id="templateDropdown" name="template_id" required>
-                <input type="hidden" id="recipientMode" name="recipient_mode" value="all">
+                <input type="hidden" id="recipientMode" name="recipient_mode" value="subgroups">
 
                 <div class="wg-form-section">
                     <div class="wg-section-heading">
@@ -313,22 +308,10 @@ if (isset($_POST['send'])) {
                         <span><i class="bi bi-people"></i></span>
                         <div>
                             <h5>Recipients</h5>
-                            <p>Send to all contacts or choose subgroups from a parent group.</p>
+                            <p>Select a parent group, then choose one or more related subgroups.</p>
                         </div>
                     </div>
-                    <label class="form-label fw-semibold">Audience</label>
-                    <div class="wg-radio-panel">
-                            <div class="form-check">
-                            <input class="form-check-input" type="radio" name="recipient_choice" id="recipientAll" value="all" checked>
-                            <label class="form-check-label" for="recipientAll">All contacts</label>
-                            </div>
-                            <div class="form-check">
-                            <input class="form-check-input" type="radio" name="recipient_choice" id="recipientSubgroups" value="subgroups">
-                            <label class="form-check-label" for="recipientSubgroups">Selected subgroups</label>
-                            </div>
-                        </div>
-
-                    <div class="wg-subgroup-picker d-none" id="subgroupPicker">
+                    <div class="wg-subgroup-picker" id="subgroupPicker">
                         <label class="form-label mt-3" for="parentGroupDropdown">Parent Group</label>
                         <select id="parentGroupDropdown" class="form-control">
                             <option value="">Select parent group</option>
@@ -343,7 +326,15 @@ if (isset($_POST['send'])) {
                                 Select subgroups
                             </button>
                             <div class="dropdown-menu wg-subgroup-menu w-100" aria-labelledby="subgroupDropdownButton" id="subgroupCheckboxList">
-                                <div class="wg-search-empty">Select a parent group first.</div>
+                                <div class="wg-search-empty" data-empty-state>Select a parent group first.</div>
+                                <?php foreach ($subgroupsByParent as $parentId => $subgroups): ?>
+                                    <?php foreach ($subgroups as $subgroup): ?>
+                                        <label class="dropdown-item wg-checkbox-option d-none" data-parent-id="<?php echo h((string) $parentId); ?>">
+                                            <input class="form-check-input" type="checkbox" name="subgroup_ids[]" value="<?php echo h((string) $subgroup['id']); ?>">
+                                            <span><?php echo h($subgroup['group_name']); ?></span>
+                                        </label>
+                                    <?php endforeach; ?>
+                                <?php endforeach; ?>
                             </div>
                         </div>
                         <button class="btn btn-link btn-sm px-0 mt-2 d-none" type="button" id="selectAllSubgroups">Select all shown</button>
@@ -404,14 +395,12 @@ if (isset($_POST['send'])) {
 </div>
 
 <script>
-    const subgroupsByParent = <?php echo ApiSupport::encodeJson($subgroupOptionsByParent); ?>;
     const sendForm = document.getElementById('sendMessageForm');
     const sendButton = document.getElementById('sendMessageButton');
     const templateInput = document.getElementById('templateDropdown');
     const templateSearch = document.getElementById('templateSearch');
     const templateOptions = document.getElementById('templateOptions');
     const recipientMode = document.getElementById('recipientMode');
-    const recipientChoiceInputs = document.querySelectorAll('input[name="recipient_choice"]');
     const subgroupPicker = document.getElementById('subgroupPicker');
     const parentGroupDropdown = document.getElementById('parentGroupDropdown');
     const subgroupCheckboxList = document.getElementById('subgroupCheckboxList');
@@ -437,17 +426,6 @@ if (isset($_POST['send'])) {
         document.getElementById('rangeEnd').required = isPartial;
     }
 
-    function selectedRecipientMode() {
-        const selected = document.querySelector('input[name="recipient_choice"]:checked');
-        return selected ? selected.value : 'all';
-    }
-
-    function syncRecipientPicker() {
-        const mode = selectedRecipientMode();
-        recipientMode.value = mode;
-        subgroupPicker.classList.toggle('d-none', mode !== 'subgroups');
-    }
-
     function selectedSubgroupIds() {
         return Array.from(document.querySelectorAll('input[name="subgroup_ids[]"]:checked')).map((input) => input.value);
     }
@@ -458,41 +436,43 @@ if (isset($_POST['send'])) {
     }
 
     function renderSubgroupOptions(parentId) {
-        subgroupCheckboxList.innerHTML = '';
-        const rows = Array.isArray(subgroupsByParent[parentId]) ? subgroupsByParent[parentId] : [];
-
-        if (!parentId) {
-            subgroupCheckboxList.innerHTML = '<div class="wg-search-empty">Select a parent group first.</div>';
-            selectAllSubgroups.classList.add('d-none');
-            updateSubgroupButtonLabel();
-            return;
-        }
-
-        if (rows.length === 0) {
-            subgroupCheckboxList.innerHTML = '<div class="wg-search-empty">No subgroups under this parent.</div>';
-            selectAllSubgroups.classList.add('d-none');
-            updateSubgroupButtonLabel();
-            return;
-        }
-
-        rows.forEach((subgroup) => {
-            const item = document.createElement('label');
-            item.className = 'dropdown-item wg-checkbox-option';
-            const checkbox = document.createElement('input');
-            checkbox.className = 'form-check-input';
-            checkbox.type = 'checkbox';
-            checkbox.name = 'subgroup_ids[]';
-            checkbox.value = subgroup.id || '';
-            checkbox.addEventListener('change', updateSubgroupButtonLabel);
-
-            const name = document.createElement('span');
-            name.textContent = subgroup.name || 'Subgroup';
-
-            item.appendChild(checkbox);
-            item.appendChild(name);
-            subgroupCheckboxList.appendChild(item);
+        let visible = 0;
+        const emptyState = subgroupCheckboxList.querySelector('[data-empty-state]');
+        subgroupCheckboxList.querySelectorAll('.wg-checkbox-option').forEach((item) => {
+            const input = item.querySelector('input');
+            const matches = parentId !== '' && item.getAttribute('data-parent-id') === String(parentId);
+            item.classList.toggle('d-none', !matches);
+            if (!matches && input) {
+                input.checked = false;
+            }
+            if (matches) {
+                visible++;
+            }
         });
 
+        if (!parentId) {
+            if (emptyState) {
+                emptyState.textContent = 'Select a parent group first.';
+                emptyState.classList.remove('d-none');
+            }
+            selectAllSubgroups.classList.add('d-none');
+            updateSubgroupButtonLabel();
+            return;
+        }
+
+        if (visible === 0) {
+            if (emptyState) {
+                emptyState.textContent = 'No subgroups under this parent.';
+                emptyState.classList.remove('d-none');
+            }
+            selectAllSubgroups.classList.add('d-none');
+            updateSubgroupButtonLabel();
+            return;
+        }
+
+        if (emptyState) {
+            emptyState.classList.add('d-none');
+        }
         selectAllSubgroups.classList.remove('d-none');
         updateSubgroupButtonLabel();
     }
@@ -561,13 +541,15 @@ if (isset($_POST['send'])) {
 
     sendScopeInputs.forEach((input) => input.addEventListener('change', syncRangeFields));
     syncRangeFields();
-    recipientChoiceInputs.forEach((input) => input.addEventListener('change', syncRecipientPicker));
-    syncRecipientPicker();
+    recipientMode.value = 'subgroups';
     parentGroupDropdown?.addEventListener('change', function () {
         renderSubgroupOptions(this.value);
     });
+    subgroupCheckboxList?.querySelectorAll('input[name="subgroup_ids[]"]').forEach((input) => {
+        input.addEventListener('change', updateSubgroupButtonLabel);
+    });
     selectAllSubgroups?.addEventListener('click', function () {
-        document.querySelectorAll('input[name="subgroup_ids[]"]').forEach((input) => {
+        subgroupCheckboxList.querySelectorAll('.wg-checkbox-option:not(.d-none) input[name="subgroup_ids[]"]').forEach((input) => {
             input.checked = true;
         });
         updateSubgroupButtonLabel();
@@ -623,7 +605,7 @@ if (isset($_POST['send'])) {
                 return;
             }
 
-            if (selectedRecipientMode() === 'subgroups' && selectedSubgroupIds().length === 0) {
+            if (selectedSubgroupIds().length === 0) {
                 progressCard.classList.remove('d-none');
                 progressErrors.classList.remove('d-none');
                 progressErrors.textContent = 'Select at least one subgroup.';

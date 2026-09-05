@@ -23,7 +23,7 @@ function batchSelectedGroupIds(mysqli $db, int $bizId, array $payload): array
 {
     $mode = strtolower(trim((string) ($payload['recipient_mode'] ?? 'all')));
     if ($mode !== 'subgroups') {
-        return [];
+        ApiSupport::jsonResponse(['ok' => false, 'error' => 'Select at least one subgroup.'], 422);
     }
 
     $ids = [];
