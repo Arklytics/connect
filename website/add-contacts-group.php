@@ -245,12 +245,32 @@ function wgDownloadContactSampleCsv(): void
     exit;
 }
 
+function wgEnsureContactImportTable(mysqli $db): void
+{
+    $db->query("
+        CREATE TABLE IF NOT EXISTS gd_contact_imports (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            biz_id INT NOT NULL,
+            parent_group_id INT NULL,
+            subgroup_id INT NOT NULL,
+            file_name VARCHAR(255) NOT NULL,
+            created_count INT NOT NULL DEFAULT 0,
+            updated_count INT NOT NULL DEFAULT 0,
+            skipped_count INT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
+            INDEX idx_biz_imports (biz_id),
+            INDEX idx_subgroup_imports (subgroup_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+}
+
 $biz_id = Auth::requireLogin();
 try {
     ApiSupport::ensureGroupHierarchyColumns($db);
 } catch (Throwable $exception) {
     error_log('Group hierarchy ensure failed: ' . $exception->getMessage());
 }
+wgEnsureContactImportTable($db);
 
 if (isset($_GET['sample_csv'])) {
     wgDownloadContactSampleCsv();
@@ -258,18 +278,31 @@ if (isset($_GET['sample_csv'])) {
 
 include 'header.php';
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_import') {
+    Security::verifyCsrf();
+    $importId = Security::intFrom($_POST['import_id'] ?? null);
+    if ($importId > 0) {
+        $stmt = $db->prepare('DELETE FROM gd_contact_imports WHERE id = ? AND biz_id = ?');
+        $stmt->bind_param('ii', $importId, $biz_id);
+        $stmt->execute();
+        $message = 'Import record deleted.';
+        $message_type = 'success';
+    }
+}
+
 // Handle Excel Import Submission
 if (isset($_POST['import'])) {
     Security::verifyCsrf();
-    $group_id = Security::intFrom($_POST['group'] ?? null);
+    $parent_group_id = Security::intFrom($_POST['parent_group'] ?? null);
+    $group_id = Security::intFrom($_POST['subgroup'] ?? null);
 
-    $groupStmt = $db->prepare('SELECT id FROM gd_groups WHERE id = ? AND biz_id = ? LIMIT 1');
-    $groupStmt->bind_param('ii', $group_id, $biz_id);
+    $groupStmt = $db->prepare('SELECT id, parent_id FROM gd_groups WHERE id = ? AND biz_id = ? AND parent_id = ? LIMIT 1');
+    $groupStmt->bind_param('iii', $group_id, $biz_id, $parent_group_id);
     $groupStmt->execute();
     $groupExists = $groupStmt->get_result()->fetch_assoc();
 
     if (!$groupExists) {
-        $message = 'Please select a valid contact group.';
+        $message = 'Please select a valid parent group and subgroup.';
         $message_type = 'warning';
     } elseif (!empty($_FILES['file']['tmp_name']) && ($_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
         $inputFileName = $_FILES['file']['tmp_name'];
@@ -311,6 +344,14 @@ if (isset($_POST['import'])) {
 
             $message = "Imported {$created} new contact(s), updated {$updated}, skipped {$skipped}.";
             $message_type = ($created + $updated) > 0 ? 'success' : 'warning';
+
+            $fileName = substr((string) ($_FILES['file']['name'] ?? 'contacts'), 0, 255);
+            $historyStmt = $db->prepare('
+                INSERT INTO gd_contact_imports (biz_id, parent_group_id, subgroup_id, file_name, created_count, updated_count, skipped_count, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+            ');
+            $historyStmt->bind_param('iiisiii', $biz_id, $parent_group_id, $group_id, $fileName, $created, $updated, $skipped);
+            $historyStmt->execute();
         } catch (Throwable $e) {
             $message = 'Error reading contact file: ' . $e->getMessage();
             $message_type = 'danger';
@@ -319,6 +360,42 @@ if (isset($_POST['import'])) {
         $message = "No file uploaded.";
         $message_type = "warning";
     }
+}
+
+$parentGroups = [];
+$subgroupsByParent = [];
+$stmt = $db->prepare('
+    SELECT g.id, g.parent_id, g.group_name
+    FROM gd_groups g
+    WHERE g.biz_id = ?
+    ORDER BY g.parent_id IS NOT NULL, g.group_name
+');
+$stmt->bind_param('i', $biz_id);
+$stmt->execute();
+$groupsResult = $stmt->get_result();
+while ($group = $groupsResult->fetch_assoc()) {
+    if (empty($group['parent_id'])) {
+        $parentGroups[] = $group;
+    } else {
+        $subgroupsByParent[(int) $group['parent_id']][] = $group;
+    }
+}
+
+$imports = [];
+$stmt = $db->prepare('
+    SELECT i.*, parent.group_name AS parent_name, subgroup.group_name AS subgroup_name
+    FROM gd_contact_imports i
+    LEFT JOIN gd_groups parent ON parent.id = i.parent_group_id AND parent.biz_id = i.biz_id
+    LEFT JOIN gd_groups subgroup ON subgroup.id = i.subgroup_id AND subgroup.biz_id = i.biz_id
+    WHERE i.biz_id = ?
+    ORDER BY i.id DESC
+    LIMIT 50
+');
+$stmt->bind_param('i', $biz_id);
+$stmt->execute();
+$importsResult = $stmt->get_result();
+while ($row = $importsResult->fetch_assoc()) {
+    $imports[] = $row;
 }
 ?>
 
@@ -335,60 +412,123 @@ if (isset($_POST['import'])) {
     <?php endif; ?>
 </div>
 
-<div class="container-fluid">
+<div class="container-fluid wg-shell">
     <div class="row">
         <div class="col-lg-2 col-md-3 p-0 wg-sidebar">
             <?php include 'sidebar.php'; ?>
         </div>
-        <div class="col-lg-10 col-md-9 wg-main">
-            <h4 class="mt-3"><i class="bi bi-file-earmark-spreadsheet"></i> Import Contacts</h4>
-            <div class="d-flex justify-content-end mt-2">
-                <a class="btn btn-outline-success" href="<?php echo h(app_url('business/add-contacts-group?sample_csv=1')); ?>">
-                    <i class="bi bi-download me-1"></i> Download Sample CSV
-                </a>
-            </div>
-            <form action="" method="POST" enctype="multipart/form-data" class="mt-3">
-                <?php echo Security::csrfField(); ?>
-                <div class="row bg-light mt-2">
-                    <div class="col-md-3">
-                        <select class="form-control" name="group" required>
-                            <option value="">--Select Group--</option>
-                            <?php
-                            $biz_id = Auth::requireLogin();
-                            $stmt = $db->prepare('
-                                SELECT g.id, g.parent_id, g.group_name, parent.group_name AS parent_name
-                                FROM gd_groups g
-                                LEFT JOIN gd_groups parent ON parent.id = g.parent_id
-                                WHERE g.biz_id = ?
-                                ORDER BY CASE WHEN g.parent_id IS NULL THEN g.id ELSE g.parent_id END DESC,
-                                         CASE WHEN g.parent_id IS NULL THEN 0 ELSE 1 END,
-                                         g.group_name
-                            ');
-                            $stmt->bind_param('i', $biz_id);
-                            $stmt->execute();
-                            $sql3 = $stmt->get_result();
-                            while ($get3 = mysqli_fetch_assoc($sql3)) {
-                                $label = !empty($get3['parent_id'])
-                                    ? (($get3['parent_name'] ?? '') . ' / ' . $get3['group_name'])
-                                    : $get3['group_name'];
-                                echo "<option value='" . h($get3['id']) . "'>" . h($label) . "</option>";
-                            }
-                            ?>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="alert alert-info mb-0">Upload CSV or Excel. First row should contain headers like full_name, phone_number, email, lead_status, notes.</div>
-                    </div>
-                    <div class="col-md-3">
-                        <input type="file" name="file" class="form-control" accept=".csv,.txt,.xls,.xlsx" required />
-                    </div>
-                    <div class="col-md-2">
-                        <button class="btn btn-success w-100" name="import" type="submit"><i class="bi bi-cloud-upload-fill"></i> Import</button>
-                    </div>
+        <main class="col-lg-10 col-md-9 wg-main">
+            <div class="wg-page-title">
+                <div>
+                    <h1>Import Contacts</h1>
+                    <p>Import contacts into a selected subgroup for cleaner campaign targeting.</p>
                 </div>
-            </form>
-        </div>
+                <a class="btn btn-outline-success" href="<?php echo h(app_url('business/add-contacts-group?sample_csv=1')); ?>"><i class="bi bi-download me-1"></i> Sample CSV</a>
+            </div>
+
+            <div class="wg-import-layout">
+                <section class="wg-card p-0 overflow-hidden">
+                    <div class="wg-table-toolbar">
+                        <div>
+                            <h5>Import Files</h5>
+                            <p>Review recent uploads and the subgroup they were imported into.</p>
+                        </div>
+                    </div>
+                    <?php if (empty($imports)): ?>
+                        <div class="wg-empty-state">
+                            <i class="bi bi-file-earmark-spreadsheet"></i>
+                            <h5>No import files yet</h5>
+                            <p>Upload a CSV or Excel file from the panel on the right.</p>
+                        </div>
+                    <?php else: ?>
+                        <div class="table-responsive">
+                            <table class="table wg-template-table">
+                                <thead>
+                                    <tr>
+                                        <th>File Name</th>
+                                        <th>Group</th>
+                                        <th>Imported</th>
+                                        <th>Skipped</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($imports as $import): ?>
+                                        <tr>
+                                            <td>
+                                                <div class="wg-template-name"><?php echo h($import['file_name']); ?></div>
+                                                <div class="text-muted small"><?php echo h((string) ($import['created_at'] ?? '')); ?></div>
+                                            </td>
+                                            <td><?php echo h((string) ($import['parent_name'] ?? 'Deleted group')); ?> / <?php echo h((string) ($import['subgroup_name'] ?? 'Deleted subgroup')); ?></td>
+                                            <td><span class="wg-pill"><?php echo h((string) ((int) $import['created_count'] + (int) $import['updated_count'])); ?></span></td>
+                                            <td><?php echo h((string) $import['skipped_count']); ?></td>
+                                            <td>
+                                                <form method="POST" class="m-0">
+                                                    <?php echo Security::csrfField(); ?>
+                                                    <input type="hidden" name="action" value="delete_import">
+                                                    <input type="hidden" name="import_id" value="<?php echo h((string) $import['id']); ?>">
+                                                    <button class="btn btn-light btn-sm text-danger" type="submit"><i class="bi bi-trash"></i></button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+                </section>
+
+                <aside class="wg-card wg-import-panel">
+                    <div class="wg-section-heading">
+                        <span><i class="bi bi-cloud-upload"></i></span>
+                        <div>
+                            <h5>Upload Contacts</h5>
+                            <p>Choose parent group first, then import into one subgroup.</p>
+                        </div>
+                    </div>
+                    <form action="" method="POST" enctype="multipart/form-data">
+                        <?php echo Security::csrfField(); ?>
+                        <label class="form-label" for="parentGroupImport">Parent Group</label>
+                        <select class="form-control" id="parentGroupImport" name="parent_group" required>
+                            <option value="">Select parent group</option>
+                            <?php foreach ($parentGroups as $parent): ?>
+                                <option value="<?php echo h((string) $parent['id']); ?>"><?php echo h($parent['group_name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <label class="form-label mt-3" for="subgroupImport">Subgroup</label>
+                        <select class="form-control" id="subgroupImport" name="subgroup" required>
+                            <option value="">Select subgroup</option>
+                            <?php foreach ($subgroupsByParent as $parentId => $subgroups): ?>
+                                <?php foreach ($subgroups as $subgroup): ?>
+                                    <option class="d-none" value="<?php echo h((string) $subgroup['id']); ?>" data-parent-id="<?php echo h((string) $parentId); ?>" disabled><?php echo h($subgroup['group_name']); ?></option>
+                                <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <label class="form-label mt-3" for="contactImportFile">Import File</label>
+                        <input type="file" id="contactImportFile" name="file" class="form-control" accept=".csv,.txt,.xls,.xlsx" required>
+                        <div class="form-text mt-2">CSV, XLS, or XLSX. Use headers like full_name, phone_number, email, lead_status, notes.</div>
+
+                        <button class="btn btn-success w-100 mt-3" name="import" type="submit"><i class="bi bi-cloud-upload-fill me-1"></i> Import Contacts</button>
+                    </form>
+                </aside>
+            </div>
+        </main>
     </div>
 </div>
+
+<script>
+document.getElementById('parentGroupImport')?.addEventListener('change', function () {
+    const parentId = this.value;
+    const subgroupSelect = document.getElementById('subgroupImport');
+    subgroupSelect.value = '';
+    subgroupSelect.querySelectorAll('option[data-parent-id]').forEach((option) => {
+        const matches = option.getAttribute('data-parent-id') === parentId;
+        option.classList.toggle('d-none', !matches);
+        option.disabled = !matches;
+    });
+});
+</script>
 
 <?php include 'footer.php'; ?>

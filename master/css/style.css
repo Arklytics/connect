@@ -976,6 +976,19 @@ a {
     background: #f2f6f9;
 }
 
+.wg-import-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
+    gap: 18px;
+    align-items: start;
+}
+
+.wg-import-panel {
+    position: sticky;
+    top: 86px;
+    padding: 18px;
+}
+
 .wg-pill {
     display: inline-flex;
     align-items: center;
@@ -1656,6 +1669,14 @@ textarea.form-control {
 
     .wg-send-layout {
         grid-template-columns: 1fr;
+    }
+
+    .wg-import-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .wg-import-panel {
+        position: static;
     }
 
     .wg-group-layout {
