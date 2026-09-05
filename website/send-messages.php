@@ -82,20 +82,30 @@ function wgHydrateTemplateMediaUrl(mysqli $db, int $bizId, array $template): arr
 
     $mediaHandle = wgTemplateMediaHandle($meta);
     if ($mediaHandle === '') {
-        return $template;
-    }
+        $fallbackUrl = wgSingleMediaUrlForHeader($db, $bizId, $headerType);
+        if ($fallbackUrl === '') {
+            return $template;
+        }
 
-    $stmt = $db->prepare('SELECT s3_url FROM gd_template_media WHERE biz_id = ? AND media_handle = ? AND s3_url <> "" ORDER BY id DESC LIMIT 1');
-    if (!$stmt) {
-        return $template;
-    }
+        $s3Url = $fallbackUrl;
+    } else {
+        $stmt = $db->prepare('SELECT s3_url FROM gd_template_media WHERE biz_id = ? AND media_handle = ? AND s3_url <> "" ORDER BY id DESC LIMIT 1');
+        if (!$stmt) {
+            return $template;
+        }
 
-    $stmt->bind_param('is', $bizId, $mediaHandle);
-    $stmt->execute();
-    $media = $stmt->get_result()->fetch_assoc();
-    $s3Url = trim((string) ($media['s3_url'] ?? ''));
-    if ($s3Url === '') {
-        return $template;
+        $stmt->bind_param('is', $bizId, $mediaHandle);
+        $stmt->execute();
+        $media = $stmt->get_result()->fetch_assoc();
+        $s3Url = trim((string) ($media['s3_url'] ?? ''));
+        if ($s3Url === '') {
+            $fallbackUrl = wgSingleMediaUrlForHeader($db, $bizId, $headerType);
+            if ($fallbackUrl === '') {
+                return $template;
+            }
+
+            $s3Url = $fallbackUrl;
+        }
     }
 
     $meta['header_media_url'] = $s3Url;
@@ -110,6 +120,25 @@ function wgHydrateTemplateMediaUrl(mysqli $db, int $bizId, array $template): arr
     }
 
     return $template;
+}
+
+function wgSingleMediaUrlForHeader(mysqli $db, int $bizId, string $headerType): string
+{
+    $rows = ApiSupport::businessTemplateMedia($db, $bizId, 200);
+    $matches = [];
+    $expectedKind = strtolower($headerType);
+    foreach ($rows as $row) {
+        $url = trim((string) ($row['s3_url'] ?? ''));
+        if ($url === '') {
+            continue;
+        }
+
+        if (ApiSupport::mediaKind((string) ($row['mime_type'] ?? ''), $url) === $expectedKind) {
+            $matches[] = $url;
+        }
+    }
+
+    return count($matches) === 1 ? $matches[0] : '';
 }
 ?>
 <?php
@@ -389,8 +418,11 @@ if (isset($_POST['send'])) {
                 <div class="row d-none" id="templateMediaUrlFields">
                     <div class="mb-3">
                         <label class="form-label fw-semibold" for="headerMediaUrlInput">Header Media URL</label>
+                        <select class="form-control mb-2 d-none" id="savedHeaderMediaSelect">
+                            <option value="">Choose uploaded media</option>
+                        </select>
                         <input type="url" class="form-control" id="headerMediaUrlInput" name="header_media_url" placeholder="https://example.com/image.jpg">
-                        <div class="form-text">Required for image, video, or document header templates when no saved media URL is available.</div>
+                        <div class="form-text">Choose uploaded media or paste a public URL for image, video, or document header templates.</div>
                     </div>
                 </div>
 
@@ -644,13 +676,32 @@ if (isset($_POST['send'])) {
     function syncTemplateMediaField(data) {
         const fields = document.getElementById('templateMediaUrlFields');
         const input = document.getElementById('headerMediaUrlInput');
+        const savedMediaSelect = document.getElementById('savedHeaderMediaSelect');
         const required = Boolean(data?.needs_media_url);
+        const mediaOptions = Array.isArray(data?.media_options) ? data.media_options : [];
+
+        savedMediaSelect.innerHTML = '<option value="">Choose uploaded media</option>';
+        mediaOptions.forEach((media) => {
+            const option = document.createElement('option');
+            option.value = media.url || '';
+            option.textContent = media.name || 'Saved media';
+            savedMediaSelect.appendChild(option);
+        });
+
+        savedMediaSelect.classList.toggle('d-none', mediaOptions.length === 0);
         fields.classList.toggle('d-none', !required);
         input.required = required;
-        if (!required) {
+        if (required && mediaOptions.length === 1) {
+            savedMediaSelect.value = mediaOptions[0].url || '';
+            input.value = mediaOptions[0].url || '';
+        } else if (!required) {
             input.value = '';
         }
     }
+
+    document.getElementById('savedHeaderMediaSelect')?.addEventListener('change', function () {
+        document.getElementById('headerMediaUrlInput').value = this.value;
+    });
 
     sendScopeInputs.forEach((input) => input.addEventListener('change', syncRangeFields));
     syncRangeFields();

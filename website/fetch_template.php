@@ -66,6 +66,29 @@ if (isset($_GET['template_id'])) {
                 }
             }
         }
+        $mediaOptions = [];
+        if (in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
+            ApiSupport::ensureTemplateMediaTable($db);
+            $mediaRows = ApiSupport::businessTemplateMedia($db, (int) $bizId, 200);
+            $expectedKind = strtolower($headerType);
+            foreach ($mediaRows as $mediaRow) {
+                $optionUrl = trim((string) ($mediaRow['s3_url'] ?? ''));
+                if ($optionUrl === '') {
+                    continue;
+                }
+
+                $kind = ApiSupport::mediaKind((string) ($mediaRow['mime_type'] ?? ''), $optionUrl);
+                if ($kind !== $expectedKind) {
+                    continue;
+                }
+
+                $mediaOptions[] = [
+                    'id' => (int) ($mediaRow['id'] ?? 0),
+                    'name' => (string) ($mediaRow['original_name'] ?? 'Saved media'),
+                    'url' => $optionUrl,
+                ];
+            }
+        }
 
         // Prepare the response
         echo json_encode([
@@ -75,6 +98,7 @@ if (isset($_GET['template_id'])) {
             'media_url' => $mediaUrl,
             'header_type' => $headerType,
             'needs_media_url' => in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true) && $mediaUrl === '',
+            'media_options' => $mediaOptions,
             'variable_requirements' => ApiSupport::templateVariableRequirements($template),
             'buttons' => $buttons, // Include parsed buttons
         ]);

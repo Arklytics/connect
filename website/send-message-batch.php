@@ -202,20 +202,30 @@ function batchHydrateTemplateMediaUrl(mysqli $db, int $bizId, array $template): 
 
     $mediaHandle = batchTemplateMediaHandle($meta);
     if ($mediaHandle === '') {
-        return $template;
-    }
+        $fallbackUrl = batchSingleMediaUrlForHeader($db, $bizId, $headerType);
+        if ($fallbackUrl === '') {
+            return $template;
+        }
 
-    $stmt = $db->prepare('SELECT s3_url FROM gd_template_media WHERE biz_id = ? AND media_handle = ? AND s3_url <> "" ORDER BY id DESC LIMIT 1');
-    if (!$stmt) {
-        return $template;
-    }
+        $s3Url = $fallbackUrl;
+    } else {
+        $stmt = $db->prepare('SELECT s3_url FROM gd_template_media WHERE biz_id = ? AND media_handle = ? AND s3_url <> "" ORDER BY id DESC LIMIT 1');
+        if (!$stmt) {
+            return $template;
+        }
 
-    $stmt->bind_param('is', $bizId, $mediaHandle);
-    $stmt->execute();
-    $media = $stmt->get_result()->fetch_assoc();
-    $s3Url = trim((string) ($media['s3_url'] ?? ''));
-    if ($s3Url === '') {
-        return $template;
+        $stmt->bind_param('is', $bizId, $mediaHandle);
+        $stmt->execute();
+        $media = $stmt->get_result()->fetch_assoc();
+        $s3Url = trim((string) ($media['s3_url'] ?? ''));
+        if ($s3Url === '') {
+            $fallbackUrl = batchSingleMediaUrlForHeader($db, $bizId, $headerType);
+            if ($fallbackUrl === '') {
+                return $template;
+            }
+
+            $s3Url = $fallbackUrl;
+        }
     }
 
     $meta['header_media_url'] = $s3Url;
@@ -230,6 +240,25 @@ function batchHydrateTemplateMediaUrl(mysqli $db, int $bizId, array $template): 
     }
 
     return $template;
+}
+
+function batchSingleMediaUrlForHeader(mysqli $db, int $bizId, string $headerType): string
+{
+    $rows = ApiSupport::businessTemplateMedia($db, $bizId, 200);
+    $matches = [];
+    $expectedKind = strtolower($headerType);
+    foreach ($rows as $row) {
+        $url = trim((string) ($row['s3_url'] ?? ''));
+        if ($url === '') {
+            continue;
+        }
+
+        if (ApiSupport::mediaKind((string) ($row['mime_type'] ?? ''), $url) === $expectedKind) {
+            $matches[] = $url;
+        }
+    }
+
+    return count($matches) === 1 ? $matches[0] : '';
 }
 
 function batchCredentials(mysqli $db, int $bizId): array
