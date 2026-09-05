@@ -140,18 +140,28 @@ if ($db) {
 
         <main class="col-lg-10 col-md-9 wg-main">
             <div class="wg-page-title">
-                <h1>Business Dashboard</h1>
-                <p>Track message usage, templates, and contact activity from your workspace.</p>
+                <div>
+                    <h1>Business Dashboard</h1>
+                    <p>Track message usage, templates, and contact activity from your workspace.</p>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a class="btn btn-light" href="<?php echo h(app_url('business/create-contact')); ?>">
+                        <i class="bi bi-person-plus me-1"></i> Add Lead
+                    </a>
+                    <a class="btn btn-success" href="<?php echo h(app_url('business/send-messages')); ?>">
+                        <i class="bi bi-send me-1"></i> Send Message
+                    </a>
+                </div>
             </div>
 
             <?php if ($dashboardError !== ''): ?>
                 <div class="alert alert-warning"><?php echo h($dashboardError); ?></div>
             <?php endif; ?>
 
-            <div class="wg-card p-4 mb-4 border-success">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div class="wg-card wg-crm-summary p-4 mb-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                     <div>
-                        <div class="text-muted small">Current Package</div>
+                        <div class="text-muted small text-uppercase fw-bold">Current Package</div>
                         <h5 class="mb-1"><?php echo h($packageName); ?></h5>
                         <div class="text-muted">
                             Used <?php echo h(number_format($messagesUsed)); ?> of <?php echo h(number_format($messageLimit)); ?> messages
@@ -254,13 +264,16 @@ if ($db) {
                 </div>
             <?php endif; ?>
 
-            <div class="wg-card p-4 mt-4">
-                <h5 class="mb-2">Workspace Overview</h5>
-                <p class="text-muted mb-0">Create contact groups, prepare templates, and send messages from the tools in the sidebar.</p>
-            </div>
-
-            <div class="wg-card p-4 mt-4">
-                <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div class="row g-3 mt-1">
+                <div class="col-lg-7">
+                    <div class="wg-card p-4 h-100">
+                        <h5 class="mb-2">Workspace Overview</h5>
+                        <p class="text-muted mb-0">Create contact groups, prepare templates, and send messages from the tools in the sidebar.</p>
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="wg-card p-4 h-100">
+                        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
                     <div>
                         <h5 class="mb-1">Connection Status</h5>
                         <p class="text-muted mb-0"><?php echo h($connectionLabel); ?></p>
@@ -268,6 +281,8 @@ if ($db) {
                     <a class="btn btn-outline-success" href="<?php echo h(app_url('business/profile')); ?>">
                         <i class="bi bi-person-badge me-1"></i> Open Profile
                     </a>
+                        </div>
+                    </div>
                 </div>
             </div>
 

@@ -51,11 +51,11 @@ a {
     letter-spacing: 0;
     text-decoration: none;
     min-width: 0;
-    padding: 4px 8px;
-    background: #ffffff;
-    border: 1px solid rgba(15, 143, 99, 0.1);
+    padding: 3px 8px 3px 4px;
+    background: transparent;
+    border: 1px solid transparent;
     border-radius: 8px;
-    box-shadow: 0 6px 14px rgba(16, 24, 40, 0.04);
+    box-shadow: none;
 }
 
 .wg-brand-mark {
@@ -89,16 +89,16 @@ a {
 }
 
 .wg-brand-title {
-    font-size: 1rem;
+    font-size: 0.98rem;
     font-weight: 800;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
     color: var(--wg-navy);
     white-space: nowrap;
 }
 
 .wg-brand-subtitle {
     margin-top: 3px;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 600;
     color: var(--wg-muted);
     white-space: nowrap;
@@ -132,8 +132,7 @@ a {
     top: 0;
     z-index: 20;
     min-height: var(--wg-header-height);
-    padding-top: 7px;
-    padding-bottom: 7px;
+    padding: 7px 18px;
     background: rgba(255, 255, 255, 0.96);
     border-bottom: 1px solid rgba(217, 225, 234, 0.92);
     box-shadow: 0 8px 20px rgba(16, 24, 40, 0.04);
@@ -150,7 +149,7 @@ a {
 }
 
 .wg-topbar .container-fluid {
-    gap: 16px;
+    gap: 18px;
 }
 
 .wg-topbar .navbar-brand {
@@ -176,6 +175,52 @@ a {
     background: #eefbf5 !important;
     border: 1px solid rgba(18, 128, 92, 0.16) !important;
     box-shadow: none;
+}
+
+.wg-topnav {
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    margin-right: auto;
+    background: #f8fafc;
+    border: 1px solid var(--wg-border);
+    border-radius: 10px;
+}
+
+.wg-topnav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 34px;
+    padding: 7px 11px;
+    color: #475467;
+    text-decoration: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 750;
+}
+
+.wg-topnav a:hover,
+.wg-topnav a:focus {
+    color: var(--wg-primary-dark);
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+}
+
+.wg-topbar-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.wg-topbar-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 36px;
+    padding: 7px 11px;
+    border-radius: 8px;
 }
 
 .wg-shell {
@@ -331,13 +376,13 @@ a {
 }
 
 .wg-main {
-    padding: 28px;
+    padding: 26px;
     background: var(--wg-bg-accent);
     min-height: calc(100vh - var(--wg-header-height));
 }
 
 .wg-shell .wg-sidebar + [class*="col-"] {
-    padding: 28px;
+    padding: 26px;
     background: var(--wg-bg-accent);
     min-height: calc(100vh - var(--wg-header-height));
 }
@@ -352,7 +397,14 @@ a {
 }
 
 .wg-page-title {
-    margin-bottom: 22px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--wg-border);
 }
 
 .wg-page-title h1 {
@@ -365,6 +417,7 @@ a {
 .wg-page-title p {
     margin: 6px 0 0;
     color: var(--wg-muted);
+    max-width: 760px;
 }
 
 .wg-main > h4,
@@ -395,19 +448,27 @@ a {
     background: var(--wg-surface);
     border: 1px solid rgba(217, 225, 234, 0.95);
     border-radius: var(--wg-radius);
-    box-shadow: var(--wg-shadow-soft);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
     backdrop-filter: none;
     transition: box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
 .wg-card:hover {
-    box-shadow: var(--wg-shadow);
+    box-shadow: 0 10px 24px rgba(16, 24, 40, 0.07);
     border-color: rgba(18, 128, 92, 0.16);
 }
 
 .wg-stat-card {
-    min-height: 142px;
-    padding: 20px;
+    min-height: 136px;
+    padding: 18px;
+    border-top: 3px solid rgba(18, 128, 92, 0.2);
+}
+
+.wg-crm-summary {
+    border-left: 4px solid var(--wg-primary);
+    background:
+        linear-gradient(90deg, rgba(18, 128, 92, 0.05), rgba(18, 128, 92, 0) 42%),
+        #ffffff;
 }
 
 .wg-stat-card .icon {
@@ -437,14 +498,14 @@ a {
 .wg-action-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
+    gap: 12px;
 }
 
 .wg-action-card {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 16px;
+    padding: 14px;
     text-decoration: none;
 }
 
@@ -458,7 +519,7 @@ a {
     justify-content: center;
     width: 38px;
     height: 38px;
-    border-radius: var(--wg-radius);
+    border-radius: 8px;
     background: var(--wg-surface-muted);
     color: var(--wg-primary);
     font-size: 18px;
@@ -480,11 +541,11 @@ a {
 .wg-main > .row > form,
 .wg-main .form-panel {
     margin: 0 0 22px;
-    padding: 22px;
+    padding: 20px;
     background: var(--wg-surface);
     border: 1px solid rgba(217, 225, 234, 0.95);
     border-radius: var(--wg-radius);
-    box-shadow: var(--wg-shadow-soft);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
     backdrop-filter: none;
 }
 
@@ -522,6 +583,10 @@ a {
     vertical-align: middle;
 }
 
+.table tbody tr:hover > * {
+    --bs-table-accent-bg: #f8fbfa;
+}
+
 .table-responsive {
     border-radius: var(--wg-radius);
 }
@@ -537,6 +602,7 @@ a {
     font-size: 13px;
     font-weight: 800;
     text-transform: uppercase;
+    letter-spacing: 0.02em;
 }
 
 .table td {
@@ -621,9 +687,54 @@ textarea.form-control {
 }
 
 .btn-light {
-    background: #eef3f1;
-    border-color: #dce6e1;
+    background: #ffffff;
+    border-color: var(--wg-border);
     color: var(--wg-text);
+}
+
+.btn-light:hover,
+.btn-light:focus {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: var(--wg-primary-dark);
+}
+
+.btn-outline-success {
+    color: var(--wg-primary-dark);
+    border-color: rgba(18, 128, 92, 0.38);
+}
+
+.btn-outline-success:hover,
+.btn-outline-success:focus {
+    background: var(--wg-primary);
+    border-color: var(--wg-primary);
+    color: #ffffff;
+}
+
+.card {
+    border: 1px solid rgba(217, 225, 234, 0.95);
+    border-radius: var(--wg-radius);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.card-header {
+    background: #f8fafc;
+    border-bottom-color: var(--wg-border);
+    font-weight: 750;
+}
+
+.alert {
+    border-radius: 8px;
+    border-width: 1px;
+}
+
+.progress {
+    background-color: #e7edf3;
+    border-radius: 999px;
+}
+
+.progress-bar {
+    border-radius: 999px;
 }
 
 .btn-danger {

@@ -16,11 +16,34 @@
   <body>
     
 
-<nav class="navbar wg-topbar px-3">
+<nav class="navbar wg-topbar">
   <div class="container-fluid align-items-center">
     <a class="navbar-brand wg-brand" href="<?php echo h(app_url('business')); ?>" aria-label="Arklytics Connect business home">
       <img class="wg-brand-logo" src="<?php echo h(app_url('website/uploads/connect-logo.png')); ?>" alt="Arklytics Connect logo">
+      <span class="wg-brand-copy d-none d-sm-flex">
+        <span class="wg-brand-title">Connect CRM</span>
+        <span class="wg-brand-subtitle">WhatsApp business workspace</span>
+      </span>
     </a>
-    <span class="badge rounded-pill">CRM Suite</span>
+
+    <div class="wg-topnav d-none d-lg-flex">
+      <a href="<?php echo h(app_url('business/create-contact')); ?>"><i class="bi bi-people"></i> Contacts</a>
+      <a href="<?php echo h(app_url('business/send-messages')); ?>"><i class="bi bi-send"></i> Campaigns</a>
+      <a href="<?php echo h(app_url('business/reports')); ?>"><i class="bi bi-bar-chart"></i> Reports</a>
+    </div>
+
+    <div class="wg-topbar-actions">
+      <a class="btn btn-light btn-sm" href="<?php echo h(app_url('business/payments')); ?>">
+        <i class="bi bi-layers"></i>
+        <span class="d-none d-sm-inline">Plans</span>
+      </a>
+      <a class="btn btn-light btn-sm" href="<?php echo h(app_url('business/profile')); ?>" aria-label="Profile">
+        <i class="bi bi-person-circle"></i>
+      </a>
+      <a class="btn btn-success btn-sm" href="<?php echo h(app_url('business/logout')); ?>">
+        <i class="bi bi-box-arrow-right"></i>
+        <span class="d-none d-sm-inline">Logout</span>
+      </a>
+    </div>
   </div>
 </nav>
