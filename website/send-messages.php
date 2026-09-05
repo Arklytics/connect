@@ -11,6 +11,35 @@ try {
 } catch (Throwable $exception) {
     error_log('Group hierarchy ensure failed: ' . $exception->getMessage());
 }
+
+$templates = [];
+$stmt = $db->prepare('SELECT * FROM gd_whatsapp_templates WHERE biz_id = ? ORDER BY id DESC');
+$stmt->bind_param('i', $biz_id);
+$stmt->execute();
+$templateResult = $stmt->get_result();
+while ($row = $templateResult->fetch_assoc()) {
+    $templates[] = $row;
+}
+
+$parentGroups = [];
+$subgroupsByParent = [];
+$stmt = $db->prepare('
+    SELECT g.id, g.parent_id, g.group_name, parent.group_name AS parent_name
+    FROM gd_groups g
+    LEFT JOIN gd_groups parent ON parent.id = g.parent_id
+    WHERE g.biz_id = ?
+    ORDER BY g.parent_id IS NOT NULL, g.group_name
+');
+$stmt->bind_param('i', $biz_id);
+$stmt->execute();
+$groupResult = $stmt->get_result();
+while ($row = $groupResult->fetch_assoc()) {
+    if (empty($row['parent_id'])) {
+        $parentGroups[] = $row;
+    } else {
+        $subgroupsByParent[(int) $row['parent_id']][] = $row;
+    }
+}
 ?>
 <?php
 if (isset($_POST['send'])) {
@@ -216,49 +245,53 @@ if (isset($_POST['send'])) {
 
 
 
-<div class="container-fluid">
+<div class="container-fluid wg-shell">
     <div class="row">
         <div class="col-lg-2 col-md-3 p-0 wg-sidebar">
             <?php include 'sidebar.php'; ?>
         </div>
 
-        <div class="col-lg-5 col-md-9 wg-main">
-            <h4 class="mt-2"><i class="bi bi-send"></i> Send Messages</h4>
-            <div class="alert alert-info py-2">
-                This page sends the selected template to a main group or subgroup. Main groups include contacts in all subgroups.
+        <main class="col-lg-10 col-md-9 wg-main">
+            <div class="wg-page-title">
+                <div>
+                    <h1>Send Messages</h1>
+                    <p>Compose a WhatsApp campaign, choose recipients, and track batch progress.</p>
+                </div>
             </div>
+
+            <div class="wg-send-layout">
+                <section class="wg-card wg-send-panel">
             <form action="" method="post" id="sendMessageForm">
                 <?php echo Security::csrfField(); ?>
-                <div class="row">
-                    <div class="mb-3">
-                        <select id="templateDropdown" name="template_id" class="form-control" required>
-                            <option value="">--Select Template--</option>
-                            <?php
-                            $biz_id = Auth::requireLogin();
-                            $stmt = $db->prepare('SELECT * FROM gd_whatsapp_templates WHERE biz_id = ? ORDER BY id DESC');
-                            $stmt->bind_param('i', $biz_id);
-                            $stmt->execute();
-                            $sql3 = $stmt->get_result();
-                            while ($get3 = mysqli_fetch_assoc($sql3)) {
-                                // Pass template data as JSON in a data attribute
-                                $templateData = htmlspecialchars(json_encode([
-                                    'message_title' => $get3['message_title'],
-                                    'message_body' => $get3['message_body'],
-                                    'media_url' => $get3['media_url'],
-                                    'subtitle' => $get3['subtitle'],
-                                    'header_type' => (function ($placeholders) {
-                                        $decoded = json_decode((string) $placeholders, true);
-                                        return is_array($decoded) ? strtoupper((string) ($decoded['header_type'] ?? '')) : '';
-                                    })($get3['placeholders'] ?? ''),
-                                ]));
-                                ?>
-                                <option value="<?php echo h($get3['id']); ?>" data-template='<?php echo $templateData; ?>'>
-                                    <?php echo h($get3['template_name']); ?>
-                                </option>
-                                <?php
-                            }
-                            ?>
-                        </select>
+                <input type="hidden" id="templateDropdown" name="template_id" required>
+                <input type="hidden" id="recipientMode" name="recipient_mode" value="all">
+
+                <div class="wg-form-section">
+                    <div class="wg-section-heading">
+                        <span><i class="bi bi-file-earmark-text"></i></span>
+                        <div>
+                            <h5>Template</h5>
+                            <p>Search by template name and select the approved message.</p>
+                        </div>
+                    </div>
+                    <label class="form-label" for="templateSearch">Select Template</label>
+                    <div class="wg-search-select">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                            <input type="search" class="form-control" id="templateSearch" placeholder="Search template">
+                        </div>
+                        <div class="wg-search-options" id="templateOptions">
+                            <?php if (empty($templates)): ?>
+                                <div class="wg-search-empty">No templates found.</div>
+                            <?php else: ?>
+                                <?php foreach ($templates as $template): ?>
+                                    <button type="button" class="wg-search-option" data-template-id="<?php echo h((string) $template['id']); ?>" data-template-name="<?php echo h($template['template_name']); ?>">
+                                        <span><?php echo h($template['template_name']); ?></span>
+                                        <small><?php echo h((string) ($template['category'] ?? 'Template')); ?></small>
+                                    </button>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
 
@@ -270,50 +303,46 @@ if (isset($_POST['send'])) {
                     </div>
                 </div>
 
-                <div class="row">
-                    <div class="mb-3">
-                        <select id="groupDropdown" name="group_id" class="form-control" required>
-                            <option value="">--Select Group or Subgroup--</option>
-                            <?php
-                            $biz_id = Auth::requireLogin();
-                            $stmt = $db->prepare('
-                                SELECT g.id, g.parent_id, g.group_name, parent.group_name AS parent_name
-                                FROM gd_groups g
-                                LEFT JOIN gd_groups parent ON parent.id = g.parent_id
-                                WHERE g.biz_id = ?
-                                ORDER BY CASE WHEN g.parent_id IS NULL THEN g.id ELSE g.parent_id END DESC,
-                                         CASE WHEN g.parent_id IS NULL THEN 0 ELSE 1 END,
-                                         g.group_name
-                            ');
-                            $stmt->bind_param('i', $biz_id);
-                            $stmt->execute();
-                            $sql3 = $stmt->get_result();
-                            while ($get3 = mysqli_fetch_assoc($sql3)) {
-                                ?>
-                                <option value="<?php echo h($get3['id']); ?>">
-                                    <?php echo h(!empty($get3['parent_id']) ? (($get3['parent_name'] ?? '') . ' / ' . $get3['group_name']) : ($get3['group_name'] . ' (includes subgroups)')); ?>
-                                </option>
-                                <?php
-                            }
-                            ?>
-                        </select>
+                <div class="wg-form-section mt-3">
+                    <div class="wg-section-heading">
+                        <span><i class="bi bi-people"></i></span>
+                        <div>
+                            <h5>Recipients</h5>
+                            <p>Send to all contacts or choose subgroups from a parent group.</p>
+                        </div>
                     </div>
-                </div>
-
-                <div class="row">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Send Scope</label>
-                        <div class="d-flex flex-wrap gap-3">
+                    <label class="form-label fw-semibold">Audience</label>
+                    <div class="wg-radio-panel">
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="send_scope" id="sendScopeAll" value="all" checked>
-                                <label class="form-check-label" for="sendScopeAll">All contacts</label>
+                            <input class="form-check-input" type="radio" name="recipient_choice" id="recipientAll" value="all" checked>
+                            <label class="form-check-label" for="recipientAll">All contacts</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="send_scope" id="sendScopePartial" value="partial">
-                                <label class="form-check-label" for="sendScopePartial">Partial range</label>
+                            <input class="form-check-input" type="radio" name="recipient_choice" id="recipientSubgroups" value="subgroups">
+                            <label class="form-check-label" for="recipientSubgroups">Selected subgroups</label>
+                            </div>
+                        </div>
+
+                    <div class="wg-subgroup-picker d-none" id="subgroupPicker">
+                        <label class="form-label mt-3" for="parentGroupDropdown">Parent Group</label>
+                        <select id="parentGroupDropdown" class="form-control">
+                            <option value="">Select parent group</option>
+                            <?php foreach ($parentGroups as $parent): ?>
+                                <option value="<?php echo h((string) $parent['id']); ?>"><?php echo h($parent['group_name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <label class="form-label mt-3">Subgroups</label>
+                        <div class="dropdown w-100">
+                            <button class="btn btn-light dropdown-toggle wg-checkbox-dropdown" type="button" id="subgroupDropdownButton" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                                Select subgroups
+                            </button>
+                            <div class="dropdown-menu wg-subgroup-menu w-100" aria-labelledby="subgroupDropdownButton" id="subgroupCheckboxList">
+                                <div class="wg-search-empty">Select a parent group first.</div>
                             </div>
                         </div>
                     </div>
+
                 </div>
 
                 <div class="row d-none" id="partialRangeFields">
@@ -330,7 +359,7 @@ if (isset($_POST['send'])) {
                     </div>
                 </div>
                 
-                <button class="btn btn-success" name="send" id="sendMessageButton"><i class="bi bi-send-check me-1"></i> Send Message</button>
+                <button class="btn btn-success mt-3" id="sendMessageButton"><i class="bi bi-send-check me-1"></i> Send Message</button>
             </form>
 
             <div class="card border-0 shadow-sm mt-3 d-none" id="sendProgressCard">
@@ -346,11 +375,11 @@ if (isset($_POST['send'])) {
                     <div class="small text-danger mt-2 d-none" id="sendProgressErrors"></div>
                 </div>
             </div>
-        </div>
+                </section>
 
-        <div class="col-lg-5 col-md-9 wg-main">
+                <aside class="wg-card wg-send-preview">
             <h5 class="mt-2"><i class="bi bi-phone"></i> Preview</h5>
-            <div class="border p-3 shadow-sm bg-light rounded" style="width: 100%; max-width: 400px; margin: 0 auto;">
+            <div class="wg-template-preview" style="width: 100%; max-width: 400px; margin: 0 auto;">
                 <div class="whats-header border-bottom p-3 rounded">
                     <i class="bi bi-building"></i><b> Arklytics Connect</b> <i class="bi bi-patch-check-fill text-primary"></i>
                 </div>
@@ -362,13 +391,25 @@ if (isset($_POST['send'])) {
                     <div id="previewButtons" class="mt-3"></div>
                 </div>
             </div>
-        </div>
+                </aside>
+            </div>
+        </main>
     </div>
 </div>
 
 <script>
+    const subgroupsByParent = <?php echo ApiSupport::encodeJson($subgroupsByParent); ?>;
     const sendForm = document.getElementById('sendMessageForm');
     const sendButton = document.getElementById('sendMessageButton');
+    const templateInput = document.getElementById('templateDropdown');
+    const templateSearch = document.getElementById('templateSearch');
+    const templateOptions = document.getElementById('templateOptions');
+    const recipientMode = document.getElementById('recipientMode');
+    const recipientChoiceInputs = document.querySelectorAll('input[name="recipient_choice"]');
+    const subgroupPicker = document.getElementById('subgroupPicker');
+    const parentGroupDropdown = document.getElementById('parentGroupDropdown');
+    const subgroupCheckboxList = document.getElementById('subgroupCheckboxList');
+    const subgroupDropdownButton = document.getElementById('subgroupDropdownButton');
     const progressCard = document.getElementById('sendProgressCard');
     const progressBar = document.getElementById('sendProgressBar');
     const progressCount = document.getElementById('sendProgressCount');
@@ -387,6 +428,77 @@ if (isset($_POST['send'])) {
         partialRangeFields.classList.toggle('d-none', !isPartial);
         document.getElementById('rangeStart').required = isPartial;
         document.getElementById('rangeEnd').required = isPartial;
+    }
+
+    function selectedRecipientMode() {
+        const selected = document.querySelector('input[name="recipient_choice"]:checked');
+        return selected ? selected.value : 'all';
+    }
+
+    function syncRecipientPicker() {
+        const mode = selectedRecipientMode();
+        recipientMode.value = mode;
+        subgroupPicker.classList.toggle('d-none', mode !== 'subgroups');
+    }
+
+    function selectedSubgroupIds() {
+        return Array.from(document.querySelectorAll('input[name="subgroup_ids[]"]:checked')).map((input) => input.value);
+    }
+
+    function updateSubgroupButtonLabel() {
+        const count = selectedSubgroupIds().length;
+        subgroupDropdownButton.textContent = count > 0 ? `${count} subgroup${count === 1 ? '' : 's'} selected` : 'Select subgroups';
+    }
+
+    function renderSubgroupOptions(parentId) {
+        subgroupCheckboxList.innerHTML = '';
+        const rows = Array.isArray(subgroupsByParent[parentId]) ? subgroupsByParent[parentId] : [];
+
+        if (!parentId) {
+            subgroupCheckboxList.innerHTML = '<div class="wg-search-empty">Select a parent group first.</div>';
+            updateSubgroupButtonLabel();
+            return;
+        }
+
+        if (rows.length === 0) {
+            subgroupCheckboxList.innerHTML = '<div class="wg-search-empty">No subgroups under this parent.</div>';
+            updateSubgroupButtonLabel();
+            return;
+        }
+
+        rows.forEach((subgroup) => {
+            const item = document.createElement('label');
+            item.className = 'dropdown-item wg-checkbox-option';
+            const checkbox = document.createElement('input');
+            checkbox.className = 'form-check-input';
+            checkbox.type = 'checkbox';
+            checkbox.name = 'subgroup_ids[]';
+            checkbox.value = subgroup.id || '';
+            checkbox.addEventListener('change', updateSubgroupButtonLabel);
+
+            const name = document.createElement('span');
+            name.textContent = subgroup.group_name || 'Subgroup';
+
+            item.appendChild(checkbox);
+            item.appendChild(name);
+            subgroupCheckboxList.appendChild(item);
+        });
+
+        updateSubgroupButtonLabel();
+    }
+
+    function filterTemplateOptions() {
+        const query = templateSearch.value.trim().toLowerCase();
+        let visible = 0;
+        templateOptions.querySelectorAll('.wg-search-option').forEach((option) => {
+            const text = option.textContent.toLowerCase();
+            const match = query === '' || text.includes(query);
+            option.classList.toggle('d-none', !match);
+            if (match) {
+                visible++;
+            }
+        });
+        templateOptions.classList.toggle('has-no-results', visible === 0);
     }
 
     function addTemplateVariableInput(container, name, label) {
@@ -439,6 +551,21 @@ if (isset($_POST['send'])) {
 
     sendScopeInputs.forEach((input) => input.addEventListener('change', syncRangeFields));
     syncRangeFields();
+    recipientChoiceInputs.forEach((input) => input.addEventListener('change', syncRecipientPicker));
+    syncRecipientPicker();
+    parentGroupDropdown?.addEventListener('change', function () {
+        renderSubgroupOptions(this.value);
+    });
+    templateSearch?.addEventListener('input', filterTemplateOptions);
+    templateOptions?.querySelectorAll('.wg-search-option').forEach((option) => {
+        option.addEventListener('click', function () {
+            templateInput.value = this.getAttribute('data-template-id') || '';
+            templateSearch.value = this.getAttribute('data-template-name') || '';
+            templateOptions.querySelectorAll('.wg-search-option').forEach((item) => item.classList.remove('active'));
+            this.classList.add('active');
+            loadTemplatePreview(templateInput.value);
+        });
+    });
 
     function setProgress(done, total, sent, failed) {
         const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
@@ -469,6 +596,22 @@ if (isset($_POST['send'])) {
             event.preventDefault();
 
             if (!sendForm.reportValidity()) {
+                return;
+            }
+
+            if (!templateInput.value) {
+                progressCard.classList.remove('d-none');
+                progressErrors.classList.remove('d-none');
+                progressErrors.textContent = 'Select a template.';
+                progressStatus.textContent = 'Template needs correction.';
+                return;
+            }
+
+            if (selectedRecipientMode() === 'subgroups' && selectedSubgroupIds().length === 0) {
+                progressCard.classList.remove('d-none');
+                progressErrors.classList.remove('d-none');
+                progressErrors.textContent = 'Select at least one subgroup.';
+                progressStatus.textContent = 'Recipients need correction.';
                 return;
             }
 
@@ -503,9 +646,10 @@ if (isset($_POST['send'])) {
                 const prepareData = new FormData();
                 prepareData.append('_csrf_token', baseData.get('_csrf_token'));
                 prepareData.append('template_id', baseData.get('template_id'));
-                prepareData.append('group_id', baseData.get('group_id'));
                 prepareData.append('limit', String(batchSize));
                 prepareData.append('action', 'prepare');
+                prepareData.append('recipient_mode', baseData.get('recipient_mode') || 'all');
+                selectedSubgroupIds().forEach((id) => prepareData.append('subgroup_ids[]', id));
                 prepareData.append('send_scope', baseData.get('send_scope') || 'all');
                 prepareData.append('range_start', baseData.get('range_start') || '');
                 prepareData.append('range_end', baseData.get('range_end') || '');
@@ -522,10 +666,11 @@ if (isset($_POST['send'])) {
                     const batchData = new FormData();
                     batchData.append('_csrf_token', baseData.get('_csrf_token'));
                     batchData.append('template_id', baseData.get('template_id'));
-                    batchData.append('group_id', baseData.get('group_id'));
                     batchData.append('limit', String(batchSize));
                     batchData.append('offset', String(offset));
                     batchData.append('action', 'send');
+                    batchData.append('recipient_mode', baseData.get('recipient_mode') || 'all');
+                    selectedSubgroupIds().forEach((id) => batchData.append('subgroup_ids[]', id));
                     batchData.append('send_scope', baseData.get('send_scope') || 'all');
                     batchData.append('range_start', baseData.get('range_start') || '');
                     batchData.append('range_end', baseData.get('range_end') || '');
@@ -562,9 +707,7 @@ if (isset($_POST['send'])) {
         });
     }
 
-    document.getElementById('templateDropdown').addEventListener('change', function () {
-        const templateId = this.value;
-
+    function loadTemplatePreview(templateId) {
         if (templateId) {
             fetch(`fetch_template?template_id=${templateId}`)
                 .then(response => response.json())
@@ -647,5 +790,5 @@ if (isset($_POST['send'])) {
             document.getElementById('previewButtons').innerHTML = ''; // Clear buttons
             renderTemplateVariableFields({});
         }
-    });
+    }
 </script>

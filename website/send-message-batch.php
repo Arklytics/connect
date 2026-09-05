@@ -19,16 +19,76 @@ function batchRange(array $payload, int $total): array
     return [$start, $end, max(0, $end - $start + 1)];
 }
 
-function batchRecipients(mysqli $db, int $bizId, int $groupId, int $offset, int $limit, int $rangeStart): array
+function batchSelectedGroupIds(mysqli $db, int $bizId, array $payload): array
 {
-    $sqlOffset = max(0, ($rangeStart - 1) + $offset);
-    $targetGroupIds = ApiSupport::groupTargetIds($db, $bizId, $groupId, true);
-    if (empty($targetGroupIds)) {
+    $mode = strtolower(trim((string) ($payload['recipient_mode'] ?? 'all')));
+    if ($mode !== 'subgroups') {
         return [];
     }
-    $placeholders = implode(',', array_fill(0, count($targetGroupIds), '?'));
-    $types = 'i' . str_repeat('i', count($targetGroupIds)) . str_repeat('i', count($targetGroupIds)) . 'ii';
-    $values = array_merge([$bizId], $targetGroupIds, $targetGroupIds, [$limit, $sqlOffset]);
+
+    $ids = [];
+    foreach ((array) ($payload['subgroup_ids'] ?? []) as $id) {
+        $cleanId = Security::intFrom($id);
+        if ($cleanId > 0) {
+            $ids[] = $cleanId;
+        }
+    }
+
+    $ids = array_values(array_unique($ids));
+    if ($ids === []) {
+        ApiSupport::jsonResponse(['ok' => false, 'error' => 'Select at least one subgroup.'], 422);
+    }
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $types = str_repeat('i', count($ids)) . 'i';
+    $values = array_merge($ids, [$bizId]);
+    $stmt = $db->prepare('SELECT id FROM gd_groups WHERE id IN (' . $placeholders . ') AND biz_id = ? AND parent_id IS NOT NULL');
+    $bind = [$types];
+    foreach ($values as $index => $value) {
+        $bind[] = &$values[$index];
+    }
+    $stmt->bind_param(...$bind);
+    $stmt->execute();
+
+    $validIds = [];
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $validIds[] = (int) ($row['id'] ?? 0);
+    }
+
+    if ($validIds === []) {
+        ApiSupport::jsonResponse(['ok' => false, 'error' => 'Selected subgroups were not found.'], 422);
+    }
+
+    return $validIds;
+}
+
+function batchRecipients(mysqli $db, int $bizId, array $groupIds, int $offset, int $limit, int $rangeStart): array
+{
+    $sqlOffset = max(0, ($rangeStart - 1) + $offset);
+    if ($groupIds === []) {
+        $stmt = $db->prepare(
+            'SELECT DISTINCT c.id, c.full_name, c.phone_number
+             FROM gd_user_contacts c
+             WHERE c.biz_id = ?
+             ORDER BY c.id ASC
+             LIMIT ? OFFSET ?'
+        );
+        $stmt->bind_param('iii', $bizId, $limit, $sqlOffset);
+        $stmt->execute();
+
+        $rows = [];
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
+        }
+
+        return $rows;
+    }
+
+    $placeholders = implode(',', array_fill(0, count($groupIds), '?'));
+    $types = 'i' . str_repeat('i', count($groupIds)) . str_repeat('i', count($groupIds)) . 'ii';
+    $values = array_merge([$bizId], $groupIds, $groupIds, [$limit, $sqlOffset]);
     $stmt = $db->prepare(
         'SELECT DISTINCT c.id, c.full_name, c.phone_number
          FROM gd_user_contacts c
@@ -53,15 +113,20 @@ function batchRecipients(mysqli $db, int $bizId, int $groupId, int $offset, int 
     return $rows;
 }
 
-function batchRecipientCount(mysqli $db, int $bizId, int $groupId): int
+function batchRecipientCount(mysqli $db, int $bizId, array $groupIds): int
 {
-    $targetGroupIds = ApiSupport::groupTargetIds($db, $bizId, $groupId, true);
-    if (empty($targetGroupIds)) {
-        return 0;
+    if ($groupIds === []) {
+        $stmt = $db->prepare('SELECT COUNT(DISTINCT id) AS total FROM gd_user_contacts WHERE biz_id = ?');
+        $stmt->bind_param('i', $bizId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc() ?: [];
+
+        return (int) ($row['total'] ?? 0);
     }
-    $placeholders = implode(',', array_fill(0, count($targetGroupIds), '?'));
-    $types = 'i' . str_repeat('i', count($targetGroupIds)) . str_repeat('i', count($targetGroupIds));
-    $values = array_merge([$bizId], $targetGroupIds, $targetGroupIds);
+
+    $placeholders = implode(',', array_fill(0, count($groupIds), '?'));
+    $types = 'i' . str_repeat('i', count($groupIds)) . str_repeat('i', count($groupIds));
+    $values = array_merge([$bizId], $groupIds, $groupIds);
     $stmt = $db->prepare(
         'SELECT COUNT(*) AS total
          FROM (
@@ -125,12 +190,11 @@ try {
 
     $action = strtolower(trim((string) ($_POST['action'] ?? 'send')));
     $templateId = Security::intFrom($_POST['template_id'] ?? null);
-    $groupId = Security::intFrom($_POST['group_id'] ?? null);
     $offset = max(0, Security::intFrom($_POST['offset'] ?? 0));
     $limit = max(1, min(10, Security::intFrom($_POST['limit'] ?? 5)));
 
-    if ($templateId <= 0 || $groupId <= 0) {
-        ApiSupport::jsonResponse(['ok' => false, 'error' => 'Select a template and group.'], 422);
+    if ($templateId <= 0) {
+        ApiSupport::jsonResponse(['ok' => false, 'error' => 'Select a template.'], 422);
     }
 
     $template = batchTemplate($db, (int) $biz_id, $templateId);
@@ -144,7 +208,8 @@ try {
         ApiSupport::jsonResponse(['ok' => false, 'error' => (string) $templateSend['error']], 422);
     }
 
-    $groupTotal = batchRecipientCount($db, (int) $biz_id, $groupId);
+    $selectedGroupIds = batchSelectedGroupIds($db, (int) $biz_id, $_POST);
+    $groupTotal = batchRecipientCount($db, (int) $biz_id, $selectedGroupIds);
     if ($groupTotal <= 0) {
         ApiSupport::jsonResponse(['ok' => false, 'error' => 'No members found in the selected group.'], 422);
     }
@@ -168,7 +233,7 @@ try {
 
     [$phoneNumberId, $whatsappToken] = batchCredentials($db, (int) $biz_id);
     $limit = min($limit, max(0, $total - $offset));
-    $recipients = batchRecipients($db, (int) $biz_id, $groupId, $offset, $limit, $rangeStart);
+    $recipients = batchRecipients($db, (int) $biz_id, $selectedGroupIds, $offset, $limit, $rangeStart);
     $sent = 0;
     $failed = 0;
     $errors = [];

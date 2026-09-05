@@ -21,8 +21,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? 'create_group'));
     $group = trim((string) ($_POST['group_name'] ?? $_POST['parent_group_name'] ?? $_POST['subgroup_name'] ?? ''));
     $parentId = $action === 'create_subgroup' ? Security::intFrom($_POST['parent_id'] ?? null) : 0;
+    $groupId = Security::intFrom($_POST['group_id'] ?? null);
 
-    if ($parentId > 0) {
+    if ($action === 'delete_group') {
+        if ($groupId <= 0) {
+            $message = 'Select a valid group to delete.';
+            $message_type = 'danger';
+        } else {
+            $groupStmt = $db->prepare('SELECT id, parent_id FROM gd_groups WHERE id = ? AND biz_id = ? LIMIT 1');
+            $groupStmt->bind_param('ii', $groupId, $biz_id);
+            $groupStmt->execute();
+            $deleteGroup = $groupStmt->get_result()->fetch_assoc();
+
+            if (!$deleteGroup) {
+                $message = 'Group not found.';
+                $message_type = 'danger';
+            } else {
+                $deleteIds = [(int) $deleteGroup['id']];
+                if (empty($deleteGroup['parent_id'])) {
+                    $childStmt = $db->prepare('SELECT id FROM gd_groups WHERE parent_id = ? AND biz_id = ?');
+                    $childStmt->bind_param('ii', $groupId, $biz_id);
+                    $childStmt->execute();
+                    $children = $childStmt->get_result();
+                    while ($child = $children->fetch_assoc()) {
+                        $deleteIds[] = (int) ($child['id'] ?? 0);
+                    }
+                }
+
+                $deleteIds = array_values(array_filter(array_unique($deleteIds)));
+                $placeholders = implode(',', array_fill(0, count($deleteIds), '?'));
+                $types = 'i' . str_repeat('i', count($deleteIds));
+                $values = array_merge([(int) $biz_id], $deleteIds);
+
+                $contactStmt = $db->prepare('DELETE FROM gd_group_contacts WHERE biz_id = ? AND group_id IN (' . $placeholders . ')');
+                $bind = [$types];
+                foreach ($values as $index => $value) {
+                    $bind[] = &$values[$index];
+                }
+                $contactStmt->bind_param(...$bind);
+                $contactStmt->execute();
+
+                $directContactStmt = $db->prepare('UPDATE gd_user_contacts SET group_id = NULL WHERE biz_id = ? AND group_id IN (' . $placeholders . ')');
+                $bind = [$types];
+                foreach ($values as $index => $value) {
+                    $bind[] = &$values[$index];
+                }
+                $directContactStmt->bind_param(...$bind);
+                $directContactStmt->execute();
+
+                $groupTypes = str_repeat('i', count($deleteIds)) . 'i';
+                $groupValues = array_merge($deleteIds, [(int) $biz_id]);
+                $deleteStmt = $db->prepare('DELETE FROM gd_groups WHERE id IN (' . $placeholders . ') AND biz_id = ?');
+                $bind = [$groupTypes];
+                foreach ($groupValues as $index => $value) {
+                    $bind[] = &$groupValues[$index];
+                }
+                $deleteStmt->bind_param(...$bind);
+                $deleteStmt->execute();
+
+                $message = empty($deleteGroup['parent_id']) ? 'Parent group and its subgroups deleted.' : 'Subgroup deleted.';
+                $message_type = 'success';
+            }
+        }
+    } elseif ($action === 'update_group') {
+        if ($groupId <= 0 || $group === '') {
+            $message = 'Group name is required.';
+            $message_type = 'danger';
+        } else {
+            $stmt = $db->prepare('UPDATE gd_groups SET group_name = ?, updated_at = NOW() WHERE id = ? AND biz_id = ?');
+            $stmt->bind_param('sii', $group, $groupId, $biz_id);
+            if ($stmt->execute()) {
+                $message = 'Group updated.';
+                $message_type = 'success';
+                $_GET['parent_id'] = (string) ($parentId > 0 ? $parentId : $groupId);
+            } else {
+                $message = 'Unable to update group.';
+                $message_type = 'danger';
+            }
+        }
+    } elseif ($parentId > 0) {
         $parentStmt = $db->prepare('SELECT id FROM gd_groups WHERE id = ? AND biz_id = ? AND parent_id IS NULL LIMIT 1');
         $parentStmt->bind_param('ii', $parentId, $biz_id);
         $parentStmt->execute();
@@ -32,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if ($message === '') {
+    if ($message === '' && !in_array($action, ['delete_group', 'update_group'], true)) {
         if ($parentId > 0) {
             $stmt = $db->prepare('INSERT INTO gd_groups (biz_id, parent_id, group_name, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())');
             $stmt->bind_param('iis', $biz_id, $parentId, $group);
@@ -177,6 +254,7 @@ $relatedSubgroups = $subgroupsByParent[$selectedParentId] ?? [];
                                 $isSelected = $parentId === $selectedParentId;
                                 $subgroupCount = count($subgroupsByParent[$parentId] ?? []);
                                 ?>
+                                <div class="wg-parent-row-wrap">
                                 <a class="wg-parent-row <?php echo $isSelected ? 'active' : ''; ?>" href="<?php echo h(app_url('business/create-group?q=' . rawurlencode($search) . '&parent_id=' . $parentId)); ?>">
                                     <span class="wg-parent-icon"><i class="bi bi-folder2-open"></i></span>
                                     <span>
@@ -184,6 +262,15 @@ $relatedSubgroups = $subgroupsByParent[$selectedParentId] ?? [];
                                         <small><?php echo h((string) $subgroupCount); ?> subgroups | <?php echo h((string) ($contactCounts[$parentId] ?? 0)); ?> contacts</small>
                                     </span>
                                 </a>
+                                <div class="wg-row-actions">
+                                    <button class="btn btn-light btn-sm" type="button" data-bs-toggle="offcanvas" data-bs-target="#editGroupOffcanvas" data-group-id="<?php echo h((string) $parentId); ?>" data-group-name="<?php echo h($parent['group_name']); ?>" data-parent-id="0">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-light btn-sm text-danger" type="button" data-bs-toggle="modal" data-bs-target="#deleteGroupModal" data-group-id="<?php echo h((string) $parentId); ?>" data-group-name="<?php echo h($parent['group_name']); ?>">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                                </div>
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </div>
@@ -238,6 +325,12 @@ $relatedSubgroups = $subgroupsByParent[$selectedParentId] ?? [];
                                                 <div class="d-flex flex-wrap gap-2">
                                                     <a href="<?php echo h(app_url('business/add-contacts-group?group_id=' . $subgroupId)); ?>" class="btn btn-primary btn-sm"><i class="bi bi-person-plus me-1"></i> Add</a>
                                                     <a href="<?php echo h(app_url('business/view-contacts?group_id=' . $subgroupId)); ?>" class="btn btn-light btn-sm"><i class="bi bi-eye me-1"></i> View</a>
+                                                    <button class="btn btn-light btn-sm" type="button" data-bs-toggle="offcanvas" data-bs-target="#editGroupOffcanvas" data-group-id="<?php echo h((string) $subgroupId); ?>" data-group-name="<?php echo h($subgroup['group_name']); ?>" data-parent-id="<?php echo h((string) $selectedParentId); ?>">
+                                                        <i class="bi bi-pencil"></i>
+                                                    </button>
+                                                    <button class="btn btn-light btn-sm text-danger" type="button" data-bs-toggle="modal" data-bs-target="#deleteGroupModal" data-group-id="<?php echo h((string) $subgroupId); ?>" data-group-name="<?php echo h($subgroup['group_name']); ?>">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -305,5 +398,82 @@ $relatedSubgroups = $subgroupsByParent[$selectedParentId] ?? [];
         </form>
     </div>
 </div>
+
+<div class="offcanvas offcanvas-end wg-offcanvas" tabindex="-1" id="editGroupOffcanvas" aria-labelledby="editGroupOffcanvasLabel">
+    <div class="offcanvas-header">
+        <div>
+            <span class="wg-kicker">Edit Segment</span>
+            <h5 class="offcanvas-title" id="editGroupOffcanvasLabel">Edit Group</h5>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <form action="" method="POST" class="wg-offcanvas-form">
+            <?php echo Security::csrfField(); ?>
+            <input type="hidden" name="action" value="update_group">
+            <input type="hidden" name="group_id" id="edit_group_id">
+            <input type="hidden" name="parent_id" id="edit_parent_id">
+            <div class="wg-form-section">
+                <div class="wg-section-heading">
+                    <span><i class="bi bi-pencil-square"></i></span>
+                    <div>
+                        <h5>Group Details</h5>
+                        <p>Update the group or subgroup name used across contacts and campaigns.</p>
+                    </div>
+                </div>
+                <label class="form-label" for="edit_group_name">Group Name</label>
+                <input type="text" class="form-control" id="edit_group_name" name="group_name" required>
+                <button class="btn btn-success w-100 mt-3" type="submit"><i class="bi bi-check2 me-1"></i> Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="deleteGroupModal" tabindex="-1" aria-labelledby="deleteGroupModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form action="" method="POST">
+                <?php echo Security::csrfField(); ?>
+                <input type="hidden" name="action" value="delete_group">
+                <input type="hidden" name="group_id" id="delete_group_id">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteGroupModalLabel">Delete Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-1">Delete <strong id="delete_group_name">this group</strong>?</p>
+                    <p class="text-muted mb-0">Deleting a parent group also deletes its subgroups and removes their group-contact links.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i> Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('editGroupOffcanvas')?.addEventListener('show.bs.offcanvas', function (event) {
+    const button = event.relatedTarget;
+    if (!button) {
+        return;
+    }
+
+    document.getElementById('edit_group_id').value = button.getAttribute('data-group-id') || '';
+    document.getElementById('edit_group_name').value = button.getAttribute('data-group-name') || '';
+    document.getElementById('edit_parent_id').value = button.getAttribute('data-parent-id') || '';
+});
+
+document.getElementById('deleteGroupModal')?.addEventListener('show.bs.modal', function (event) {
+    const button = event.relatedTarget;
+    if (!button) {
+        return;
+    }
+
+    document.getElementById('delete_group_id').value = button.getAttribute('data-group-id') || '';
+    document.getElementById('delete_group_name').textContent = button.getAttribute('data-group-name') || 'this group';
+});
+</script>
 
 <?php include 'footer.php'; ?>
