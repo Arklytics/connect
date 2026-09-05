@@ -362,8 +362,23 @@ if (isset($_POST['send'])) {
                 <div class="row d-none" id="templateVariableFields">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Template Variable Values</label>
-                        <div class="form-text mb-2">Use {{name}}, {{phone}}, or {{email}} to personalize each contact.</div>
+                        <div class="form-text mb-2">Use contact fields like {{name}}, {{phone}}, or {{email}}, or type fixed text.</div>
                         <div id="templateVariableInputs" class="row g-2"></div>
+                    </div>
+                </div>
+                <datalist id="contactVariableSuggestions">
+                    <option value="{{name}}">
+                    <option value="{{phone}}">
+                    <option value="{{email}}">
+                    <option value="{{full_name}}">
+                    <option value="{{phone_number}}">
+                </datalist>
+
+                <div class="row d-none" id="templateMediaUrlFields">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="headerMediaUrlInput">Header Media URL</label>
+                        <input type="url" class="form-control" id="headerMediaUrlInput" name="header_media_url" placeholder="https://example.com/image.jpg">
+                        <div class="form-text">Required for image, video, or document header templates when no saved media URL is available.</div>
                     </div>
                 </div>
 
@@ -569,6 +584,8 @@ if (isset($_POST['send'])) {
         input.name = name;
         input.className = 'form-control';
         input.required = true;
+        input.setAttribute('list', 'contactVariableSuggestions');
+        input.placeholder = '{{name}}, {{phone}}, {{email}}, or fixed text';
 
         wrapper.appendChild(inputLabel);
         wrapper.appendChild(input);
@@ -601,6 +618,20 @@ if (isset($_POST['send'])) {
             if (/^(header_values|body_values|button_values)\[/.test(key)) {
                 target.append(key, value);
             }
+        }
+        if (source.get('header_media_url')) {
+            target.append('header_media_url', source.get('header_media_url'));
+        }
+    }
+
+    function syncTemplateMediaField(data) {
+        const fields = document.getElementById('templateMediaUrlFields');
+        const input = document.getElementById('headerMediaUrlInput');
+        const required = Boolean(data?.needs_media_url);
+        fields.classList.toggle('d-none', !required);
+        input.required = required;
+        if (!required) {
+            input.value = '';
         }
     }
 
@@ -779,6 +810,7 @@ if (isset($_POST['send'])) {
                     document.getElementById('previewBody').textContent = data.message_body || '[Message Body]';
                     document.getElementById('previewSubtitle').textContent = data.subtitle || '[Sub Title]';
                     renderTemplateVariableFields(data.variable_requirements || {});
+                    syncTemplateMediaField(data);
 
                     const mediaPreviewContainer = document.getElementById('previewMediaUrl');
                     mediaPreviewContainer.innerHTML = ''; // Clear previous content
@@ -846,6 +878,7 @@ if (isset($_POST['send'])) {
             document.getElementById('previewMediaUrl').innerHTML = '[No Media Available]';
             document.getElementById('previewButtons').innerHTML = ''; // Clear buttons
             renderTemplateVariableFields({});
+            syncTemplateMediaField({});
         }
     }
 </script>

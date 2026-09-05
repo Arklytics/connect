@@ -28,14 +28,19 @@ if (isset($_GET['template_id'])) {
         }
         $placeholderMeta = json_decode((string) ($template['placeholders'] ?? ''), true);
         $headerType = is_array($placeholderMeta) ? strtoupper((string) ($placeholderMeta['header_type'] ?? '')) : '';
+        $mediaUrl = trim((string) ($template['media_url'] ?? ''));
+        if ($mediaUrl === '' && is_array($placeholderMeta)) {
+            $mediaUrl = trim((string) ($placeholderMeta['header_media_url'] ?? ''));
+        }
 
         // Prepare the response
         echo json_encode([
             'message_title' => $template['message_title'],
             'message_body' => $template['message_body'],
             'subtitle' => $template['subtitle'],
-            'media_url' => $template['media_url'],
+            'media_url' => $mediaUrl,
             'header_type' => $headerType,
+            'needs_media_url' => in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true) && $mediaUrl === '',
             'variable_requirements' => ApiSupport::templateVariableRequirements($template),
             'buttons' => $buttons, // Include parsed buttons
         ]);
