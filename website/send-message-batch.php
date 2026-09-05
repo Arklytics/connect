@@ -220,6 +220,13 @@ function batchHydrateTemplateMediaUrl(mysqli $db, int $bizId, array $template): 
     $meta['header_media_url'] = $s3Url;
     $template['media_url'] = $s3Url;
     $template['placeholders'] = ApiSupport::encodeJson($meta) ?? (string) ($template['placeholders'] ?? '');
+    $updateStmt = $db->prepare('UPDATE gd_whatsapp_templates SET media_url = ?, placeholders = ?, updated_at = NOW() WHERE id = ? AND biz_id = ?');
+    if ($updateStmt) {
+        $templateJson = (string) $template['placeholders'];
+        $templateId = (int) ($template['id'] ?? 0);
+        $updateStmt->bind_param('ssii', $s3Url, $templateJson, $templateId, $bizId);
+        $updateStmt->execute();
+    }
 
     return $template;
 }

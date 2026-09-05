@@ -100,6 +100,13 @@ function wgHydrateTemplateMediaUrl(mysqli $db, int $bizId, array $template): arr
     $meta['header_media_url'] = $s3Url;
     $template['media_url'] = $s3Url;
     $template['placeholders'] = ApiSupport::encodeJson($meta) ?? (string) ($template['placeholders'] ?? '');
+    $updateStmt = $db->prepare('UPDATE gd_whatsapp_templates SET media_url = ?, placeholders = ?, updated_at = NOW() WHERE id = ? AND biz_id = ?');
+    if ($updateStmt) {
+        $templateJson = (string) $template['placeholders'];
+        $templateId = (int) ($template['id'] ?? 0);
+        $updateStmt->bind_param('ssii', $s3Url, $templateJson, $templateId, $bizId);
+        $updateStmt->execute();
+    }
 
     return $template;
 }
@@ -368,10 +375,14 @@ if (isset($_POST['send'])) {
                 </div>
                 <datalist id="contactVariableSuggestions">
                     <option value="{{name}}">
+                    <option value="{{fullname}}">
                     <option value="{{phone}}">
+                    <option value="{{mobile}}">
                     <option value="{{email}}">
                     <option value="{{full_name}}">
                     <option value="{{phone_number}}">
+                    <option value="Order ID">
+                    <option value="Payment URL">
                 </datalist>
 
                 <div class="row d-none" id="templateMediaUrlFields">
@@ -587,8 +598,13 @@ if (isset($_POST['send'])) {
         input.setAttribute('list', 'contactVariableSuggestions');
         input.placeholder = '{{name}}, {{phone}}, {{email}}, or fixed text';
 
+        const help = document.createElement('div');
+        help.className = 'form-text';
+        help.textContent = 'Use a contact token or enter fixed content like order ID, URL, amount, city, or custom text.';
+
         wrapper.appendChild(inputLabel);
         wrapper.appendChild(input);
+        wrapper.appendChild(help);
         container.appendChild(wrapper);
     }
 

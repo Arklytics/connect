@@ -1297,11 +1297,23 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
         if (!isset($tokens['full_name']) && isset($tokens['name'])) {
             $tokens['full_name'] = $tokens['name'];
         }
+        if (!isset($tokens['fullname']) && isset($tokens['full_name'])) {
+            $tokens['fullname'] = $tokens['full_name'];
+        }
+        if (!isset($tokens['full_name']) && isset($tokens['fullname'])) {
+            $tokens['full_name'] = $tokens['fullname'];
+        }
         if (!isset($tokens['phone']) && isset($tokens['phone_number'])) {
             $tokens['phone'] = $tokens['phone_number'];
         }
         if (!isset($tokens['phone_number']) && isset($tokens['phone'])) {
             $tokens['phone_number'] = $tokens['phone'];
+        }
+        if (!isset($tokens['mobile']) && isset($tokens['phone_number'])) {
+            $tokens['mobile'] = $tokens['phone_number'];
+        }
+        if (!isset($tokens['mobile_number']) && isset($tokens['phone_number'])) {
+            $tokens['mobile_number'] = $tokens['phone_number'];
         }
 
         foreach ($tokens as $key => $tokenValue) {
