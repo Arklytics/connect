@@ -35,56 +35,61 @@ function signupPendingData(): array
     return $pending;
 }
 
-function signupOtpComponents(string $otp): array
-{
-    return [
-        [
-            'type' => 'body',
-            'parameters' => [
-                [
-                    'type' => 'text',
-                    'text' => $otp,
-                ],
-            ],
-        ],
-        [
-            'type' => 'button',
-            'sub_type' => 'url',
-            'index' => '0',
-            'parameters' => [
-                [
-                    'type' => 'text',
-                    'text' => $otp,
-                ],
-            ],
-        ],
-    ];
-}
-
 function signupSendWhatsappOtp(mysqli $db, string $to, string $otp): array
 {
-    $phoneNumberId = trim((string) AppSettings::getGlobal($db, 'SIGNUP_OTP_PHONE_NUMBER_ID', Config::get('SIGNUP_OTP_PHONE_NUMBER_ID', '')));
-    if ($phoneNumberId === '') {
-        $phoneNumberId = trim((string) AppSettings::getGlobal($db, 'META_PHONE_NUMBER_ID', Config::get('META_PHONE_NUMBER_ID', '')));
-    }
-
-    $accessToken = trim((string) AppSettings::getGlobal($db, 'SIGNUP_OTP_ACCESS_TOKEN', Config::get('SIGNUP_OTP_ACCESS_TOKEN', '')));
-    if ($accessToken === '') {
-        $accessToken = trim((string) AppSettings::getGlobal($db, 'META_ACCESS_TOKEN', Config::get('META_ACCESS_TOKEN', '')));
-    }
-
-    if ($phoneNumberId === '' || $accessToken === '') {
+    $apiKey = trim((string) AppSettings::getGlobal($db, 'SIGNUP_OTP_API_KEY', Config::get('SIGNUP_OTP_API_KEY', '')));
+    if ($apiKey === '') {
         return [
             'ok' => false,
-            'error' => 'WhatsApp OTP sender is not configured. Add SIGNUP_OTP_PHONE_NUMBER_ID and SIGNUP_OTP_ACCESS_TOKEN, or META_PHONE_NUMBER_ID and META_ACCESS_TOKEN.',
+            'error' => 'WhatsApp OTP sender is not configured. Add SIGNUP_OTP_API_KEY from the business WhatsApp Connection API key.',
         ];
     }
 
+    $bizId = (int) trim((string) AppSettings::getGlobal($db, 'SIGNUP_OTP_BIZ_ID', Config::get('SIGNUP_OTP_BIZ_ID', '0')));
     $templateName = trim((string) AppSettings::getGlobal($db, 'SIGNUP_OTP_TEMPLATE', Config::get('SIGNUP_OTP_TEMPLATE', 'login_otp')));
     $language = trim((string) AppSettings::getGlobal($db, 'SIGNUP_OTP_LANGUAGE', Config::get('SIGNUP_OTP_LANGUAGE', 'en_US')));
-    $payload = ApiSupport::whatsappTemplatePayload($to, $templateName !== '' ? $templateName : 'login_otp', $language !== '' ? $language : 'en_US', signupOtpComponents($otp));
+    $payload = [
+        'kind' => 'authentication',
+        'template_name' => $templateName !== '' ? $templateName : 'login_otp',
+        'language' => $language !== '' ? $language : 'en_US',
+        'to' => $to,
+        'otp' => $otp,
+    ];
 
-    return ApiSupport::whatsappSendRequest($phoneNumberId, $accessToken, $payload);
+    if ($bizId > 0) {
+        $payload['biz_id'] = $bizId;
+    }
+
+    $requestJson = ApiSupport::encodeJson($payload);
+    $curl = curl_init(rtrim(app_public_url(''), '/') . '/api/whatsapp/send');
+    curl_setopt_array($curl, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $requestJson !== null ? $requestJson : json_encode($payload),
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . $apiKey,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+
+    $response = curl_exec($curl);
+    $httpCode = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($curl);
+    curl_close($curl);
+
+    $responseBody = is_string($response) ? $response : '';
+    $decoded = json_decode($responseBody, true);
+    $ok = $curlError === '' && $httpCode >= 200 && $httpCode < 300 && is_array($decoded) && !empty($decoded['ok']);
+
+    return [
+        'ok' => $ok,
+        'http_code' => $httpCode,
+        'error' => $curlError !== ''
+            ? 'cURL error: ' . $curlError
+            : (is_array($decoded) ? (string) ($decoded['error'] ?? 'OTP API request failed.') : trim($responseBody)),
+        'response_json' => $responseBody,
+    ];
 }
 
 $pendingSignup = signupPendingData();
