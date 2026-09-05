@@ -158,6 +158,69 @@ function batchTemplate(mysqli $db, int $bizId, int $templateId): array
         ApiSupport::jsonResponse(['ok' => false, 'error' => 'Template not found.'], 404);
     }
 
+    return batchHydrateTemplateMediaUrl($db, $bizId, $template);
+}
+
+function batchTemplateMediaHandle(array $meta): string
+{
+    $mediaHandle = trim((string) ($meta['header_media_handle'] ?? ''));
+    if ($mediaHandle !== '') {
+        return $mediaHandle;
+    }
+
+    foreach ((array) ($meta['payload']['components'] ?? []) as $component) {
+        if (!is_array($component) || strtoupper(trim((string) ($component['type'] ?? ''))) !== 'HEADER') {
+            continue;
+        }
+
+        $handles = $component['example']['header_handle'] ?? [];
+        if (is_array($handles) && trim((string) ($handles[0] ?? '')) !== '') {
+            return trim((string) $handles[0]);
+        }
+    }
+
+    return '';
+}
+
+function batchHydrateTemplateMediaUrl(mysqli $db, int $bizId, array $template): array
+{
+    $meta = json_decode((string) ($template['placeholders'] ?? ''), true);
+    if (!is_array($meta)) {
+        return $template;
+    }
+
+    $headerType = strtoupper(trim((string) ($meta['header_type'] ?? 'NONE')));
+    if (!in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
+        return $template;
+    }
+
+    $mediaUrl = trim((string) ($meta['header_media_url'] ?? $template['media_url'] ?? ''));
+    if ($mediaUrl !== '') {
+        return $template;
+    }
+
+    $mediaHandle = batchTemplateMediaHandle($meta);
+    if ($mediaHandle === '') {
+        return $template;
+    }
+
+    $stmt = $db->prepare('SELECT s3_url FROM gd_template_media WHERE biz_id = ? AND media_handle = ? AND s3_url <> "" ORDER BY id DESC LIMIT 1');
+    if (!$stmt) {
+        return $template;
+    }
+
+    $stmt->bind_param('is', $bizId, $mediaHandle);
+    $stmt->execute();
+    $media = $stmt->get_result()->fetch_assoc();
+    $s3Url = trim((string) ($media['s3_url'] ?? ''));
+    if ($s3Url === '') {
+        return $template;
+    }
+
+    $meta['header_media_url'] = $s3Url;
+    $template['media_url'] = $s3Url;
+    $template['placeholders'] = ApiSupport::encodeJson($meta) ?? (string) ($template['placeholders'] ?? '');
+
     return $template;
 }
 

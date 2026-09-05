@@ -1125,27 +1125,6 @@ final class ApiSupport
     return self::sampleValue($values, $index);
 }
 
-private static function templateHeaderMediaHandle(array $meta): string
-{
-    $mediaHandle = trim((string) ($meta['header_media_handle'] ?? ''));
-    if ($mediaHandle !== '') {
-        return $mediaHandle;
-    }
-
-    foreach ((array) ($meta['payload']['components'] ?? []) as $component) {
-        if (!is_array($component) || strtoupper(trim((string) ($component['type'] ?? ''))) !== 'HEADER') {
-            continue;
-        }
-
-        $handles = $component['example']['header_handle'] ?? [];
-        if (is_array($handles) && trim((string) ($handles[0] ?? '')) !== '') {
-            return trim((string) $handles[0]);
-        }
-    }
-
-    return '';
-}
-
 public static function buildTemplateSendComponents(array $templateRow, array $sendValues = []): array
 {
     $meta = [];
@@ -1178,15 +1157,14 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
         $components[] = ['type' => 'header', 'parameters' => $parameters];
     } elseif (in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
         $mediaUrl = trim((string) ($sendValues['header_media_url'] ?? $meta['header_media_url'] ?? $templateRow['media_url'] ?? ''));
-        $mediaHandle = trim((string) ($sendValues['header_media_handle'] ?? self::templateHeaderMediaHandle($meta)));
-        if ($mediaUrl === '' && $mediaHandle === '') {
+        if ($mediaUrl === '') {
             return [
                 'components' => [],
-                'error' => 'This template needs a media URL or media handle for the header before it can be sent.',
+                'error' => 'This template needs a media URL for the header before it can be sent.',
             ];
         }
 
-        $components[] = self::buildMediaHeaderComponent($headerType, $mediaUrl !== '' ? $mediaUrl : $mediaHandle, $mediaUrl !== '' ? 'link' : 'id');
+        $components[] = self::buildMediaHeaderComponent($headerType, $mediaUrl);
     }
 
     $bodyNumbers = self::templatePlaceholderNumbers((string) ($templateRow['message_body'] ?? ''));
@@ -1434,15 +1412,14 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
 
         if (in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
             $mediaUrl = trim((string) ($meta['header_media_url'] ?? ($templateRow['media_url'] ?? '')));
-            $mediaHandle = self::templateHeaderMediaHandle($meta);
-            if ($mediaUrl === '' && $mediaHandle === '') {
+            if ($mediaUrl === '') {
                 return [
                     'components' => [],
-                    'error' => 'This template needs a media URL or media handle for the header before it can be sent.',
+                    'error' => 'This template needs a media URL for the header before it can be sent.',
                 ];
             }
 
-            $components[] = self::buildMediaHeaderComponent($headerType, $mediaUrl !== '' ? $mediaUrl : $mediaHandle, $mediaUrl !== '' ? 'link' : 'id');
+            $components[] = self::buildMediaHeaderComponent($headerType, $mediaUrl);
         }
 
         return [
@@ -1520,12 +1497,11 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
 
         if (in_array($format, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
             $mediaUrl = trim((string) ($meta['header_media_url'] ?? ($templateRow['media_url'] ?? '')));
-            $mediaHandle = self::templateHeaderMediaHandle($meta);
-            if ($mediaUrl === '' && $mediaHandle === '') {
+            if ($mediaUrl === '') {
                 return null;
             }
 
-            return self::buildMediaHeaderComponent($format, $mediaUrl !== '' ? $mediaUrl : $mediaHandle, $mediaUrl !== '' ? 'link' : 'id');
+            return self::buildMediaHeaderComponent($format, $mediaUrl);
         }
 
         return null;
@@ -1617,20 +1593,19 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
         ];
     }
 
-    private static function buildMediaHeaderComponent(string $format, string $mediaReference, string $referenceType = 'link'): array
+    private static function buildMediaHeaderComponent(string $format, string $mediaUrl): array
     {
         $type = strtolower($format);
         $mimeType = $type;
-        $referenceType = $referenceType === 'id' ? 'id' : 'link';
         $parameter = [
             'type' => $mimeType,
             $mimeType => [
-                $referenceType => $mediaReference,
+                'link' => $mediaUrl,
             ],
         ];
 
-        if ($type === 'document' && $referenceType === 'link') {
-            $filename = basename(parse_url($mediaReference, PHP_URL_PATH) ?: $mediaReference);
+        if ($type === 'document') {
+            $filename = basename(parse_url($mediaUrl, PHP_URL_PATH) ?: $mediaUrl);
             if ($filename !== '') {
                 $parameter['document']['filename'] = $filename;
             }
