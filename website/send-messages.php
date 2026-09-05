@@ -23,6 +23,7 @@ while ($row = $templateResult->fetch_assoc()) {
 
 $parentGroups = [];
 $subgroupsByParent = [];
+$subgroupOptionsByParent = [];
 $stmt = $db->prepare('
     SELECT g.id, g.parent_id, g.group_name, parent.group_name AS parent_name
     FROM gd_groups g
@@ -38,6 +39,10 @@ while ($row = $groupResult->fetch_assoc()) {
         $parentGroups[] = $row;
     } else {
         $subgroupsByParent[(int) $row['parent_id']][] = $row;
+        $subgroupOptionsByParent[(string) ((int) $row['parent_id'])][] = [
+            'id' => (int) ($row['id'] ?? 0),
+            'name' => (string) ($row['group_name'] ?? ''),
+        ];
     }
 }
 ?>
@@ -341,6 +346,7 @@ if (isset($_POST['send'])) {
                                 <div class="wg-search-empty">Select a parent group first.</div>
                             </div>
                         </div>
+                        <button class="btn btn-link btn-sm px-0 mt-2 d-none" type="button" id="selectAllSubgroups">Select all shown</button>
                     </div>
 
                 </div>
@@ -398,7 +404,7 @@ if (isset($_POST['send'])) {
 </div>
 
 <script>
-    const subgroupsByParent = <?php echo ApiSupport::encodeJson($subgroupsByParent); ?>;
+    const subgroupsByParent = <?php echo ApiSupport::encodeJson($subgroupOptionsByParent); ?>;
     const sendForm = document.getElementById('sendMessageForm');
     const sendButton = document.getElementById('sendMessageButton');
     const templateInput = document.getElementById('templateDropdown');
@@ -410,6 +416,7 @@ if (isset($_POST['send'])) {
     const parentGroupDropdown = document.getElementById('parentGroupDropdown');
     const subgroupCheckboxList = document.getElementById('subgroupCheckboxList');
     const subgroupDropdownButton = document.getElementById('subgroupDropdownButton');
+    const selectAllSubgroups = document.getElementById('selectAllSubgroups');
     const progressCard = document.getElementById('sendProgressCard');
     const progressBar = document.getElementById('sendProgressBar');
     const progressCount = document.getElementById('sendProgressCount');
@@ -456,12 +463,14 @@ if (isset($_POST['send'])) {
 
         if (!parentId) {
             subgroupCheckboxList.innerHTML = '<div class="wg-search-empty">Select a parent group first.</div>';
+            selectAllSubgroups.classList.add('d-none');
             updateSubgroupButtonLabel();
             return;
         }
 
         if (rows.length === 0) {
             subgroupCheckboxList.innerHTML = '<div class="wg-search-empty">No subgroups under this parent.</div>';
+            selectAllSubgroups.classList.add('d-none');
             updateSubgroupButtonLabel();
             return;
         }
@@ -477,13 +486,14 @@ if (isset($_POST['send'])) {
             checkbox.addEventListener('change', updateSubgroupButtonLabel);
 
             const name = document.createElement('span');
-            name.textContent = subgroup.group_name || 'Subgroup';
+            name.textContent = subgroup.name || 'Subgroup';
 
             item.appendChild(checkbox);
             item.appendChild(name);
             subgroupCheckboxList.appendChild(item);
         });
 
+        selectAllSubgroups.classList.remove('d-none');
         updateSubgroupButtonLabel();
     }
 
@@ -555,6 +565,12 @@ if (isset($_POST['send'])) {
     syncRecipientPicker();
     parentGroupDropdown?.addEventListener('change', function () {
         renderSubgroupOptions(this.value);
+    });
+    selectAllSubgroups?.addEventListener('click', function () {
+        document.querySelectorAll('input[name="subgroup_ids[]"]').forEach((input) => {
+            input.checked = true;
+        });
+        updateSubgroupButtonLabel();
     });
     templateSearch?.addEventListener('input', filterTemplateOptions);
     templateOptions?.querySelectorAll('.wg-search-option').forEach((option) => {
