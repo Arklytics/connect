@@ -31,7 +31,7 @@
       <li class="list-group-item text-light shadow rounded mt-2 p-3"><i class="bi bi-clipboard-data-fill"></i> Reports</li>
     </a>
     <a href="{{ route('business.payments.index') }}" class="text-decoration-none">
-      <li class="list-group-item text-light shadow rounded mt-2 p-3"><i class="bi bi-credit-card"></i> Payments</li>
+      <li class="list-group-item text-light shadow rounded mt-2 p-3"><i class="bi bi-credit-card"></i> Packages / Plans</li>
     </a>
     <form method="POST" action="{{ route('business.logout') }}">
       @csrf

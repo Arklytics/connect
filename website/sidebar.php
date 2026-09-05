@@ -41,18 +41,6 @@ try {
  <a href="<?php echo h(app_url('business/view-templates')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-files"></i> View Templates</li></a>
     </ul>
 
-    <li class="list-group-item dropdown-toggle" id="settingsDropdown" style="cursor: pointer;">
-      <i class="bi bi-gear"></i> Settings
-    </li>
-    <ul class="list-group collapse" id="settingsMenu">
- <a href="<?php echo h(app_url('business/profile')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-person-badge"></i> Profile Settings</li></a>
- <a href="<?php echo h(app_url('business/connect-whatsapp')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-whatsapp"></i> WhatsApp Connection</li></a>
-<?php if ($sidebarAiKnowledgeEnabled): ?>
- <a href="<?php echo h(app_url('business/ai-knowledge')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-robot"></i> AI Knowledge</li></a>
-<?php endif; ?>
- <a href="<?php echo h(app_url('business/payments')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-credit-card"></i> Payments</li></a>
-    </ul>
-
     <li class="list-group-item dropdown-toggle" id="messageDropdown" style="cursor: pointer;">
       <i class="bi bi-whatsapp"></i> Messages
     </li>
@@ -69,6 +57,18 @@ try {
  <a href="<?php echo h(app_url('business/reports')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-clipboard-data-fill"></i> Reports Home</li></a>
  <a href="<?php echo h(app_url('business/view-messages')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-chat-dots-fill"></i> Message Reports</li></a>
  <a href="<?php echo h(app_url('business/lead-reports')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-people-fill"></i> Lead Reports</li></a>
+    </ul>
+
+    <li class="list-group-item dropdown-toggle" id="settingsDropdown" style="cursor: pointer;">
+      <i class="bi bi-gear"></i> Settings
+    </li>
+    <ul class="list-group collapse" id="settingsMenu">
+ <a href="<?php echo h(app_url('business/profile')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-person-badge"></i> Profile Settings</li></a>
+ <a href="<?php echo h(app_url('business/connect-whatsapp')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-whatsapp"></i> WhatsApp Connection</li></a>
+<?php if ($sidebarAiKnowledgeEnabled): ?>
+ <a href="<?php echo h(app_url('business/ai-knowledge')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-robot"></i> AI Knowledge</li></a>
+<?php endif; ?>
+ <a href="<?php echo h(app_url('business/payments')); ?>" class="text-decoration-none"><li class="list-group-item"><i class="bi bi-credit-card"></i> Packages / Plans</li></a>
     </ul>
 
  <a href="<?php echo h(app_url('business/logout')); ?>" class="text-decoration-none">
