@@ -957,6 +957,12 @@ a {
     box-shadow: var(--wg-shadow);
 }
 
+.wg-subgroup-menu.show {
+    position: static !important;
+    transform: none !important;
+    margin-top: 8px !important;
+}
+
 .wg-checkbox-option {
     display: flex;
     align-items: center;

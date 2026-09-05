@@ -337,7 +337,6 @@ if (isset($_POST['send'])) {
                                 <?php endforeach; ?>
                             </div>
                         </div>
-                        <button class="btn btn-link btn-sm px-0 mt-2 d-none" type="button" id="selectAllSubgroups">Select all shown</button>
                     </div>
 
                 </div>
@@ -405,7 +404,6 @@ if (isset($_POST['send'])) {
     const parentGroupDropdown = document.getElementById('parentGroupDropdown');
     const subgroupCheckboxList = document.getElementById('subgroupCheckboxList');
     const subgroupDropdownButton = document.getElementById('subgroupDropdownButton');
-    const selectAllSubgroups = document.getElementById('selectAllSubgroups');
     const progressCard = document.getElementById('sendProgressCard');
     const progressBar = document.getElementById('sendProgressBar');
     const progressCount = document.getElementById('sendProgressCount');
@@ -455,7 +453,8 @@ if (isset($_POST['send'])) {
                 emptyState.textContent = 'Select a parent group first.';
                 emptyState.classList.remove('d-none');
             }
-            selectAllSubgroups.classList.add('d-none');
+            subgroupCheckboxList.classList.remove('show');
+            subgroupDropdownButton.setAttribute('aria-expanded', 'false');
             updateSubgroupButtonLabel();
             return;
         }
@@ -465,7 +464,8 @@ if (isset($_POST['send'])) {
                 emptyState.textContent = 'No subgroups under this parent.';
                 emptyState.classList.remove('d-none');
             }
-            selectAllSubgroups.classList.add('d-none');
+            subgroupCheckboxList.classList.add('show');
+            subgroupDropdownButton.setAttribute('aria-expanded', 'true');
             updateSubgroupButtonLabel();
             return;
         }
@@ -473,7 +473,8 @@ if (isset($_POST['send'])) {
         if (emptyState) {
             emptyState.classList.add('d-none');
         }
-        selectAllSubgroups.classList.remove('d-none');
+        subgroupCheckboxList.classList.add('show');
+        subgroupDropdownButton.setAttribute('aria-expanded', 'true');
         updateSubgroupButtonLabel();
     }
 
@@ -547,12 +548,6 @@ if (isset($_POST['send'])) {
     });
     subgroupCheckboxList?.querySelectorAll('input[name="subgroup_ids[]"]').forEach((input) => {
         input.addEventListener('change', updateSubgroupButtonLabel);
-    });
-    selectAllSubgroups?.addEventListener('click', function () {
-        subgroupCheckboxList.querySelectorAll('.wg-checkbox-option:not(.d-none) input[name="subgroup_ids[]"]').forEach((input) => {
-            input.checked = true;
-        });
-        updateSubgroupButtonLabel();
     });
     templateSearch?.addEventListener('input', filterTemplateOptions);
     templateOptions?.querySelectorAll('.wg-search-option').forEach((option) => {
