@@ -46,11 +46,11 @@ function signupSendWhatsappOtp(mysqli $db, string $to, string $otp): array
     }
 
     $bizId = (int) trim((string) AppSettings::getGlobal($db, 'SIGNUP_OTP_BIZ_ID', Config::get('SIGNUP_OTP_BIZ_ID', '0')));
-    $templateName = trim((string) AppSettings::getGlobal($db, 'SIGNUP_OTP_TEMPLATE', Config::get('SIGNUP_OTP_TEMPLATE', 'login_otp')));
+    $templateName = trim((string) AppSettings::getGlobal($db, 'SIGNUP_OTP_TEMPLATE', Config::get('SIGNUP_OTP_TEMPLATE', 'otp_for_connect')));
     $language = trim((string) AppSettings::getGlobal($db, 'SIGNUP_OTP_LANGUAGE', Config::get('SIGNUP_OTP_LANGUAGE', 'en_US')));
     $payload = [
         'kind' => 'authentication',
-        'template_name' => $templateName !== '' ? $templateName : 'login_otp',
+        'template_name' => $templateName !== '' ? $templateName : 'otp_for_connect',
         'language' => $language !== '' ? $language : 'en_US',
         'to' => $to,
         'otp' => $otp,
