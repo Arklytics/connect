@@ -894,6 +894,105 @@ a {
     color: var(--wg-muted);
 }
 
+.wg-group-layout {
+    display: grid;
+    grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.wg-group-search {
+    margin: 0;
+    padding: 14px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--wg-border);
+}
+
+.wg-parent-list {
+    display: grid;
+    gap: 8px;
+    max-height: calc(100vh - 265px);
+    overflow-y: auto;
+    padding: 14px;
+}
+
+.wg-parent-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 13px;
+    color: inherit;
+    text-decoration: none;
+    background: #f8fafc;
+    border: 1px solid var(--wg-border);
+    border-radius: 8px;
+}
+
+.wg-parent-row:hover,
+.wg-parent-row:focus,
+.wg-parent-row.active {
+    color: inherit;
+    text-decoration: none;
+    background: #ffffff;
+    border-color: rgba(18, 128, 92, 0.32);
+    box-shadow: 0 8px 18px rgba(16, 24, 40, 0.07);
+}
+
+.wg-parent-row.active {
+    border-left: 4px solid var(--wg-primary);
+}
+
+.wg-parent-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    color: var(--wg-primary-dark);
+    background: #ecfdf3;
+    border-radius: 8px;
+    flex: 0 0 34px;
+}
+
+.wg-parent-row strong,
+.wg-parent-row small {
+    display: block;
+}
+
+.wg-parent-row strong {
+    color: var(--wg-text);
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.wg-parent-row small {
+    margin-top: 3px;
+    color: var(--wg-muted);
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.wg-offcanvas {
+    width: min(460px, 100vw);
+    background: #f8fafc;
+}
+
+.wg-offcanvas .offcanvas-header {
+    align-items: flex-start;
+    background: #ffffff;
+    border-bottom: 1px solid var(--wg-border);
+}
+
+.wg-offcanvas .offcanvas-title {
+    margin-top: 3px;
+    color: var(--wg-text);
+    font-weight: 850;
+}
+
+.wg-offcanvas-form {
+    margin: 0;
+}
+
 .wg-stat-card .icon {
     display: inline-flex;
     align-items: center;
@@ -1404,6 +1503,14 @@ textarea.form-control {
 
     .wg-template-metrics {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .wg-group-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .wg-parent-list {
+        max-height: none;
     }
 
     .wg-main,
