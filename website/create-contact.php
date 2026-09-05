@@ -142,6 +142,29 @@ function gdDynamicUpdate(mysqli $db, string $table, array $data, string $whereSq
     return (bool) $stmt->execute();
 }
 
+function gdAttachContactToGroup(mysqli $db, int $bizId, int $groupId, int $contactId): bool
+{
+    $linkCheck = $db->prepare('SELECT id FROM gd_group_contacts WHERE biz_id = ? AND group_id = ? AND contact_id = ? LIMIT 1');
+    $linkCheck->bind_param('iii', $bizId, $groupId, $contactId);
+    $linkCheck->execute();
+    if ($linkCheck->get_result()->fetch_assoc()) {
+        return true;
+    }
+
+    $columns = gdTableColumns($db, 'gd_group_contacts');
+    $now = date('Y-m-d H:i:s');
+    $link = [
+        'biz_id' => $bizId,
+        'group_id' => $groupId,
+        'contact_id' => $contactId,
+        'created_at' => $now,
+        'updated_at' => $now,
+    ];
+    $link = array_intersect_key($link, array_flip($columns));
+
+    return gdDynamicInsert($db, 'gd_group_contacts', $link);
+}
+
 $biz_id = Auth::requireLogin();
 try {
     ApiSupport::ensureGroupHierarchyColumns($db);
@@ -172,19 +195,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $source = trim((string) ($_POST['source'] ?? 'Manual'));
         $notes = trim((string) ($_POST['notes'] ?? ''));
         $lost_reason = trim((string) ($_POST['lost_reason'] ?? ''));
-        $next_follow_up_at = trim((string) ($_POST['next_follow_up_at'] ?? ''));
+        $next_follow_up_at = str_replace('T', ' ', trim((string) ($_POST['next_follow_up_at'] ?? '')));
         $whatsapp_opt_in = gdTruthy($_POST['whatsapp_opt_in'] ?? 0);
 
         if ($full_name === '' || $phone_number === '') {
             $message = 'Full name and mobile number are required.';
             $message_type = 'danger';
-        } elseif ($group_id <= 0 || !ApiSupport::isSubgroup($db, (int) $biz_id, (int) $group_id)) {
-            $message = 'Please select a subgroup before saving a contact.';
-            $message_type = 'warning';
         } elseif ($parent_group_id <= 0) {
             $message = 'Please select the parent group first.';
             $message_type = 'warning';
+        } elseif ($group_id <= 0) {
+            $message = 'Please select a subgroup before saving a contact.';
+            $message_type = 'warning';
         } else {
+            $groupStmt = $db->prepare('SELECT id FROM gd_groups WHERE id = ? AND biz_id = ? AND parent_id = ? LIMIT 1');
+            $groupStmt->bind_param('iii', $group_id, $biz_id, $parent_group_id);
+            $groupStmt->execute();
+            $validSubgroup = $groupStmt->get_result()->fetch_assoc();
+
+            if (!$validSubgroup) {
+                $message = 'Please select a valid subgroup under the selected parent group.';
+                $message_type = 'warning';
+            } else {
             $existingStmt = $db->prepare('SELECT id FROM gd_user_contacts WHERE phone_number = ? AND biz_id = ? LIMIT 1');
             $existingStmt->bind_param('si', $phone_number, $biz_id);
             $existingStmt->execute();
@@ -217,14 +249,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $record[$column] = $value;
                 }
             }
+            $record = array_intersect_key($record, array_flip($contactColumns));
 
             if ($existing) {
                 $contact_id = (int) $existing['id'];
                 $updateRecord = $record;
                 unset($updateRecord['biz_id']);
                 if (gdDynamicUpdate($db, 'gd_user_contacts', $updateRecord, 'id = ? AND biz_id = ?', [$contact_id, $biz_id])) {
-                    $message = 'Contact updated successfully.';
-                    $message_type = 'success';
+                    if (gdAttachContactToGroup($db, (int) $biz_id, (int) $group_id, $contact_id)) {
+                        $message = 'Contact updated successfully.';
+                        $message_type = 'success';
+                    } else {
+                        $message = 'Contact updated but could not attach to subgroup.';
+                        $message_type = 'warning';
+                    }
                 } else {
                     $message = 'Unable to update contact.';
                     $message_type = 'danger';
@@ -232,11 +270,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $record['created_at'] = date('Y-m-d H:i:s');
                 $record['updated_at'] = date('Y-m-d H:i:s');
+                $record = array_intersect_key($record, array_flip($contactColumns));
                 if (gdDynamicInsert($db, 'gd_user_contacts', $record)) {
                     $contact_id = (int) $db->insert_id;
-                    $stmt2 = $db->prepare('INSERT INTO gd_group_contacts (biz_id, group_id, contact_id) VALUES (?, ?, ?)');
-                    $stmt2->bind_param('iii', $biz_id, $group_id, $contact_id);
-                    if ($stmt2->execute()) {
+                    if (gdAttachContactToGroup($db, (int) $biz_id, (int) $group_id, $contact_id)) {
                         $message = 'Contact saved successfully.';
                         $message_type = 'success';
                     } else {
@@ -247,6 +284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $message = 'Unable to save contact.';
                     $message_type = 'danger';
                 }
+            }
             }
         }
     }
@@ -481,7 +519,7 @@ if ($followupTableExists) {
                                     <option value="">--Select Subgroup--</option>
                                     <?php foreach ($groups as $group): ?>
                                         <?php if (!empty($group['parent_id'])): ?>
-                                            <option value="<?php echo h($group['id']); ?>" data-parent="<?php echo h($group['parent_id']); ?>"><?php echo h($group['group_name']); ?></option>
+                                            <option class="d-none" value="<?php echo h($group['id']); ?>" data-parent="<?php echo h($group['parent_id']); ?>" disabled><?php echo h($group['group_name']); ?></option>
                                         <?php endif; ?>
                                     <?php endforeach; ?>
                                 </select>
@@ -685,5 +723,27 @@ if ($followupTableExists) {
         </div>
     </div>
 </div>
+
+<script>
+document.querySelectorAll('.parent-select').forEach((parentSelect) => {
+    const subgroupSelect = document.querySelector(parentSelect.getAttribute('data-child') || '');
+    if (!subgroupSelect) {
+        return;
+    }
+
+    function syncSubgroups() {
+        const parentId = parentSelect.value;
+        subgroupSelect.value = '';
+        subgroupSelect.querySelectorAll('option[data-parent]').forEach((option) => {
+            const matches = parentId !== '' && option.getAttribute('data-parent') === parentId;
+            option.classList.toggle('d-none', !matches);
+            option.disabled = !matches;
+        });
+    }
+
+    parentSelect.addEventListener('change', syncSubgroups);
+    syncSubgroups();
+});
+</script>
 
 <?php include 'footer.php'; ?>
