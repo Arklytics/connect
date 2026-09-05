@@ -708,6 +708,21 @@ final class ApiSupport
         return $numbers;
     }
 
+    public static function templatePlaceholderTokens(string $text): array
+    {
+        preg_match_all('/{{\s*([A-Za-z0-9_]+)\s*}}|\[\s*([A-Za-z0-9_]+)\s*\]/', $text, $matches, PREG_SET_ORDER);
+        $tokens = [];
+        foreach ($matches as $match) {
+            $token = trim((string) ($match[1] !== '' ? $match[1] : ($match[2] ?? '')));
+            if ($token === '') {
+                continue;
+            }
+            $tokens[] = ctype_digit($token) ? (int) $token : strtolower($token);
+        }
+
+        return array_values(array_unique($tokens));
+    }
+
     public static function normalizeTemplateName(string $name): string
     {
         $name = strtolower(trim($name));
@@ -1021,8 +1036,17 @@ final class ApiSupport
         return filter_var($url, FILTER_VALIDATE_URL) !== false && in_array($scheme, ['http', 'https'], true);
     }
 
-    private static function sampleValue(array $values, int $index): string
+    private static function sampleValue(array $values, int|string $index): string
     {
+        if (!is_int($index) && array_key_exists((string) $index, $values)) {
+            return trim((string) $values[(string) $index]);
+        }
+
+        if (!is_numeric($index)) {
+            return '';
+        }
+
+        $index = (int) $index;
         $isList = array_keys($values) === range(0, count($values) - 1);
         if ($isList) {
             $zeroBasedKey = $index - 1;
@@ -1089,8 +1113,8 @@ final class ApiSupport
         $headerType = strtoupper(trim((string) ($meta['header_type'] ?? 'NONE')));
         $headerText = (string) ($meta['header_text'] ?? ($templateRow['message_title'] ?? ''));
         $requirements = [
-            'header' => $headerType === 'TEXT' ? self::templatePlaceholderNumbers($headerText) : [],
-            'body' => self::templatePlaceholderNumbers((string) ($templateRow['message_body'] ?? '')),
+            'header' => $headerType === 'TEXT' ? self::templatePlaceholderTokens($headerText) : [],
+            'body' => self::templatePlaceholderTokens((string) ($templateRow['message_body'] ?? '')),
             'buttons' => [],
         ];
 
@@ -1106,7 +1130,7 @@ final class ApiSupport
 
         foreach (array_values($buttons) as $index => $button) {
             if (is_array($button) && strtoupper(trim((string) ($button['type'] ?? ''))) === 'URL') {
-                $numbers = self::templatePlaceholderNumbers((string) ($button['url'] ?? $button['link'] ?? ''));
+                $numbers = self::templatePlaceholderTokens((string) ($button['url'] ?? $button['link'] ?? ''));
                 if (!empty($numbers)) {
                     $requirements['buttons'][] = [
                         'index' => $index,
@@ -1120,7 +1144,7 @@ final class ApiSupport
         return $requirements;
     }
 
-    private static function templateExampleValue(array $values, int $index): string
+    private static function templateExampleValue(array $values, int|string $index): string
 {
     return self::sampleValue($values, $index);
 }
@@ -1138,7 +1162,7 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
     $components = [];
     $headerType = strtoupper(trim((string) ($meta['header_type'] ?? 'NONE')));
     $headerText = (string) ($meta['header_text'] ?? ($templateRow['message_title'] ?? ''));
-    $headerNumbers = self::templatePlaceholderNumbers($headerText);
+    $headerNumbers = self::templatePlaceholderTokens($headerText);
 
     if ($headerType === 'TEXT' && !empty($headerNumbers)) {
         $parameters = [];
@@ -1167,7 +1191,7 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
         $components[] = self::buildMediaHeaderComponent($headerType, $mediaUrl);
     }
 
-    $bodyNumbers = self::templatePlaceholderNumbers((string) ($templateRow['message_body'] ?? ''));
+    $bodyNumbers = self::templatePlaceholderTokens((string) ($templateRow['message_body'] ?? ''));
     if (!empty($bodyNumbers)) {
         $parameters = [];
         foreach ($bodyNumbers as $number) {
@@ -1201,7 +1225,7 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
         }
 
         $url = trim((string) ($button['url'] ?? $button['link'] ?? ''));
-        $numbers = self::templatePlaceholderNumbers($url);
+        $numbers = self::templatePlaceholderTokens($url);
         if (empty($numbers)) {
             continue;
         }
@@ -1236,7 +1260,7 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
     ];
 }
 
-    private static function templateSendValue(array $values, string $section, int $number, ?string $buttonIndex = null): string
+    private static function templateSendValue(array $values, string $section, int|string $number, ?string $buttonIndex = null): string
     {
         $sectionKeys = [
             $section,

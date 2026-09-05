@@ -28,6 +28,7 @@ function wgFetchTemplateMediaHandle(array $meta): string
 if (isset($_GET['template_id'])) {
     $templateId = Security::intFrom($_GET['template_id']);
     $bizId = Auth::requireLogin();
+    ApiSupport::ensureTemplateMediaTable($db);
     
     $stmt = $db->prepare('SELECT message_title, message_body, subtitle, media_url, placeholders, buttons FROM gd_whatsapp_templates WHERE id = ? AND biz_id = ? LIMIT 1');
     $stmt->bind_param('ii', $templateId, $bizId);

@@ -64,6 +64,7 @@ function wgTemplateMediaHandle(array $meta): string
 
 function wgHydrateTemplateMediaUrl(mysqli $db, int $bizId, array $template): array
 {
+    ApiSupport::ensureTemplateMediaTable($db);
     $meta = json_decode((string) ($template['placeholders'] ?? ''), true);
     if (!is_array($meta)) {
         return $template;

@@ -184,6 +184,7 @@ function batchTemplateMediaHandle(array $meta): string
 
 function batchHydrateTemplateMediaUrl(mysqli $db, int $bizId, array $template): array
 {
+    ApiSupport::ensureTemplateMediaTable($db);
     $meta = json_decode((string) ($template['placeholders'] ?? ''), true);
     if (!is_array($meta)) {
         return $template;
