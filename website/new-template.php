@@ -433,21 +433,38 @@ try {
     <?php endif; ?>
 </div>
 
-<div class="container-fluid">
+<div class="container-fluid wg-shell">
     <div class="row">
         <div class="col-lg-2 col-md-3 p-0 wg-sidebar">
             <?php include 'sidebar.php'; ?>
         </div>
 
         <div class="col-lg-7 col-md-9 wg-main">
-            <h4><i class="bi bi-cloud-plus"></i> Create Cloud API Template</h4>
-            <div class="alert alert-info">
-                For image, video, or document headers, choose a file here or upload it first. Files are stored in S3 and the app generates the WhatsApp media handle.
-    <a href="<?php echo h(app_url('business/upload-media')); ?>" class="alert-link">Upload media</a>
+            <div class="wg-page-title">
+                <div>
+                    <h1>Create Template</h1>
+                    <p>Design an approved WhatsApp template with headers, variables, buttons, and live payload preview.</p>
+                </div>
+                <a class="btn btn-light" href="<?php echo h(app_url('business/view-templates')); ?>">
+                    <i class="bi bi-files me-1"></i> Template Library
+                </a>
             </div>
-            <form action="" method="post" id="templateForm" enctype="multipart/form-data">
+            <div class="alert alert-info wg-template-tip">
+                <i class="bi bi-info-circle me-2"></i>
+                Media headers can use a saved file or a new upload. Files are stored in S3 and converted to WhatsApp media handles.
+                <a href="<?php echo h(app_url('business/upload-media')); ?>" class="alert-link">Manage media</a>
+            </div>
+            <form action="" method="post" id="templateForm" enctype="multipart/form-data" class="wg-template-builder">
                 <?php echo Security::csrfField(); ?>
 
+                <div class="wg-form-section">
+                    <div class="wg-section-heading">
+                        <span><i class="bi bi-sliders"></i></span>
+                        <div>
+                            <h5>Template Basics</h5>
+                            <p>Name, category, and language used for Meta review.</p>
+                        </div>
+                    </div>
                 <div class="row">
                     <div class="col-md-6">
                         <label class="form-label" for="template_name">Template Name</label>
@@ -471,7 +488,16 @@ try {
                         </select>
                     </div>
                 </div>
+                </div>
 
+                <div class="wg-form-section">
+                    <div class="wg-section-heading">
+                        <span><i class="bi bi-shield-lock"></i></span>
+                        <div>
+                            <h5>Authentication Options</h5>
+                            <p>Used only when category is set to Authentication.</p>
+                        </div>
+                    </div>
                 <div class="row auth-template-field d-none">
                     <div class="col-md-4">
                         <label class="form-label" for="auth_button_text">OTP Button Text</label>
@@ -488,7 +514,16 @@ try {
                         </div>
                     </div>
                 </div>
+                </div>
 
+                <div class="wg-form-section standard-template-field">
+                    <div class="wg-section-heading">
+                        <span><i class="bi bi-layout-text-window"></i></span>
+                        <div>
+                            <h5>Message Content</h5>
+                            <p>Build the visible WhatsApp message and required examples.</p>
+                        </div>
+                    </div>
                 <div class="row standard-template-field">
                     <div class="col-md-4">
                         <label class="form-label" for="header_type">Header Type</label>
@@ -580,24 +615,38 @@ try {
                         <input type="text" name="footer_text" id="footer_text" class="form-control" placeholder="Thank you for choosing us" oninput="renderTemplateBuilder()">
                     </div>
                 </div>
+                </div>
 
+                <div class="wg-form-section standard-template-field">
+                    <div class="wg-section-heading">
+                        <span><i class="bi bi-ui-checks"></i></span>
+                        <div>
+                            <h5>Buttons</h5>
+                            <p>Add quick replies, URLs, or phone call buttons.</p>
+                        </div>
+                    </div>
                 <div class="row standard-template-field">
                     <div class="col-md-12">
                         <div class="d-flex align-items-center justify-content-between mb-2">
-                            <h5 class="mb-0">Buttons</h5>
+                            <h5 class="mb-0">Actions</h5>
                             <button type="button" class="btn btn-light btn-sm" onclick="addButton()"><i class="bi bi-plus-circle me-1"></i> Add Button</button>
                         </div>
                         <div id="button-container"></div>
                     </div>
                 </div>
+                </div>
 
-                <button type="submit" class="btn btn-primary mt-2"><i class="bi bi-cloud-upload me-1"></i> Create on WhatsApp</button>
+                <div class="wg-builder-footer">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-cloud-upload me-1"></i> Create on WhatsApp</button>
+                    <a class="btn btn-light" href="<?php echo h(app_url('business/upload-media')); ?>"><i class="bi bi-cloud-upload me-1"></i> Upload Media</a>
+                </div>
             </form>
         </div>
 
-        <div class="col-lg-3 col-md-9 wg-main">
+        <div class="col-lg-3 col-md-9 wg-main wg-template-side">
+            <div class="wg-preview-sticky">
             <h5><i class="bi bi-phone"></i> Template Preview</h5>
-            <div class="border p-3 shadow-sm bg-light">
+            <div class="wg-template-preview">
                 <div id="previewMediaUrl" class="mb-3 text-center"></div>
                 <h6 id="previewTitle" class="text-primary">[Header]</h6>
                 <p id="previewBody">[Body]</p>
@@ -607,6 +656,7 @@ try {
 
             <h5 class="mt-4"><i class="bi bi-code-square"></i> API Payload</h5>
             <pre class="wg-code-preview" id="payloadPreview"><?php echo h($apiPayloadPreview ?: '{}'); ?></pre>
+            </div>
         </div>
     </div>
 </div>

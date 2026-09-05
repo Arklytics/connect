@@ -158,38 +158,54 @@ if ($db) {
                 <div class="alert alert-warning"><?php echo h($dashboardError); ?></div>
             <?php endif; ?>
 
-            <div class="wg-card wg-crm-summary p-4 mb-4">
-                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-                    <div>
-                        <div class="text-muted small text-uppercase fw-bold">Current Package</div>
-                        <h5 class="mb-1"><?php echo h($packageName); ?></h5>
-                        <div class="text-muted">
-                            Used <?php echo h(number_format($messagesUsed)); ?> of <?php echo h(number_format($messageLimit)); ?> messages
-                            <?php if (!empty($packageEndsAt)): ?>
-                                <span class="ms-2">Ends: <?php echo h((string) $packageEndsAt); ?></span>
+            <?php
+                $percent = $messageLimit > 0 ? (int) round(min(1, $messagesUsed / max(1, $messageLimit)) * 100) : 0;
+                $successRate = $totalMessages > 0 ? (int) round(($successfulMessages / max(1, $totalMessages)) * 100) : 0;
+            ?>
+            <section class="wg-dashboard-hero mb-4">
+                <div class="wg-dashboard-hero-main">
+                    <span class="wg-kicker">Workspace Health</span>
+                    <h2><?php echo h($connectionLabel); ?></h2>
+                    <p>Monitor usage, leads, follow-ups, and WhatsApp delivery from one business dashboard.</p>
+                    <div class="wg-dashboard-actions">
+                        <a class="btn btn-success" href="<?php echo h(app_url('business/send-messages')); ?>">
+                            <i class="bi bi-send me-1"></i> Send Campaign
+                        </a>
+                        <a class="btn btn-light" href="<?php echo h(app_url('business/add-contacts-group')); ?>">
+                            <i class="bi bi-upload me-1"></i> Import Leads
+                        </a>
+                    </div>
+                </div>
+                <div class="wg-usage-panel">
+                    <div class="d-flex justify-content-between align-items-start gap-3">
+                        <div>
+                            <span class="wg-kicker">Package</span>
+                            <h3><?php echo h($packageName); ?></h3>
+                        </div>
+                        <a class="btn btn-light btn-sm" href="<?php echo h(app_url('business/payments')); ?>">Plans</a>
+                    </div>
+                    <div class="wg-usage-number"><?php echo h(number_format($messagesRemaining)); ?></div>
+                    <div class="text-muted small">messages remaining</div>
+                    <div class="progress mt-3" style="height: 9px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: <?php echo h((string) $percent); ?>%;" aria-valuenow="<?php echo h((string) $percent); ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <div class="wg-usage-meta">
+                        <span><?php echo h(number_format($messagesUsed)); ?> used</span>
+                        <span><?php echo h(number_format($messageLimit)); ?> limit</span>
+                    </div>
+                    <?php if (!empty($packageEndsAt)): ?>
+                        <div class="text-muted small mt-2">Ends: <?php echo h((string) $packageEndsAt); ?></div>
+                    <?php endif; ?>
+                    <?php if ($limitRequestStatus !== 'none'): ?>
+                        <div class="wg-status-note mt-3">
+                            Limit request: <?php echo h(ucfirst($limitRequestStatus)); ?>
+                            <?php if ($limitRequestNote !== ''): ?>
+                                <span><?php echo h($limitRequestNote); ?></span>
                             <?php endif; ?>
                         </div>
-                    </div>
-                    <div class="text-end">
-                        <div class="fs-3 fw-bold"><?php echo h(number_format($messagesRemaining)); ?></div>
-                        <div class="text-muted small">Messages left</div>
-                    </div>
+                    <?php endif; ?>
                 </div>
-                <div class="progress mt-3" style="height: 10px;">
-                    <?php
-                        $percent = $messageLimit > 0 ? (int) round(min(1, $messagesUsed / max(1, $messageLimit)) * 100) : 0;
-                    ?>
-                    <div class="progress-bar bg-success" role="progressbar" style="width: <?php echo h((string) $percent); ?>%;" aria-valuenow="<?php echo h((string) $percent); ?>" aria-valuemin="0" aria-valuemax="100"></div>
-                </div>
-                <?php if ($limitRequestStatus !== 'none'): ?>
-                    <div class="mt-3 small text-muted">
-                        Limit request status: <?php echo h(ucfirst($limitRequestStatus)); ?>
-                        <?php if ($limitRequestNote !== ''): ?>
-                            <span class="ms-2">Note: <?php echo h($limitRequestNote); ?></span>
-                        <?php endif; ?>
-                    </div>
-                <?php endif; ?>
-            </div>
+            </section>
 
             <div class="row g-3">
                 <?php if ($hasCrmColumns): ?>
@@ -232,8 +248,8 @@ if ($db) {
                 <div class="col-xl-4 col-md-6">
                     <div class="wg-card wg-stat-card">
                         <span class="icon"><i class="bi bi-send-check"></i></span>
-                        <div class="label">Successful</div>
-                        <p class="value"><?php echo h((string) $successfulMessages); ?></p>
+                        <div class="label">Success Rate</div>
+                        <p class="value"><?php echo h((string) $successRate); ?>%</p>
                     </div>
                 </div>
                 <div class="col-xl-4 col-md-6">
@@ -264,23 +280,44 @@ if ($db) {
                 </div>
             <?php endif; ?>
 
-            <div class="row g-3 mt-1">
+            <div class="row g-3 mt-2">
                 <div class="col-lg-7">
                     <div class="wg-card p-4 h-100">
-                        <h5 class="mb-2">Workspace Overview</h5>
-                        <p class="text-muted mb-0">Create contact groups, prepare templates, and send messages from the tools in the sidebar.</p>
+                        <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+                            <h5 class="mb-0">CRM Setup</h5>
+                            <span class="badge bg-light text-dark border"><?php echo $hasCrmColumns && $totalContacts > 0 ? 'Active' : 'Ready'; ?></span>
+                        </div>
+                        <div class="wg-checklist">
+                            <a href="<?php echo h(app_url('business/create-group')); ?>">
+                                <i class="bi bi-diagram-3"></i>
+                                <span><strong>Organize groups</strong><small>Create lists and subgroups for targeted campaigns.</small></span>
+                            </a>
+                            <a href="<?php echo h(app_url('business/new-template')); ?>">
+                                <i class="bi bi-file-earmark-plus"></i>
+                                <span><strong>Prepare templates</strong><small>Build approved WhatsApp messages for repeat use.</small></span>
+                            </a>
+                            <a href="<?php echo h(app_url('business/lead-reports')); ?>">
+                                <i class="bi bi-clipboard-data"></i>
+                                <span><strong>Review lead reports</strong><small>Track lead outcomes and pending follow-ups.</small></span>
+                            </a>
+                        </div>
                     </div>
                 </div>
                 <div class="col-lg-5">
                     <div class="wg-card p-4 h-100">
-                        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
-                    <div>
-                        <h5 class="mb-1">Connection Status</h5>
-                        <p class="text-muted mb-0"><?php echo h($connectionLabel); ?></p>
-                    </div>
-                    <a class="btn btn-outline-success" href="<?php echo h(app_url('business/profile')); ?>">
-                        <i class="bi bi-person-badge me-1"></i> Open Profile
-                    </a>
+                        <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between mb-3">
+                            <div>
+                                <h5 class="mb-1">Connection Status</h5>
+                                <p class="text-muted mb-0"><?php echo h($connectionLabel); ?></p>
+                            </div>
+                            <a class="btn btn-outline-success btn-sm" href="<?php echo h(app_url('business/connect-whatsapp')); ?>">
+                                <i class="bi bi-whatsapp me-1"></i> Manage
+                            </a>
+                        </div>
+                        <div class="wg-mini-metrics">
+                            <div><span><?php echo h(number_format($totalMessages)); ?></span><small>Total sent</small></div>
+                            <div><span><?php echo h(number_format($successfulMessages)); ?></span><small>Delivered ok</small></div>
+                            <div><span><?php echo h(number_format($failedMessages)); ?></span><small>Failed</small></div>
                         </div>
                     </div>
                 </div>
