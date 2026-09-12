@@ -171,7 +171,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $validationErrors = [];
 
         if (in_array($header_type, ['IMAGE', 'VIDEO', 'DOCUMENT'], true) && $category !== 'AUTHENTICATION') {
-            $handleError = ApiSupport::templateMediaHandleError($header_media_handle, $header_type);
+            $handleError = ApiSupport::templateMediaHandleError($header_media_handle, $header_type, $fileType ?? '');
             if ($handleError !== '') {
                 $validationErrors[] = $handleError;
             }
@@ -598,7 +598,7 @@ try {
                                             <button
                                                 type="button"
                                                 class="btn btn-light btn-sm w-100 mt-2"
-                                                data-media-url="<?php echo h($mediaUrl); ?>"
+                                                data-media-kind="<?php echo h(strtoupper($kind)); ?>" data-media-url="<?php echo h($mediaUrl); ?>"
                                                 data-media-handle="<?php echo h($mediaHandleValue); ?>"
                                                 onclick="useSavedMedia(this)">
                                                 Use
@@ -828,6 +828,11 @@ function renderTemplateBuilder() {
 }
 
 function useSavedMedia(button) {
+    const kind = (button.dataset.mediaKind || '').toUpperCase();
+    if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(kind)) {
+      document.getElementById('header_type').value = kind;
+      toggleHeader();
+    }
   document.getElementById('header_media_handle').value = button.dataset.mediaHandle || '';
   document.getElementById('header_media_url').value = button.dataset.mediaUrl || '';
   const fileInput = document.getElementById('header_media_file');

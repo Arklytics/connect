@@ -846,7 +846,7 @@ final class ApiSupport
         }
 
         if (in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
-            $mediaError = self::templateMediaHandleError($headerMediaHandle, $headerType);
+            $mediaError = self::templateMediaHandleError($headerMediaHandle, $headerType, $mimeType ?? '');
             if ($mediaError !== '') {
                 return ['ok' => false, 'status' => 422, 'error' => $mediaError];
             }
@@ -1668,10 +1668,10 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
         ];
     }
 
-public static function templateMediaHandleError(string $handle, string $headerType): string
+public static function templateMediaHandleError(string $handle, string $headerType, string $mimeType = ''): string
     {
         $handle = trim($handle);
-        if ($handle === '' || !preg_match('/^\d+:[^:]+:([^:]+):/', $handle, $match)) {
+        if ($handle === '' || ctype_digit($handle) || preg_match('~^(?:https?://|upload:)~i', $handle)) {
             return 'Upload the file to generate a WhatsApp template media handle. A media ID or URL cannot be used as a review handle.';
         }
         $types = [
@@ -1679,7 +1679,9 @@ public static function templateMediaHandleError(string $handle, string $headerTy
             'VIDEO' => ['video/mp4', 'video/3gpp'],
             'DOCUMENT' => ['application/pdf'],
         ];
-        if (!in_array(strtolower($match[1]), $types[$headerType] ?? [], true)) {
+        // Meta handles are opaque: their colon-separated fields are not a MIME contract.
+        // Validate only MIME metadata detected from the actual uploaded file.
+        if ($mimeType !== '' && !in_array(strtolower($mimeType), $types[$headerType] ?? [], true)) {
             return 'The selected media does not match the ' . strtolower($headerType) . ' header. Choose a matching file or change the header type.';
         }
         if (preg_match('/:e:(\d+):/', $handle, $expiry) && (int) $expiry[1] <= time() + 60) {

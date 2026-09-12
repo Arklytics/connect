@@ -97,7 +97,7 @@
                             @endif
                           </div>
                           <div class="small fw-semibold text-truncate" title="{{ $mediaName }}">{{ $mediaName }}</div>
-                          <button type="button" class="btn btn-light btn-sm w-100 mt-2" data-media-url="{{ $mediaUrl }}" data-media-handle="{{ $mediaHandle }}" onclick="useSavedMedia(this)">Use</button>
+                          <button type="button" class="btn btn-light btn-sm w-100 mt-2" data-media-kind="{{ strtoupper($kind) }}" data-media-url="{{ $mediaUrl }}" data-media-handle="{{ $mediaHandle }}" onclick="useSavedMedia(this)">Use</button>
                         </div>
                       </div>
                     @endforeach
@@ -389,6 +389,11 @@
   }
 
   function useSavedMedia(button) {
+    const kind = (button.dataset.mediaKind || '').toUpperCase();
+    if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(kind)) {
+      document.getElementById('header_type').value = kind;
+      toggleHeader();
+    }
     document.getElementById('header_media_handle').value = button.dataset.mediaHandle || '';
     document.getElementById('header_media_url').value = button.dataset.mediaUrl || '';
     const fileInput = document.getElementById('header_media_file');

@@ -153,7 +153,7 @@ class TemplateController extends Controller
         }
 
         if (in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
-            $mediaError = \ApiSupport::templateMediaHandleError($headerMediaHandle, $headerType);
+            $mediaError = \ApiSupport::templateMediaHandleError($headerMediaHandle, $headerType, $mediaType ?? '');
             if ($mediaError !== '') {
                 return back()->withInput()->with('error', $mediaError);
             }

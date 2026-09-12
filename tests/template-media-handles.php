@@ -15,10 +15,19 @@ foreach (['IMAGE' => 'image/jpeg', 'VIDEO' => 'video/mp4', 'DOCUMENT' => 'applic
         }
         $checks++;
     }
-    if (ApiSupport::templateMediaHandleError($handle, $type === 'IMAGE' ? 'VIDEO' : 'IMAGE') === '') {
+    if (ApiSupport::templateMediaHandleError($handle, $type === 'IMAGE' ? 'VIDEO' : 'IMAGE', $mime) === '') {
         throw new RuntimeException('Mismatched media accepted');
     }
     $checks += 2;
+}
+// Opaque and encoded fields must never be mistaken for the file MIME type.
+foreach (['4::aW1hZ2UvanBlZw==:opaque:signature', '4:filename:aW1hZ2UvcG5n:opaque:signature', 'future-opaque-handle'] as $handle) {
+    foreach (['IMAGE', 'VIDEO', 'DOCUMENT'] as $type) {
+        if (ApiSupport::templateMediaHandleError($handle, $type) !== '') {
+            throw new RuntimeException('Opaque handle rejected');
+        }
+        $checks++;
+    }
 }
 $result = ApiSupport::metaUploadMediaHandle('', '', __DIR__ . '/missing-media-file', 'file.jpg', 'image/jpeg', 10);
 if ($result['ok'] || empty($result['error'])) {
