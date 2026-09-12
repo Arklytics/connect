@@ -29,6 +29,20 @@ foreach (['4::aW1hZ2UvanBlZw==:opaque:signature', '4:filename:aW1hZ2UvcG5n:opaqu
         $checks++;
     }
 }
+$first = '4::aW1hZ2UvanBlZw==:signatureA:e:1999999999:app:user:signedA';
+$second = '4::aW1hZ2UvanBlZw==:signatureB:e:1999999999:app:user:signedB';
+foreach ([$first, $first . "\n" . $second, $first . "\r\n" . $second, $first . $second, $first . ' ' . $second] as $raw) {
+    if (ApiSupport::normalizeTemplateMediaHandle($raw) !== $first) {
+        throw new RuntimeException('Multiple upload handles were not reduced to one intact handle');
+    }
+    $checks++;
+}
+foreach (['2:ZmlsZQ==:image/jpeg:signature', '', 'opaque-handle'] as $raw) {
+    if (ApiSupport::normalizeTemplateMediaHandle($raw) !== $raw) {
+        throw new RuntimeException('Single handle changed');
+    }
+    $checks++;
+}
 $result = ApiSupport::metaUploadMediaHandle('', '', __DIR__ . '/missing-media-file', 'file.jpg', 'image/jpeg', 10);
 if ($result['ok'] || empty($result['error'])) {
     throw new RuntimeException('Missing upload file accepted');

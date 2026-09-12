@@ -69,7 +69,7 @@ class TemplateController extends Controller
         $headerType = strtoupper(trim((string) ($data['header_type'] ?? 'NONE')));
         $headerText = $this->normalizeTemplateText((string) ($data['header_text'] ?? ''));
         $headerSample = trim((string) ($data['header_sample'] ?? ''));
-        $headerMediaHandle = trim((string) ($data['header_media_handle'] ?? ''));
+        $headerMediaHandle = \ApiSupport::normalizeTemplateMediaHandle((string) ($data['header_media_handle'] ?? ''));
         $headerMediaUrl = trim((string) ($data['header_media_url'] ?? ''));
         $bodyText = $this->normalizeTemplateText((string) ($data['body_text'] ?? ''));
         $footerText = trim((string) ($data['footer_text'] ?? ''));
@@ -111,6 +111,8 @@ class TemplateController extends Controller
                     return back()->withInput()->with('error', 'Media handle generation failed: ' . (string) ($uploadResult['error'] ?? 'Unknown error.'));
                 }
                 $mediaUrl = (string) ($existingMedia['s3_url'] ?? $mediaUrl);
+                DB::table('gd_template_media')->where('id', $existingMedia['id'])->where('biz_id', $bizId)
+                    ->update(['media_handle' => $headerMediaHandle, 'updated_at' => now()]);
             } else {
                 $s3Upload = \ApiSupport::s3UploadFile(
                     $tempPath,

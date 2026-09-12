@@ -81,7 +81,7 @@
                     @foreach (($mediaLibrary ?? []) as $media)
                       @php
                         $mediaUrl = (string) ($media['s3_url'] ?? '');
-                        $mediaHandle = (string) ($media['media_handle'] ?? '');
+                        $mediaHandle = \ApiSupport::normalizeTemplateMediaHandle((string) ($media['media_handle'] ?? ''));
                         $mediaName = (string) ($media['original_name'] ?? 'Media file');
                         $kind = \ApiSupport::mediaKind((string) ($media['mime_type'] ?? ''), $mediaUrl);
                       @endphp

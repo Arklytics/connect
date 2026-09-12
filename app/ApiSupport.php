@@ -151,6 +151,7 @@ final class ApiSupport
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())'
         );
         $fileHash = strtolower(trim($fileHash));
+        $mediaHandle = self::normalizeTemplateMediaHandle($mediaHandle);
         $stmt->bind_param('ississss', $bizId, $originalName, $mimeType, $fileSize, $fileHash, $s3Key, $s3Url, $mediaHandle);
         $stmt->execute();
     }
@@ -750,7 +751,7 @@ final class ApiSupport
         $headerType = strtoupper(trim((string) ($input['header_type'] ?? 'NONE')));
         $headerText = self::normalizeTemplateText((string) ($input['header_text'] ?? ''));
         $headerSample = trim((string) ($input['header_sample'] ?? ''));
-        $headerMediaHandle = trim((string) ($input['header_media_handle'] ?? ''));
+        $headerMediaHandle = self::normalizeTemplateMediaHandle((string) ($input['header_media_handle'] ?? ''));
         $mediaUrl = trim((string) ($input['header_media_url'] ?? $input['media_url'] ?? ''));
         $bodyText = self::normalizeTemplateText((string) ($input['body_text'] ?? $input['message_body'] ?? $input['body'] ?? ''));
         $footerText = trim((string) ($input['footer_text'] ?? $input['subtitle'] ?? ''));
@@ -1668,6 +1669,21 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
         ];
     }
 
+public static function normalizeTemplateMediaHandle(string $value): string
+    {
+        // The upload API can return multiple alternative handles in h. Use one
+        // complete handle, never the whole list. HTML text inputs may remove
+        // the newlines from older stored responses, joining 4:: handles together.
+        $lines = preg_split('/[\r\n]+|(?=4::)/', trim($value)) ?: [];
+        foreach ($lines as $line) {
+            $handle = trim($line);
+            if ($handle !== '') {
+                return $handle;
+            }
+        }
+        return '';
+    }
+
 public static function templateMediaHandleError(string $handle, string $headerType, string $mimeType = ''): string
     {
         $handle = trim($handle);
@@ -1813,7 +1829,7 @@ public static function metaUploadMediaHandle(
 
         'ok' => true,
 
-        'handle' => $json['h'],
+        'handle' => self::normalizeTemplateMediaHandle((string) $json['h']),
 
         'error' => null,
 

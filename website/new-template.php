@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $language = trim((string) ($_POST['language'] ?? 'en_US'));
     $header_type = strtoupper(trim((string) ($_POST['header_type'] ?? 'NONE')));
     $header_text = normalizeTemplateText((string) ($_POST['header_text'] ?? ''));
-    $header_media_handle = trim((string) ($_POST['header_media_handle'] ?? ''));
+    $header_media_handle = ApiSupport::normalizeTemplateMediaHandle((string) ($_POST['header_media_handle'] ?? ''));
     $header_media_url = trim((string) ($_POST['header_media_url'] ?? ''));
     $header_media_file = $_FILES['header_media_file'] ?? null;
     $body_text = normalizeTemplateText((string) ($_POST['body_text'] ?? ''));
@@ -121,6 +121,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $header_media_url = (string) ($existingMedia['s3_url'] ?? $header_media_url);
                 $uploadedMediaPreviewUrl = $header_media_url;
+                if ($header_media_handle !== '') {
+                    $mediaId = (int) $existingMedia['id'];
+                    $refresh = $db->prepare('UPDATE gd_template_media SET media_handle = ?, updated_at = NOW() WHERE id = ? AND biz_id = ?');
+                    $refresh->bind_param('sii', $header_media_handle, $mediaId, $biz_id);
+                    $refresh->execute();
+                }
             } else {
                 $s3Upload = ApiSupport::s3UploadFile($tmpPath, $fileName, $fileType);
                 if (!($s3Upload['ok'] ?? false)) {
@@ -578,7 +584,7 @@ try {
                                 <?php foreach ($mediaLibrary as $media): ?>
                                     <?php
                                     $mediaUrl = (string) ($media['s3_url'] ?? '');
-                                    $mediaHandleValue = (string) ($media['media_handle'] ?? '');
+                                    $mediaHandleValue = \ApiSupport::normalizeTemplateMediaHandle((string) ($media['media_handle'] ?? ''));
                                     $kind = ApiSupport::mediaKind((string) ($media['mime_type'] ?? ''), $mediaUrl);
                                     ?>
                                     <div class="col-md-4">

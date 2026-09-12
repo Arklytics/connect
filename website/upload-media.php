@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            if ($previewUrl !== '' && $mediaHandle !== '' && !is_array($existingMedia)) {
+            if ($previewUrl !== '' && $mediaHandle !== '') {
                 ApiSupport::storeTemplateMedia(
                     $db,
                     (int) $biz_id,
@@ -249,7 +249,7 @@ try {
                         <?php foreach ($mediaLibrary as $media): ?>
                             <?php
                             $mediaUrl = (string) ($media['s3_url'] ?? '');
-                            $mediaHandleValue = (string) ($media['media_handle'] ?? '');
+                            $mediaHandleValue = \ApiSupport::normalizeTemplateMediaHandle((string) ($media['media_handle'] ?? ''));
                             $kind = ApiSupport::mediaKind((string) ($media['mime_type'] ?? ''), $mediaUrl);
                             $urlInputId = 'mediaUrl' . (int) $media['id'];
                             $handleInputId = 'mediaHandle' . (int) $media['id'];
