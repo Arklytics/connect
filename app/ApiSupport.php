@@ -785,7 +785,7 @@ final class ApiSupport
         $whatsappBusinessId = trim((string) ($business['whatsapp_id'] ?? ''));
         $appId = trim((string) AppSettings::getGlobal($db, 'META_APP_ID', Config::get('META_APP_ID', '')));
 
-        if ($headerMediaHandle === '' && is_array($mediaFile) && (int) ($mediaFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        if (is_array($mediaFile) && (int) ($mediaFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
             if ((int) ($mediaFile['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
                 return ['ok' => false, 'status' => 422, 'error' => 'header_media_file upload failed.'];
             }
@@ -812,12 +812,12 @@ final class ApiSupport
             $fileHash = is_file($filePath) ? (string) hash_file('sha256', $filePath) : '';
             $existingMedia = self::findTemplateMediaByFile($db, $bizId, $fileName, $mimeType, $fileSize, $fileHash);
             if (is_array($existingMedia)) {
-                $headerMediaHandle = (string) ($existingMedia['media_handle'] ?? '');
+                $headerMediaHandle = ''; // A new file must receive a fresh Meta review handle.
                 $mediaUrl = (string) ($existingMedia['s3_url'] ?? $mediaUrl);
             }
         }
 
-        if ($headerMediaHandle === '' && is_array($mediaFile) && (int) ($mediaFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+        if (is_array($mediaFile) && (int) ($mediaFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
             $filePath = (string) ($mediaFile['tmp_name'] ?? '');
             $fileName = (string) ($mediaFile['name'] ?? 'template-media');
             $fileSize = (int) ($mediaFile['size'] ?? 0);
@@ -843,6 +843,13 @@ final class ApiSupport
             $mediaUrl = (string) ($s3Upload['url'] ?? '');
             $headerMediaHandle = (string) ($uploadResult['handle'] ?? '');
             self::storeTemplateMedia($db, $bizId, $fileName, $mimeType, $fileSize, $mediaUrl, $headerMediaHandle, (string) ($s3Upload['key'] ?? ''), $fileHash);
+        }
+
+        if (in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
+            $mediaError = self::templateMediaHandleError($headerMediaHandle, $headerType);
+            if ($mediaError !== '') {
+                return ['ok' => false, 'status' => 422, 'error' => $mediaError];
+            }
         }
 
         $validationErrors = [];
@@ -1661,6 +1668,26 @@ public static function buildTemplateSendComponents(array $templateRow, array $se
         ];
     }
 
+public static function templateMediaHandleError(string $handle, string $headerType): string
+    {
+        $handle = trim($handle);
+        if ($handle === '' || !preg_match('/^\d+:[^:]+:([^:]+):/', $handle, $match)) {
+            return 'Upload the file to generate a WhatsApp template media handle. A media ID or URL cannot be used as a review handle.';
+        }
+        $types = [
+            'IMAGE' => ['image/jpeg', 'image/png'],
+            'VIDEO' => ['video/mp4', 'video/3gpp'],
+            'DOCUMENT' => ['application/pdf'],
+        ];
+        if (!in_array(strtolower($match[1]), $types[$headerType] ?? [], true)) {
+            return 'The selected media does not match the ' . strtolower($headerType) . ' header. Choose a matching file or change the header type.';
+        }
+        if (preg_match('/:e:(\d+):/', $handle, $expiry) && (int) $expiry[1] <= time() + 60) {
+            return 'This WhatsApp media handle has expired. Upload the file again to generate a fresh handle.';
+        }
+        return '';
+    }
+
 public static function metaUploadMediaHandle(
     string $appId,
     string $accessToken,
@@ -1670,7 +1697,7 @@ public static function metaUploadMediaHandle(
     int $fileLength
 ): array {
 
-    if (!is_file($filePath)) {
+    if (!is_file($filePath) || !is_readable($filePath)) {
         return [
             'ok' => false,
             'handle' => null,
@@ -1678,6 +1705,11 @@ public static function metaUploadMediaHandle(
         ];
     }
 
+    $binary = file_get_contents($filePath);
+    if ($binary === false || $binary === '') {
+        return ['ok' => false, 'handle' => null, 'error' => 'The uploaded file is empty or unreadable.'];
+    }
+    $fileLength = strlen($binary);
     $graphVersion = self::GRAPH_VERSION;
 
     /*
@@ -1692,6 +1724,8 @@ public static function metaUploadMediaHandle(
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_TIMEOUT => 120,
         CURLOPT_HTTPHEADER => [
             "Authorization: Bearer {$accessToken}",
         ],
@@ -1704,16 +1738,17 @@ public static function metaUploadMediaHandle(
 
     $response = curl_exec($ch);
     $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
     curl_close($ch);
 
-    $json = json_decode($response, true);
+    $json = json_decode((string) $response, true);
 
-    if ($http >= 300 || empty($json['id'])) {
+    if ($curlError !== '' || $http < 200 || $http >= 300 || empty($json['id'])) {
 
         return [
             'ok' => false,
             'handle' => null,
-            'error' => $json['error']['message'] ?? $response,
+            'error' => $curlError ?: ($json['error']['message'] ?? 'Meta did not return a valid upload response.'),
         ];
     }
 
@@ -1724,8 +1759,6 @@ public static function metaUploadMediaHandle(
      * Upload Binary
      */
 
-    $binary = file_get_contents($filePath);
-
     $uploadUrl = "https://graph.facebook.com/{$graphVersion}/{$uploadId}";
 
     $ch = curl_init($uploadUrl);
@@ -1734,6 +1767,8 @@ public static function metaUploadMediaHandle(
 
         CURLOPT_CUSTOMREQUEST => "POST",
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_TIMEOUT => 120,
 
         CURLOPT_HTTPHEADER => [
 
@@ -1754,11 +1789,12 @@ public static function metaUploadMediaHandle(
     $response = curl_exec($ch);
     $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
+    $curlError = curl_error($ch);
     curl_close($ch);
 
-    $json = json_decode($response, true);
+    $json = json_decode((string) $response, true);
 
-    if ($http >= 300 || empty($json['h'])) {
+    if ($curlError !== '' || $http < 200 || $http >= 300 || empty($json['h'])) {
 
         return [
 
@@ -1766,7 +1802,7 @@ public static function metaUploadMediaHandle(
 
             'handle' => null,
 
-            'error' => $json['error']['message'] ?? $response,
+            'error' => $curlError ?: ($json['error']['message'] ?? 'Meta did not return a valid upload response.'),
 
         ];
     }

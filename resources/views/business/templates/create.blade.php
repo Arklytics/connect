@@ -429,7 +429,11 @@
   document.getElementById('category').addEventListener('change', renderPayloadPreview);
   document.getElementById('language').addEventListener('change', renderPayloadPreview);
   document.getElementById('header_sample').addEventListener('input', renderPayloadPreview);
-  document.getElementById('header_media_file').addEventListener('change', renderTemplateBuilder);
+  document.getElementById('header_media_file').addEventListener('change', function () {
+    document.getElementById('header_media_handle').value = '';
+    document.getElementById('header_media_url').value = '';
+    renderTemplateBuilder();
+  });
   document.getElementById('body_text').addEventListener('input', renderTemplateBuilder);
   document.getElementById('footer_text').addEventListener('input', renderTemplateBuilder);
   document.getElementById('header_text').addEventListener('input', renderTemplateBuilder);

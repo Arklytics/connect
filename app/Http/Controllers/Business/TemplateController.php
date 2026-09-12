@@ -79,7 +79,7 @@ class TemplateController extends Controller
         $buttons = [];
         $mediaUrl = $headerMediaUrl;
 
-        if ($headerMediaHandle === '' && $request->hasFile('header_media_file')) {
+        if ($request->hasFile('header_media_file')) {
             $mediaFile = $request->file('header_media_file');
             $mediaType = (string) ($mediaFile?->getMimeType() ?? '');
             $allowedTypes = [
@@ -105,7 +105,11 @@ class TemplateController extends Controller
             $existingMedia = $this->findTemplateMediaByFile($bizId, $originalName, $mediaType, $fileSize, $fileHash);
 
             if (is_array($existingMedia)) {
-                $headerMediaHandle = (string) ($existingMedia['media_handle'] ?? '');
+                $uploadResult = \ApiSupport::metaUploadMediaHandle($appId, $accessToken, $tempPath, $originalName, $mediaType, $fileSize);
+                $headerMediaHandle = (string) ($uploadResult['handle'] ?? '');
+                if (!($uploadResult['ok'] ?? false)) {
+                    return back()->withInput()->with('error', 'Media handle generation failed: ' . (string) ($uploadResult['error'] ?? 'Unknown error.'));
+                }
                 $mediaUrl = (string) ($existingMedia['s3_url'] ?? $mediaUrl);
             } else {
                 $s3Upload = \ApiSupport::s3UploadFile(
@@ -145,6 +149,13 @@ class TemplateController extends Controller
                     (string) ($s3Upload['key'] ?? ''),
                     $fileHash
                 );
+            }
+        }
+
+        if (in_array($headerType, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
+            $mediaError = \ApiSupport::templateMediaHandleError($headerMediaHandle, $headerType);
+            if ($mediaError !== '') {
+                return back()->withInput()->with('error', $mediaError);
             }
         }
 

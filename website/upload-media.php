@@ -56,7 +56,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $existingMedia = ApiSupport::findTemplateMediaByFile($db, (int) $biz_id, $fileName, $fileType, $fileSize, $fileHash);
             if (is_array($existingMedia)) {
                 $previewUrl = (string) ($existingMedia['s3_url'] ?? '');
-                $mediaHandle = (string) ($existingMedia['media_handle'] ?? '');
+                $uploadResult = \ApiSupport::metaUploadMediaHandle($appId, $accessToken, $tmpPath, $fileName, $fileType, $fileSize);
+                $mediaHandle = (string) ($uploadResult['handle'] ?? '');
+                if (!($uploadResult['ok'] ?? false)) {
+                    $metaError = (string) ($uploadResult['error'] ?? 'Media handle generation failed.');
+                }
                 $s3Upload = ['ok' => $previewUrl !== '', 'key' => (string) ($existingMedia['s3_key'] ?? '')];
             } else {
                 $s3Upload = ApiSupport::s3UploadFile($tmpPath, $fileName, $fileType);

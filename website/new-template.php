@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $whatsapp_business_id = trim((string) ($business['whatsapp_id'] ?? ''));
     $appId = trim((string) AppSettings::getGlobal($db, 'META_APP_ID', Config::get('META_APP_ID', '')));
 
-    if ($header_media_handle === '' && is_array($header_media_file) && (int) ($header_media_file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+    if (is_array($header_media_file) && (int) ($header_media_file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
         $fileName = basename((string) $header_media_file['name']);
         $tmpPath = (string) $header_media_file['tmp_name'];
         $fileSize = (int) $header_media_file['size'];
@@ -114,7 +114,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $existingMedia = ApiSupport::findTemplateMediaByFile($db, (int) $biz_id, $fileName, $fileType, $fileSize, $fileHash);
             if (is_array($existingMedia)) {
-                $header_media_handle = (string) ($existingMedia['media_handle'] ?? '');
+                $uploadResult = \ApiSupport::metaUploadMediaHandle((string) $appId, (string) $access_token, $tmpPath, $fileName, $fileType, $fileSize);
+                $header_media_handle = (string) ($uploadResult['handle'] ?? '');
+                if (!($uploadResult['ok'] ?? false)) {
+                    $mediaUploadError = (string) ($uploadResult['error'] ?? 'Media handle generation failed.');
+                }
                 $header_media_url = (string) ($existingMedia['s3_url'] ?? $header_media_url);
                 $uploadedMediaPreviewUrl = $header_media_url;
             } else {
@@ -165,6 +169,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message_type = 'danger';
     } else {
         $validationErrors = [];
+
+        if (in_array($header_type, ['IMAGE', 'VIDEO', 'DOCUMENT'], true) && $category !== 'AUTHENTICATION') {
+            $handleError = ApiSupport::templateMediaHandleError($header_media_handle, $header_type);
+            if ($handleError !== '') {
+                $validationErrors[] = $handleError;
+            }
+        }
 
         if ($mediaUploadError !== '') {
             $validationErrors[] = $mediaUploadError;
@@ -967,7 +978,11 @@ document.getElementById('auth_button_text').addEventListener('input', renderTemp
 document.getElementById('auth_expiration_minutes').addEventListener('input', renderTemplateBuilder);
 document.getElementById('auth_add_security').addEventListener('change', renderTemplateBuilder);
 document.getElementById('header_sample').addEventListener('input', renderPayloadPreview);
-document.getElementById('header_media_file').addEventListener('change', renderTemplateBuilder);
+document.getElementById('header_media_file').addEventListener('change', function () {
+    document.getElementById('header_media_handle').value = '';
+    document.getElementById('header_media_url').value = '';
+    renderTemplateBuilder();
+  });
 document.getElementById('header_text').addEventListener('blur', function () {
   this.value = normalizeTemplateText(this.value);
   renderTemplateBuilder();
